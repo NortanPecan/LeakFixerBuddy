@@ -112,6 +112,12 @@ function normalizeTgUser(user: TelegramUser) {
   }
 }
 
+function serializeTelegramId(value: unknown): string | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'bigint') return value.toString()
+  return String(value)
+}
+
 async function findUserByTelegramId(rawId: number | string) {
   const candidates = telegramIdCandidates(rawId)
   for (const candidate of candidates) {
@@ -279,7 +285,7 @@ export async function POST(request: NextRequest) {
       success: true,
       user: {
         id: user.id,
-        telegramId: user.telegramId,
+        telegramId: serializeTelegramId(user.telegramId),
         username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
@@ -411,7 +417,7 @@ export async function GET(request: NextRequest) {
       isDemo: true,
       user: {
         id: user.id,
-        telegramId: user.telegramId,
+        telegramId: serializeTelegramId(user.telegramId),
         username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
