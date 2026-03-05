@@ -48,6 +48,9 @@ model AppUser {
   contentItems ContentItem[]
   settings     UserSettings?
   feedbacks    Feedback[]
+  accounts     Account[]
+  categories   Category[]
+  transactions Transaction[]
 
   @@map("app_users")
 }
@@ -572,4 +575,70 @@ model Feedback {
   user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("feedbacks")
+}
+
+// ============================================
+// FINANCE MODULE
+// ============================================
+
+/// Financial account (cash, card, poker bankroll, etc.)
+model Account {
+  id             String   @id @default(cuid())
+  userId         String
+  name           String   // "Карта Тинькофф", "Наличные", "Банкролл покер"
+  type           String   @default("cash") // cash, card, poker, steam, other
+  initialBalance Float    @default(0)  // Starting balance
+  icon           String?  // Emoji or icon name
+  color          String?  // Hex color
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  user         AppUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@map("accounts")
+}
+
+/// Finance category (envelope/budget category)
+model Category {
+  id            String   @id @default(cuid())
+  userId        String
+  name          String   // "Steam/связки", "LeakFixer", "ИИ/подписки"
+  zone          String   @default("general") // steam, leakfixer, ai, poker, health, life, savings, general
+  monthlyTarget Float?   // Desired monthly budget (optional)
+  icon          String?  // Emoji or icon name
+  color         String?  // Hex color
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  user         AppUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@map("categories")
+}
+
+/// Financial transaction
+model Transaction {
+  id          String   @id @default(cuid())
+  userId      String
+  accountId   String
+  categoryId  String?  // Optional - can be uncategorized
+  date        DateTime @default(now())
+  amount      Float    // Positive = income, Negative = expense
+  description String?  // Comment/note
+  zone        String?  // Can be derived from category or set manually
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user     AppUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account  Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@map("transactions")
 }

@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 // Navigation state
-export type Screen = 'home' | 'fitness' | 'rituals' | 'gym' | 'profile' | 'create-ritual' | 'catalog' | 'all-rituals' | 'tasks' | 'chain' | 'create-task' | 'create-chain' | 'notes' | 'note-detail' | 'development' | 'content-detail'
+export type Screen = 'home' | 'fitness' | 'rituals' | 'gym' | 'profile' | 'create-ritual' | 'catalog' | 'all-rituals' | 'tasks' | 'chain' | 'create-task' | 'create-chain' | 'notes' | 'note-detail' | 'development' | 'content-detail' | 'finance'
 
 interface User {
   id: string
