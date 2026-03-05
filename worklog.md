@@ -227,3 +227,47 @@ Stage Summary:
 - Balance calculated from transactions
 - Categories auto-created from zones
 - Ready for production use
+
+---
+Task ID: 7
+Agent: Main Agent (GLM-5)
+Task: Implement Challenges module (personal challenges over rituals/tasks)
+
+Work Log:
+- Updated Prisma schema:
+  - Created Challenge model (type: ritual/chain/custom, zone, duration, progress)
+  - Created ChallengeProgress model (daysCompleted, currentStreak)
+  - Added relations to AppUser
+- Created API routes:
+  - GET/POST/PATCH/DELETE /api/challenges
+  - Progress auto-calculated from existing data:
+    - Ritual challenges: from RitualCompletion records
+    - Chain challenges: from Task status in Chain
+    - Custom challenges: from Tasks in zone with matching date range
+- Created ChallengesScreen with:
+  - Active challenges list with progress bars
+  - Completed/failed challenges list
+  - Streak display for ritual challenges
+  - Create challenge dialog
+  - Filter tabs (Active/Completed)
+  - Zone-based categorization
+- Updated BottomNav:
+  - Replaced "Ритуалы" with "Челенджи" tab
+  - Trophy icon for challenges
+- Updated store.ts with 'challenges' screen type
+- Updated page.tsx with ChallengesScreen import and route
+- Challenge types supported:
+  - ritual: streak based on ritual completions
+  - chain: progress based on completed tasks in chain
+  - custom: actions count in specific zone
+- All APIs tested:
+  - POST /api/challenges creates challenges
+  - GET /api/challenges returns challenges with calculated progress
+- Committed to GitHub: 72fdabd
+
+Stage Summary:
+- Challenges module fully implemented
+- Progress calculated from existing RitualCompletion/Task data
+- No duplicate data entry required
+- BottomNav updated with Challenges tab
+- Ready for production use

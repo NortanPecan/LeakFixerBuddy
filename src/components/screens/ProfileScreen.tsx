@@ -44,7 +44,10 @@ import {
   Check,
   Sun,
   Monitor,
-  Sparkles
+  Sparkles,
+  Wallet,
+  StickyNote,
+  BookOpen
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
@@ -546,7 +549,37 @@ export function ProfileScreen() {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Быстрый доступ</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-2">
+          <button
+            className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+            onClick={() => setScreen('finance')}
+          >
+            <div className="flex items-center gap-3">
+              <Wallet className="w-5 h-5 text-emerald-400" />
+              <span className="font-medium">Финансы</span>
+            </div>
+            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+          </button>
+          <button
+            className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+            onClick={() => setScreen('notes')}
+          >
+            <div className="flex items-center gap-3">
+              <StickyNote className="w-5 h-5 text-yellow-400" />
+              <span className="font-medium">Заметки</span>
+            </div>
+            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+          </button>
+          <button
+            className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+            onClick={() => setScreen('development')}
+          >
+            <div className="flex items-center gap-3">
+              <BookOpen className="w-5 h-5 text-purple-400" />
+              <span className="font-medium">Развитие / Контент</span>
+            </div>
+            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+          </button>
           <button
             className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
             onClick={() => setScreen('gym')}

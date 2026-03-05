@@ -64,7 +64,7 @@ interface Challenge {
 }
 
 export function ChallengesScreen() {
-  const { user, setScreen } = useAppStore()
+  const { user, setScreen, setSelectedContentId } = useAppStore()
   const [challenges, setChallenges] = useState<Challenge[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
@@ -250,7 +250,10 @@ export function ChallengesScreen() {
               <Card 
                 key={challenge.id} 
                 className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors"
-                onClick={() => {/* TODO: open detail */}}
+                onClick={() => {
+                  setSelectedContentId(challenge.id)
+                  setScreen('challenge-detail')
+                }}
               >
                 <CardContent className="pt-4">
                   <div className="flex items-start gap-3">

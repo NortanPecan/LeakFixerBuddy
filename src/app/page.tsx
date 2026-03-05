@@ -19,6 +19,7 @@ import { DevelopmentScreen } from '@/components/screens/DevelopmentScreen'
 import { ContentDetailScreen } from '@/components/screens/ContentDetailScreen'
 import { FinanceScreen } from '@/components/screens/FinanceScreen'
 import { ChallengesScreen } from '@/components/screens/ChallengesScreen'
+import { ChallengeDetailScreen } from '@/components/screens/ChallengeDetailScreen'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 
@@ -60,6 +61,8 @@ function ScreenRouter({ screen, contentId }: { screen: Screen; contentId?: strin
       return <FinanceScreen />
     case 'challenges':
       return <ChallengesScreen />
+    case 'challenge-detail':
+      return <ChallengeDetailScreen />
     case 'all-rituals':
       return <AllRitualsScreen />
     default:

@@ -2,14 +2,13 @@
 
 import { useAppStore, Screen } from '@/lib/store'
 import { cn } from '@/lib/utils'
-import { Home, User, ListTodo, StickyNote, Wallet, Trophy } from 'lucide-react'
+import { Home, User, ListTodo, StickyNote, Wallet, Trophy, Flame } from 'lucide-react'
 
 const NAV_ITEMS: { screen: Screen; icon: typeof Home; label: string }[] = [
   { screen: 'home', icon: Home, label: 'Главная' },
   { screen: 'tasks', icon: ListTodo, label: 'Дела' },
-  { screen: 'rituals', icon: Trophy, label: 'Челенджи' },
-  { screen: 'finance', icon: Wallet, label: 'Финансы' },
-  { screen: 'notes', icon: StickyNote, label: 'Заметки' },
+  { screen: 'rituals', icon: Flame, label: 'Ритуалы' },
+  { screen: 'challenges', icon: Trophy, label: 'Цели' },
   { screen: 'profile', icon: User, label: 'Профиль' },
 ]
 

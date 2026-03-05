@@ -1,14 +1,208 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-// GET /api/challenges?userId=xxx
+// Helper to calculate progress for a challenge
+async function calculateChallengeProgress(challenge: {
+  id: string
+  userId: string
+  name: string
+  type: string
+  zone: string
+  chainId: string | null
+  config: string
+  duration: number
+  progress: number
+  startDate: Date
+  endDate: Date | null
+  status: string
+  createdAt: Date
+}, userId: string) {
+  let progress = challenge.progress
+  let daysCompleted = 0
+  let currentStreak = 0
+  
+  // Parse config from JSON string
+  let config: Record<string, unknown> = {}
+  try {
+    config = typeof challenge.config === 'string' 
+      ? JSON.parse(challenge.config) 
+      : (challenge.config as Record<string, unknown>)
+  } catch {
+    config = {}
+  }
+
+  if (challenge.type === 'ritual') {
+    const selectedRitualIds = config.selectedRitualIds || []
+    const expectedDays = challenge.duration || 30
+
+    if (selectedRitualIds && selectedRitualIds.length > 0) {
+      const startDate = new Date(challenge.startDate)
+      const endDate = new Date(startDate)
+      endDate.setDate(endDate.getDate() + expectedDays)
+      endDate.setHours(23, 59, 59, 999)
+
+      const completions = await db.ritualCompletion.findMany({
+        where: {
+          ritualId: { in: selectedRitualIds },
+          date: { gte: startDate, lte: endDate }
+        }
+      })
+
+      const completedDaysSet = new Set<string>()
+      completions.forEach(c => {
+        const dateStr = c.date.toISOString().split('T')[0]
+        completedDaysSet.add(dateStr)
+      })
+
+      daysCompleted = completedDaysSet.size
+
+      const sortedDays = Array.from(completedDaysSet).sort()
+      currentStreak = 0
+      let prevDate = ''
+      
+      for (const dateStr of sortedDays) {
+        if (prevDate) {
+          const diff = Math.floor(
+            (new Date(dateStr).getTime() - new Date(prevDate).getTime()) / (1000 * 60 * 60 * 24)
+          )
+          if (diff === 1) currentStreak++
+          else currentStreak = 1
+        }
+        prevDate = dateStr
+      }
+
+      progress = Math.round((daysCompleted / expectedDays) * 100)
+    } else {
+      // No specific rituals selected - count all ritual completions
+      const startDate = new Date(challenge.startDate)
+      const endDate = new Date(startDate)
+      endDate.setDate(endDate.getDate() + expectedDays)
+      endDate.setHours(23, 59, 59, 999)
+
+      // Get all user rituals
+      const rituals = await db.ritual.findMany({
+        where: { userId, status: 'active' },
+        select: { id: true }
+      })
+      const ritualIds = rituals.map(r => r.id)
+
+      const completions = await db.ritualCompletion.findMany({
+        where: {
+          ritualId: { in: ritualIds },
+          date: { gte: startDate, lte: endDate }
+        }
+      })
+
+      const completedDaysSet = new Set<string>()
+      completions.forEach(c => {
+        const dateStr = c.date.toISOString().split('T')[0]
+        completedDaysSet.add(dateStr)
+      })
+
+      daysCompleted = completedDaysSet.size
+      progress = Math.round((daysCompleted / expectedDays) * 100)
+    }
+  } else if (challenge.type === 'chain' && challenge.chainId) {
+    const chain = await db.chain.findUnique({
+      where: { id: challenge.chainId },
+      include: { tasks: true }
+    })
+
+    if (chain) {
+      const targetSteps = config.targetSteps || chain.tasks.length
+      const completedSteps = chain.tasks.filter(t => t.status === 'done').length
+      daysCompleted = completedSteps
+      progress = Math.round((completedSteps / targetSteps) * 100)
+    }
+  } else if (challenge.type === 'custom') {
+    const zone = config.zone || challenge.zone
+    const targetCount = config.targetCount || 0
+    const periodDays = config.periodDays || 30
+    const actionType = config.actionType || 'actions'
+
+    const startDate = new Date(challenge.startDate)
+    const endDate = new Date(startDate)
+    endDate.setDate(endDate.getDate() + periodDays)
+    endDate.setHours(23, 59, 59, 999)
+
+    const tasks = await db.task.findMany({
+      where: {
+        userId,
+        zone,
+        status: 'done',
+        date: { gte: startDate, lte: endDate }
+      }
+    })
+
+    if (actionType === 'actions') {
+      daysCompleted = tasks.length
+      progress = targetCount > 0 ? Math.round((tasks.length / targetCount) * 100) : 0
+    } else {
+      const completedDaysSet = new Set<string>()
+      tasks.forEach(t => {
+        if (t.date) {
+          const dateStr = new Date(t.date).toISOString().split('T')[0]
+          completedDaysSet.add(dateStr)
+        }
+      })
+      daysCompleted = completedDaysSet.size
+      progress = targetCount > 0 ? Math.round((daysCompleted / targetCount) * 100) : 0
+    }
+    currentStreak = daysCompleted
+  }
+
+  let newStatus = challenge.status
+  if (progress >= 100 && newStatus === 'active') newStatus = 'completed'
+
+  const now = new Date()
+  if (challenge.endDate && now > new Date(challenge.endDate) && newStatus === 'active') {
+    newStatus = 'failed'
+  }
+
+  if (progress !== challenge.progress || newStatus !== challenge.status) {
+    await db.challenge.update({
+      where: { id: challenge.id },
+      data: { progress: progress ?? 0, status: newStatus }
+    })
+  }
+
+  return {
+    ...challenge,
+    progress: progress ?? 0,
+    progressPercentage: progress ?? 0,
+    daysCompleted,
+    currentStreak
+  }
+}
+
+// GET /api/challenges?userId=xxx or /api/challenges?id=xxx
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const userId = searchParams.get('userId')
+  const challengeId = searchParams.get('id')
   const status = searchParams.get('status')
 
+  // Get single challenge by ID
+  if (challengeId && !userId) {
+    try {
+      const challenge = await db.challenge.findUnique({
+        where: { id: challengeId }
+      })
+
+      if (!challenge) {
+        return NextResponse.json({ error: 'Challenge not found' }, { status: 404 })
+      }
+
+      const challengeWithProgress = await calculateChallengeProgress(challenge, challenge.userId)
+      return NextResponse.json({ success: true, challenge: challengeWithProgress })
+    } catch (error) {
+      console.error('Error fetching challenge:', error)
+      return NextResponse.json({ error: 'Failed to fetch challenge' }, { status: 500 })
+    }
+  }
+
   if (!userId) {
-    return NextResponse.json({ error: 'userId is required' }, { status: 400 })
+    return NextResponse.json({ error: 'userId or id is required' }, { status: 400 })
   }
 
   try {
@@ -22,135 +216,7 @@ export async function GET(request: NextRequest) {
 
     // Calculate progress for each challenge
     const challengesWithProgress = await Promise.all(
-      challenges.map(async (challenge) => {
-        let progress = challenge.progress
-        let daysCompleted = 0
-        let currentStreak = 0
-        
-        // Parse config from JSON string
-        let config: Record<string, unknown> = {}
-        try {
-          config = typeof challenge.config === 'string' 
-            ? JSON.parse(challenge.config) 
-            : (challenge.config as Record<string, unknown>)
-        } catch {
-          config = {}
-        }
-
-        if (challenge.type === 'ritual') {
-          const selectedRitualIds = config.selectedRitualIds || []
-          const expectedDays = challenge.duration || 30
-
-          if (selectedRitualIds && selectedRitualIds.length > 0) {
-            const startDate = new Date(challenge.startDate)
-            const endDate = new Date(startDate)
-            endDate.setDate(endDate.getDate() + expectedDays)
-            endDate.setHours(23, 59, 59, 999)
-
-            const completions = await db.ritualCompletion.findMany({
-              where: {
-                ritualId: { in: selectedRitualIds },
-                date: { gte: startDate, lte: endDate }
-              }
-            })
-
-            const completedDaysSet = new Set<string>()
-            completions.forEach(c => {
-              const dateStr = c.date.toISOString().split('T')[0]
-              completedDaysSet.add(dateStr)
-            })
-
-            daysCompleted = completedDaysSet.size
-
-            const sortedDays = Array.from(completedDaysSet).sort()
-            currentStreak = 0
-            let prevDate = ''
-            
-            for (const dateStr of sortedDays) {
-              if (prevDate) {
-                const diff = Math.floor(
-                  (new Date(dateStr).getTime() - new Date(prevDate).getTime()) / (1000 * 60 * 60 * 24)
-                )
-                if (diff === 1) currentStreak++
-                else currentStreak = 1
-              }
-              prevDate = dateStr
-            }
-
-            progress = Math.round((daysCompleted / expectedDays) * 100)
-          }
-        } else if (challenge.type === 'chain' && challenge.chainId) {
-          const chain = await db.chain.findUnique({
-            where: { id: challenge.chainId },
-            include: { tasks: true }
-          })
-
-          if (chain) {
-            const targetSteps = config.targetSteps || chain.tasks.length
-            const completedSteps = chain.tasks.filter(t => t.status === 'done').length
-            daysCompleted = completedSteps
-            progress = Math.round((completedSteps / targetSteps) * 100)
-          }
-        } else if (challenge.type === 'custom') {
-          const zone = config.zone
-          const targetCount = config.targetCount || 0
-          const periodDays = config.periodDays || 30
-          const actionType = config.actionType || 'actions'
-
-          const startDate = new Date(challenge.startDate)
-          const endDate = new Date(startDate)
-          endDate.setDate(endDate.getDate() + periodDays)
-          endDate.setHours(23, 59, 59, 999)
-
-          const tasks = await db.task.findMany({
-            where: {
-              userId,
-              zone,
-              status: 'done',
-              date: { gte: startDate, lte: endDate }
-            }
-          })
-
-          if (actionType === 'actions') {
-            daysCompleted = tasks.length
-            progress = Math.round((tasks.length / targetCount) * 100)
-          } else {
-            const completedDaysSet = new Set<string>()
-            tasks.forEach(t => {
-              if (t.date) {
-                const dateStr = new Date(t.date).toISOString().split('T')[0]
-                completedDaysSet.add(dateStr)
-              }
-            })
-            daysCompleted = completedDaysSet.size
-            progress = Math.round((daysCompleted / targetCount) * 100)
-          }
-          currentStreak = daysCompleted
-        }
-
-        let newStatus = challenge.status
-        if (progress >= 100 && newStatus === 'active') newStatus = 'completed'
-
-        const now = new Date()
-        if (challenge.endDate && now > new Date(challenge.endDate) && newStatus === 'active') {
-          newStatus = 'failed'
-        }
-
-        if (progress !== challenge.progress || newStatus !== challenge.status) {
-          await db.challenge.update({
-            where: { id: challenge.id },
-            data: { progress, status: newStatus }
-          })
-        }
-
-        return {
-          ...challenge,
-          progress,
-          progressPercentage: progress,
-          daysCompleted,
-          currentStreak
-        }
-      })
+      challenges.map(c => calculateChallengeProgress(c, userId))
     )
 
     return NextResponse.json({ success: true, challenges: challengesWithProgress })
