@@ -116,6 +116,10 @@ interface AppState {
   saveWater: (date: string, ml: number) => Promise<void>
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 // Mood status helper
 function getMoodStatus(mood: number): { status: string; color: string } {
   if (mood >= 9) return { status: 'Пиковое состояние! 🚀', color: '#fcd34d' }
@@ -179,10 +183,24 @@ export const useAppStore = create<AppState>()(
           if (isDemo) {
             response = await fetch(endpoint)
           } else {
-            const tg = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram
-            const initData = tg?.WebApp?.initData
+            const tg = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp
+            const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : ''
+            const isTelegramContext = !!tg || /Telegram/i.test(userAgent)
+
+            let initData = tg?.initData
+            if (!initData && isTelegramContext) {
+              // In Telegram clients initData may appear with a short delay.
+              for (let i = 0; i < 20; i++) {
+                await sleep(150)
+                initData = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData
+                if (initData) break
+              }
+            }
 
             if (!initData) {
+              if (isTelegramContext) {
+                throw new Error('Telegram initData is missing. Open the app from Telegram bot menu button.')
+              }
               return get().login(true)
             }
 

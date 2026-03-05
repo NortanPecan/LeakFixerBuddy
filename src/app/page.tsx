@@ -111,12 +111,8 @@ export default function Home() {
           tg.WebApp.expand?.()
         }
       }
-
-      // Login (will fall back to demo if not in Telegram)
-      const isTelegram = typeof window !== 'undefined' && 
-        !!(window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData
-
-      await login(!isTelegram)
+      // Login decision is handled in store (Telegram first, demo fallback only in regular browser)
+      await login()
 
       setIsLoading(false)
     }
