@@ -144,7 +144,7 @@ https://ваш-проект.vercel.app/api/health
 
 ## 🔧 Текущий продакшен URL
 
-**Mini App URL:** `https://leakfixer-miniapp.vercel.app`
+**Mini App URL:** `https://leak-fixer-buddy.vercel.app`
 
 > ⚠️ Если вы используете другой проект на Vercel, обновите URL в @BotFather:
 > ```
