@@ -7,7 +7,35 @@
 ![Prisma](https://img.shields.io/badge/Prisma-ORM-green)
 ![Tailwind](https://img.shields.io/badge/Tailwind-4-cyan)
 
-> 📱 **Референс**: Старая версия приложения доступна на [leakfixer-miniapp.vercel.app](https://leakfixer-miniapp.vercel.app/)
+> 📱 **Продакшен**: [leakfixer-miniapp.vercel.app](https://leakfixer-miniapp.vercel.app/)  
+> 📖 **Настройка Telegram**: [TELEGRAM_SETUP.md](./TELEGRAM_SETUP.md)
+
+---
+
+## 🚀 Быстрый старт
+
+### Sandbox (локальная разработка)
+```bash
+git clone https://github.com/NortanPecan/LeakFixerBuddy.git
+cd LeakFixerBuddy
+bun install
+bun run db:push
+bun run dev
+```
+
+Откройте http://localhost:3000 — автоматически создастся demo-пользователь.
+
+### Production (Telegram Mini App)
+
+**Обязательные переменные окружения:**
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DATABASE_URL` | Supabase pooling (port 6543) | `postgresql://...pooler.supabase.com:6543/postgres` |
+| `DIRECT_DATABASE_URL` | Supabase direct (port 5432) | `postgresql://...supabase.co:5432/postgres` |
+| `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather | `7123456789:AAHxxxx...` |
+
+**Полная инструкция:** [TELEGRAM_SETUP.md](./TELEGRAM_SETUP.md)
 
 ---
 

@@ -347,3 +347,43 @@ Stage Summary:
 - Telegram Mini App authorization is primary method
 - Ready for Supabase deployment on main branch
 - Reference: https://leakfixer-miniapp.vercel.app/
+
+---
+Task ID: 10
+Agent: Main Agent
+Task: Setup minimal working Telegram Mini App + Supabase integration
+
+Work Log:
+- Updated /api/auth/route.ts with proper Telegram signature validation:
+  - Added HMAC-SHA256 signature verification using TELEGRAM_BOT_TOKEN
+  - Validates initData hash according to Telegram WebApp spec
+  - Falls back to demo mode if bot token not set (for local dev)
+  - Added detailed error logging
+  - Added proper TypeScript types for TelegramUser
+- Created /api/health/route.ts endpoint:
+  - Checks database connection with SELECT 1
+  - Returns database type (PostgreSQL/SQLite)
+  - Shows stats (user count, profile count)
+  - Validates TELEGRAM_BOT_TOKEN presence
+  - Returns response time for monitoring
+- Created TELEGRAM_SETUP.md documentation:
+  - Step-by-step Telegram bot creation via @BotFather
+  - Mini App creation instructions
+  - Supabase connection string setup
+  - URL encoding for special characters in passwords
+  - Vercel deployment guide
+  - Environment variables reference
+  - Troubleshooting guide
+  - Integration flow diagram
+- Updated README.md:
+  - Added production URL (leakfixer-miniapp.vercel.app)
+  - Added link to TELEGRAM_SETUP.md
+  - Added required environment variables table
+  - Simplified quick start section
+
+Stage Summary:
+- Telegram auth with signature validation ready
+- Health endpoint for monitoring /api/health
+- Complete setup documentation in TELEGRAM_SETUP.md
+- Required env vars: DATABASE_URL, DIRECT_DATABASE_URL, TELEGRAM_BOT_TOKEN
+- Production URL: https://leakfixer-miniapp.vercel.app
