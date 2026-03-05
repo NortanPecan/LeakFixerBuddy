@@ -1,20 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-
-import { startOfDay, endOfDay } from '@/lib/date-utils'
-
-// Helper functions
-function getStartOfDay(date: Date): Date {
-  const d = new Date(date)
-  d.setHours(0, 0, 0, 0)
-  return d
-}
-
-function getEndOfDay(date: Date): Date {
-  const d = getStartOfDay(date)
-  d.setDate(d.getDate() + 1)
-  return d
-}
+import { getStartOfDay, getEndOfDay } from '@/lib/date-utils'
 
 // POST /api/supplements/intake - Toggle intake checked status
 export async function POST(request: NextRequest) {

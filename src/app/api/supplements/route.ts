@@ -13,6 +13,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Debug: log available models
+    console.log('Available db models:', Object.keys(db))
+    
     // Get all active supplements for user
     const supplements = await db.supplement.findMany({
       where: { userId, isActive: true },

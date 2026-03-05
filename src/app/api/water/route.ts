@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-
-import { startOfDay, endOfDay } from '@/lib/date-utils'
+import { getStartOfDay, getEndOfDay } from '@/lib/date-utils'
 
 // GET /api/water?userId=xxx - Get water for today
 // GET /api/water?userId=xxx&date=YYYY-MM-DD - Get water for specific date
@@ -16,8 +15,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const targetDate = dateParam ? new Date(dateParam) : new Date()
-    const startOfTargetDay = startOfDay(targetDate)
-    const endOfTargetDay = endOfDay(targetDate)
+    const startOfTargetDay = getStartOfDay(targetDate)
+    const endOfTargetDay = getEndOfDay(targetDate)
 
     // Find or create fitness daily record
     let fitnessDaily = await db.fitnessDaily.findFirst({
@@ -71,8 +70,8 @@ export async function PATCH(request: NextRequest) {
     }
 
     const targetDate = date ? new Date(date) : new Date()
-    const startOfTargetDay = startOfDay(targetDate)
-    const endOfTargetDay = endOfDay(targetDate)
+    const startOfTargetDay = getStartOfDay(targetDate)
+    const endOfTargetDay = getEndOfDay(targetDate)
 
     // Find or create fitness daily record
     let fitnessDaily = await db.fitnessDaily.findFirst({
