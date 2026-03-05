@@ -52,6 +52,9 @@ model AppUser {
   categories   Category[]
   transactions Transaction[]
   challenges   Challenge[]
+  supplements  Supplement[]
+  supplementIntakes SupplementIntake[]
+  foodEntries  FoodEntry[]
 
   @@map("app_users")
 }
@@ -686,4 +689,72 @@ model ChallengeProgress {
   challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
 
   @@map("challenge_progress")
+}
+
+// ============================================
+// HEALTH MODULE (Supplements, Food, Water)
+// ============================================
+
+/// Supplement definition (vitamin, mineral, etc.)
+model Supplement {
+  id                String   @id @default(cuid())
+  userId            String
+  name              String   // "Витамин D", "Креатин", "Омега-3"
+  dosage            String?  // "2000 ME", "5 г", "1 капсула"
+  unit              String   @default("мг") // мг, г, табл, капс, мл
+  standardDose      Float    @default(1) // Standard dose amount
+  timeWindow        String   @default("any") // morning, day, evening, any
+  days              String   @default("[1,2,3,4,5,6,7]") // JSON array of days (1-7)
+  isActive          Boolean  @default(true)
+  sortOrder         Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  user    AppUser           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  intakes SupplementIntake[]
+
+  @@map("supplements")
+}
+
+/// Supplement intake log
+model SupplementIntake {
+  id           String   @id @default(cuid())
+  supplementId String
+  userId       String
+  date         DateTime @default(now())
+  time         String?  // HH:mm
+  dose         Float    @default(1) // Actual dose taken
+  checked      Boolean  @default(false)
+  note         String?
+  createdAt    DateTime @default(now())
+
+  // Relations
+  supplement Supplement @relation(fields: [supplementId], references: [id], onDelete: Cascade)
+  user       AppUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([supplementId, date])
+  @@map("supplement_intakes")
+}
+
+/// Food entry (meal tracking)
+model FoodEntry {
+  id          String   @id @default(cuid())
+  userId      String
+  date        DateTime @default(now())
+  mealType    String   @default("snack") // breakfast, lunch, dinner, snack
+  name        String   // "Овсянка с ягодами"
+  calories    Int?
+  protein     Float?
+  fat         Float?
+  carbs       Float?
+  amount      String?  // "200г", "1 порция"
+  quality     String?  // good, neutral, bad (subjective rating)
+  note        String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("food_entries")
 }
