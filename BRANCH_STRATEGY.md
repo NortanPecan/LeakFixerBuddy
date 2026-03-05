@@ -2,152 +2,79 @@
 
 ## Overview
 
-LeakFixer Buddy uses a **two-branch strategy** to separate development and production environments.
+LeakFixer uses two branches with different database providers:
 
-## Branches
+- `master`: sandbox/local development, SQLite
+- `main`: production deployment, Supabase PostgreSQL
 
-### `master` — Sandbox (Development)
+## Schema files
 
-**Purpose**: Local development, UI/UX iteration, feature testing
+- `prisma/schema.prisma`: sandbox schema (SQLite)
+- `prisma/schema.supabase.prisma`: production schema (Supabase/PostgreSQL)
 
-**Configuration**:
-- Database: SQLite (local file)
-- Telegram: Mocked/demo mode
-- External services: Optional or mocked
+Both schemas must describe the same domain models. Differences are only DB-specific types/constraints.
 
-**Setup**:
-```bash
-git checkout master
-bun install
-echo 'DATABASE_URL="file:./db/custom.db"' > .env
-echo 'DEMO_MODE="true"' >> .env
-bun run db:push
-bun run dev
-```
+## Sandbox (`master`)
 
-**Workflow**:
-1. All new features start in `master`
-2. Test locally with SQLite
-3. UI/UX changes without network dependencies
-4. Merge to `main` when ready for production
+- DB: SQLite (`DATABASE_URL="file:./db/custom.db"`)
+- No required network access
+- Telegram can run in demo/mock mode for local development
 
----
-
-### `main` — Production
-
-**Purpose**: Live Telegram Mini App
-
-**Configuration**:
-- Database: Supabase PostgreSQL
-- Telegram: Real Mini App auth
-- Deployment: Vercel
-
-**Setup**:
-```bash
-git checkout main
-bun install
-# Configure .env with Supabase URLs
-bunx prisma migrate deploy
-bun run dev
-```
-
-**Deployment**:
-1. Push to `main` → auto-deploys to Vercel
-2. Environment variables configured in Vercel Dashboard
-3. Telegram Mini App URL: `https://your-app.vercel.app`
-
----
-
-## Database Schema Management
-
-### SQLite Schema (`prisma/schema.prisma`)
-- Used for `master` branch
-- Provider: `sqlite`
-- Features: All current models
-
-### PostgreSQL Schema (`prisma/schema.supabase.prisma`)
-- Used for `main` branch
-- Provider: `postgresql`
-- Compatible with Supabase
-- Uses `@db.Uuid`, `@db.Timestamptz`, etc.
-
-### Switching Schemas
-
-When deploying to production:
+Commands:
 
 ```bash
-# On main branch
-cd prisma
-mv schema.prisma schema.sqlite.prisma
-mv schema.supabase.prisma schema.prisma
-cd ..
-git add . && git commit -m "chore: switch to PostgreSQL schema"
-git push
+bun run db:generate:sandbox
+bun run db:push:sandbox
+bun run db:migrate:sandbox
+bun run db:studio:sandbox
+bun run db:validate:sandbox
 ```
 
----
+## Production (`main`)
 
-## Environment Variables
+- DB: Supabase PostgreSQL
+- Real Telegram Mini App auth
+- Deploy target: Vercel
 
-### Master (.env for sandbox)
-```env
-DATABASE_URL="file:./db/custom.db"
-DEMO_MODE="true"
-```
+Commands:
 
-### Main (.env for production)
-```env
-DATABASE_URL="postgresql://...pooler.supabase.com:6543/postgres?pgbouncer=true"
-DIRECT_DATABASE_URL="postgresql://...supabase.co:5432/postgres"
-TELEGRAM_BOT_TOKEN="your-bot-token"
-```
-
----
-
-## Migration Strategy
-
-### Development (master)
 ```bash
-bun run db:push  # Push schema changes directly to SQLite
+bun run db:generate:prod
+bun run db:push:prod
+bun run db:migrate:prod
+bun run db:studio:prod
+bun run db:validate:prod
 ```
 
-### Production (main)
-```bash
-bunx prisma migrate dev --name description  # Create migration
-bunx prisma migrate deploy  # Apply to production
-```
+## Important rule for this project
 
----
+Codex/agent does not apply SQL directly to production Supabase.
 
-## CI/CD Flow
+Production synchronization flow is manual:
 
-```
-master (local dev)
-    ↓
-  [testing]
-    ↓
-  PR to main
-    ↓
-  [review]
-    ↓
-  merge to main
-    ↓
-  Vercel auto-deploy
-    ↓
-  Production (leakfixer-miniapp.vercel.app)
-```
+1. Update `prisma/schema.supabase.prisma`.
+2. Update `SUPABASE_CHECKLIST.md`.
+3. Project owner applies SQL manually in Supabase SQL Editor.
+4. Re-run `bun run db:validate:prod` and compare against checklist.
 
----
+## Demo Auth (Production)
 
-## Future Auth Integration
+Endpoint: `GET /api/auth?demo=true`
 
-The schema supports future authentication methods:
+Purpose:
 
-1. **Current**: Telegram Mini App only
-2. **Phase 2**: Add phone verification (Supabase Auth)
-3. **Phase 3**: Add email verification (Supabase Auth)
+- Fallback login path when Telegram `initData` is unavailable.
+- Works in production with Supabase, independent from Telegram signature validation.
 
-Fields already in schema:
-- `email`, `phone` (unique, nullable)
-- `emailVerified`, `phoneVerified` (timestamps)
-- `authProvider` (telegram | email | phone)
+Environment expectations:
+
+- Required: `DATABASE_URL`
+- Recommended for Supabase: `DIRECT_DATABASE_URL`
+- Optional: `DEMO_MODE`
+- Not required for demo GET: `TELEGRAM_BOT_TOKEN` (required only for Telegram POST login)
+
+Failure policy:
+
+- Missing DB env -> clear HTTP 500 config error.
+- DB connection issue -> clear HTTP 503 error.
+- Schema mismatch -> clear HTTP 500 error with regeneration/sync hint.
