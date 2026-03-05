@@ -99,10 +99,41 @@ export default function Home() {
   const [authError, setAuthError] = useState<string | null>(null)
 
   useEffect(() => {
+    const ensureTelegramSdkLoaded = async () => {
+      if (typeof window === 'undefined') return
+
+      const hasTelegram = !!(window as unknown as { Telegram?: unknown }).Telegram
+      if (hasTelegram) return
+
+      const existing = document.querySelector<HTMLScriptElement>('script[data-telegram-web-app="true"]')
+      if (existing) {
+        if ((window as unknown as { Telegram?: unknown }).Telegram) return
+        await new Promise<void>((resolve) => {
+          existing.addEventListener('load', () => resolve(), { once: true })
+          existing.addEventListener('error', () => resolve(), { once: true })
+          setTimeout(() => resolve(), 1500)
+        })
+        return
+      }
+
+      await new Promise<void>((resolve) => {
+        const script = document.createElement('script')
+        script.src = 'https://telegram.org/js/telegram-web-app.js'
+        script.async = true
+        script.dataset.telegramWebApp = 'true'
+        script.onload = () => resolve()
+        script.onerror = () => resolve()
+        document.head.appendChild(script)
+        setTimeout(() => resolve(), 1500)
+      })
+    }
+
     const initApp = async () => {
       if (isInitialized) return
 
       setIsLoading(true)
+
+      await ensureTelegramSdkLoaded()
 
       // Initialize Telegram WebApp if available
       if (typeof window !== 'undefined') {
