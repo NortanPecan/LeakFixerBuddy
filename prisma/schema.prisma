@@ -14,20 +14,43 @@ datasource db {
 // CORE DOMAIN
 // ============================================
 
-/// App user
+/// App user - Telegram Mini App primary identity
 model AppUser {
   id           String   @id @default(cuid())
+  
+  // Telegram identity (primary auth method)
   telegramId   String   @unique
+  telegramUsername String? // @username without @
+  telegramFirstName String?
+  telegramLastName String?
+  telegramLanguageCode String? @default("ru")
+  telegramPhotoUrl String?
+  
+  // Legacy fields (for backwards compatibility)
   username     String?
   firstName    String?
   lastName     String?
   photoUrl     String?
   language     String   @default("ru")
+  
+  // Future auth methods (phone/email) - currently unused
+  email        String?  @unique
+  phone        String?  @unique
+  emailVerified DateTime?
+  phoneVerified DateTime?
+  
+  // User progress
   day          Int      @default(1)
   streak       Int      @default(0)
   points       Int      @default(0)
+  
+  // Timestamps
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  
+  // Auth metadata
+  authProvider String?  @default("telegram") // telegram, email, phone
+  lastLoginAt  DateTime?
 
   // Relations
   profile      UserProfile?
@@ -56,6 +79,9 @@ model AppUser {
   supplementIntakes SupplementIntake[]
   foodEntries  FoodEntry[]
 
+  @@index([telegramId])
+  @@index([email])
+  @@index([phone])
   @@map("app_users")
 }
 

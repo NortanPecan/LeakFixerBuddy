@@ -307,3 +307,43 @@ Stage Summary:
 - Profile can be configured with weight, height, age, sex, work type
 - Automatic calculation based on Mifflin-St Jeor formula
 - Ready for production use
+
+---
+Task ID: 9
+Agent: Main Agent
+Task: Setup branch structure (main/master) and Supabase schema for Telegram Mini App
+
+Work Log:
+- Updated SQLite schema (prisma/schema.prisma):
+  - Added Telegram identity fields: telegramId, telegramUsername, telegramFirstName, telegramLastName, telegramLanguageCode, telegramPhotoUrl
+  - Added future auth fields: email, phone (unique, nullable)
+  - Added verification fields: emailVerified, phoneVerified (timestamps)
+  - Added auth metadata: authProvider (telegram | email | phone), lastLoginAt
+  - Added indexes for telegramId, email, phone
+- Created comprehensive Supabase PostgreSQL schema (prisma/schema.supabase.prisma):
+  - Full PostgreSQL/Supabase compatible schema
+  - All current models: AppUser, UserProfile, Lesson, Habit, FitnessDaily, Ritual, Task, Note, Content, Finance, Challenge, Health, etc.
+  - Proper PostgreSQL types: @db.Uuid, @db.Timestamptz, @db.BigInt
+  - Snake_case column mapping for existing Supabase tables
+  - Compatible with existing Supabase database structure
+- Updated .env.example with clear instructions for both sandbox and production modes
+- Rewrote README.md with comprehensive documentation:
+  - Branch strategy (master=sandbox, main=production)
+  - Quick start for sandbox mode (SQLite + demo)
+  - Production deployment guide (Vercel + Supabase)
+  - Telegram Mini App setup
+  - Architecture of authorization
+  - Future auth (email/phone) integration plan
+  - Module descriptions
+  - Project structure
+- Created BRANCH_STRATEGY.md with detailed branch workflow
+
+Stage Summary:
+- Two-branch strategy documented:
+  - master = sandbox (SQLite, demo mode, no external services)
+  - main = production (Supabase, Telegram Mini App, Vercel)
+- Schema ready for both SQLite and PostgreSQL
+- Future auth (email/phone) fields prepared in AppUser model
+- Telegram Mini App authorization is primary method
+- Ready for Supabase deployment on main branch
+- Reference: https://leakfixer-miniapp.vercel.app/
