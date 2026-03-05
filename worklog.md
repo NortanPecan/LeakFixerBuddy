@@ -387,3 +387,42 @@ Stage Summary:
 - Complete setup documentation in TELEGRAM_SETUP.md
 - Required env vars: DATABASE_URL, DIRECT_DATABASE_URL, TELEGRAM_BOT_TOKEN
 - Production URL: https://leakfixer-miniapp.vercel.app
+
+---
+Task ID: 11
+Agent: Main Agent
+Task: Separate sandbox/prod schemas and create Supabase checklist
+
+Work Log:
+- Updated package.json with separate scripts for sandbox and prod:
+  - db:push:sandbox, db:push:prod (separate schemas)
+  - db:generate:sandbox, db:generate:prod
+  - db:migrate:sandbox, db:migrate:prod
+  - db:studio:sandbox, db:studio:prod
+  - db:validate:sandbox, db:validate:prod
+- Created SUPABASE_CHECKLIST.md:
+  - Complete list of 34 tables with creation order
+  - Detailed field descriptions for each table (name, type, nullable, unique, default, notes)
+  - Foreign key relationships and indexes
+  - SQL template for app_users table
+  - Instructions for Row Level Security
+  - History of changes section
+- Rewrote BRANCH_STRATEGY.md:
+  - Clear sandbox vs prod workflow
+  - Command reference tables for both environments
+  - Environment variables documentation
+  - Deployment verification guide
+  - Important limitations from sandbox
+- Created .env.example with clear instructions for:
+  - Sandbox: SQLite + demo mode
+  - Production: Supabase URLs + Telegram bot token
+- Validated SQLite schema: passes
+- PostgreSQL schema validation: requires DIRECT_DATABASE_URL (expected in sandbox)
+
+Stage Summary:
+- Complete separation of sandbox (SQLite) and prod (PostgreSQL) workflows
+- Supabase checklist with all 34 tables documented
+- User can now create tables in Supabase manually using the checklist
+- npm scripts clearly distinguish between environments
+- Sandbox works without any external network access
+- Production requires: DATABASE_URL, DIRECT_DATABASE_URL, TELEGRAM_BOT_TOKEN in Vercel

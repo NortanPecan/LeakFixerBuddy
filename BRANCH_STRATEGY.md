@@ -2,152 +2,262 @@
 
 ## Overview
 
-LeakFixer Buddy uses a **two-branch strategy** to separate development and production environments.
+LeakFixer Buddy использует **двухветочную стратегию** с полным разделением окружений.
 
-## Branches
+---
 
-### `master` — Sandbox (Development)
+## Ветки
 
-**Purpose**: Local development, UI/UX iteration, feature testing
+### `master` — Sandbox (Разработка)
 
-**Configuration**:
-- Database: SQLite (local file)
-- Telegram: Mocked/demo mode
-- External services: Optional or mocked
+**Назначение**: Локальная разработка, UI/UX итерации, тестирование фич
 
-**Setup**:
+**Конфигурация**:
+- База данных: **SQLite** (локальный файл `prisma/db/custom.db`)
+- Telegram: Мок/demo режим (без реального подключения)
+- Внешние сервисы: Опционально или замоканы
+- Схема: `prisma/schema.prisma` (SQLite)
+
+**Команды для sandbox**:
+
 ```bash
+# Установка
 git checkout master
 bun install
+
+# Настройка .env
 echo 'DATABASE_URL="file:./db/custom.db"' > .env
 echo 'DEMO_MODE="true"' >> .env
-bun run db:push
+
+# Работа с БД
+bun run db:push:sandbox      # Создать/обновить таблицы в SQLite
+bun run db:generate:sandbox  # Сгенерировать Prisma Client
+bun run db:studio:sandbox    # Открыть Prisma Studio для SQLite
+bun run db:validate:sandbox  # Проверить валидность схемы
+
+# Запуск
 bun run dev
 ```
 
 **Workflow**:
-1. All new features start in `master`
-2. Test locally with SQLite
-3. UI/UX changes without network dependencies
-4. Merge to `main` when ready for production
+1. Все новые фичи начинаются в `master`
+2. Тестируются локально с SQLite
+3. UI/UX изменения без сетевых зависимостей
+4. После готовности — merge в `main` для продакшена
 
 ---
 
 ### `main` — Production
 
-**Purpose**: Live Telegram Mini App
+**Назначение**: Рабочий Telegram Mini App
 
-**Configuration**:
-- Database: Supabase PostgreSQL
-- Telegram: Real Mini App auth
-- Deployment: Vercel
+**Конфигурация**:
+- База данных: **Supabase PostgreSQL**
+- Telegram: Реальная авторизация Mini App
+- Деплой: Vercel (автоматический при push)
+- Схема: `prisma/schema.supabase.prisma` (PostgreSQL)
 
-**Setup**:
+**Команды для prod (только для проверки схемы!)**:
+
 ```bash
-git checkout main
-bun install
-# Configure .env with Supabase URLs
-bunx prisma migrate deploy
-bun run dev
+# ВАЖНО: Эти команды НЕ подключаются к реальной БД из песочницы!
+# Они используются только для валидации схемы
+
+bun run db:validate:prod     # Проверить валидность PostgreSQL схемы
+bun run db:generate:prod     # Сгенерировать Prisma Client для PostgreSQL
 ```
 
-**Deployment**:
-1. Push to `main` → auto-deploys to Vercel
-2. Environment variables configured in Vercel Dashboard
-3. Telegram Mini App URL: `https://your-app.vercel.app`
+**Реальное управление БД в Supabase**:
+- Таблицы создаются **вручную** через веб-интерфейс Supabase
+- Используйте `SUPABASE_CHECKLIST.md` как инструкцию
+- SQL можно запускать через Supabase SQL Editor
 
 ---
 
-## Database Schema Management
+## Переменные окружения
 
-### SQLite Schema (`prisma/schema.prisma`)
-- Used for `master` branch
-- Provider: `sqlite`
-- Features: All current models
+### Master (.env для sandbox)
 
-### PostgreSQL Schema (`prisma/schema.supabase.prisma`)
-- Used for `main` branch
-- Provider: `postgresql`
-- Compatible with Supabase
-- Uses `@db.Uuid`, `@db.Timestamptz`, etc.
-
-### Switching Schemas
-
-When deploying to production:
-
-```bash
-# On main branch
-cd prisma
-mv schema.prisma schema.sqlite.prisma
-mv schema.supabase.prisma schema.prisma
-cd ..
-git add . && git commit -m "chore: switch to PostgreSQL schema"
-git push
-```
-
----
-
-## Environment Variables
-
-### Master (.env for sandbox)
 ```env
 DATABASE_URL="file:./db/custom.db"
 DEMO_MODE="true"
 ```
 
-### Main (.env for production)
+### Main (Vercel Environment Variables)
+
 ```env
-DATABASE_URL="postgresql://...pooler.supabase.com:6543/postgres?pgbouncer=true"
-DIRECT_DATABASE_URL="postgresql://...supabase.co:5432/postgres"
-TELEGRAM_BOT_TOKEN="your-bot-token"
+# Supabase Database URLs
+DATABASE_URL="postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres?pgbouncer=true"
+DIRECT_DATABASE_URL="postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres"
+
+# Telegram Bot
+TELEGRAM_BOT_TOKEN="your-bot-token-here"
+```
+
+**Как получить URL от Supabase**:
+1. Зайдите в Supabase Dashboard → Project Settings → Database
+2. `DATABASE_URL` = Connection pooling (port 6543) — для приложения
+3. `DIRECT_DATABASE_URL` = Direct connection (port 5432) — для миграций
+
+---
+
+## Управление схемами БД
+
+### Структура файлов
+
+```
+prisma/
+├── schema.prisma           # SQLite для master (sandbox)
+├── schema.supabase.prisma  # PostgreSQL для main (production)
+└── db/
+    └── custom.db           # Локальная SQLite база
+```
+
+### Различия схем
+
+| Характеристика | SQLite (sandbox) | PostgreSQL (prod) |
+|----------------|------------------|-------------------|
+| Provider | `sqlite` | `postgresql` |
+| ID тип | `@id @default(cuid())` | `@id @default(uuid()) @db.Uuid` |
+| DateTime | `DateTime` | `DateTime @db.Timestamptz` |
+| BigInt | `String` (как строка) | `BigInt @db.BigInt` |
+| directUrl | Нет | `directUrl = env("DIRECT_DATABASE_URL")` |
+
+### Когда нужно менять схему
+
+1. **Добавить новое поле**:
+   - Отредактируйте `schema.prisma` (sandbox)
+   - Отредактируйте `schema.supabase.prisma` (prod)
+   - Обновите `SUPABASE_CHECKLIST.md`
+   - Запустите `bun run db:push:sandbox`
+   - В проде добавьте поле вручную через Supabase
+
+2. **Добавить новую таблицу**:
+   - Аналогично: обе схемы + чек-лист
+   - В проде создайте таблицу по чек-листу
+
+---
+
+## NPM Scripts Reference
+
+### Sandbox (SQLite)
+
+| Команда | Описание |
+|---------|----------|
+| `bun run db:push:sandbox` | Создать/обновить таблицы в SQLite |
+| `bun run db:generate:sandbox` | Сгенерировать Prisma Client |
+| `bun run db:migrate:sandbox` | Создать и применить миграцию |
+| `bun run db:reset:sandbox` | Сбросить БД и применить все миграции |
+| `bun run db:studio:sandbox` | Открыть Prisma Studio |
+| `bun run db:validate:sandbox` | Проверить схему на ошибки |
+
+### Production (PostgreSQL)
+
+| Команда | Описание |
+|---------|----------|
+| `bun run db:push:prod` | Только для справки — НЕ использовать в песочнице |
+| `bun run db:generate:prod` | Сгенерировать клиент для PostgreSQL схемы |
+| `bun run db:migrate:prod` | Применить миграции к прод БД (снаружи песочницы) |
+| `bun run db:studio:prod` | Открыть Prisma Studio для прод БД |
+| `bun run db:validate:prod` | Проверить PostgreSQL схему на ошибки |
+
+---
+
+## Деплой на Vercel
+
+### Первый деплой
+
+1. Подключите GitHub репозиторий к Vercel
+2. Укажите branch `main` для production
+3. Добавьте environment variables в Vercel Dashboard:
+   - `DATABASE_URL`
+   - `DIRECT_DATABASE_URL`
+   - `TELEGRAM_BOT_TOKEN`
+
+### Проверка деплоя
+
+После деплоя проверьте health endpoint:
+
+```
+GET https://your-app.vercel.app/api/health
+```
+
+Ожидаемый ответ:
+```json
+{
+  "status": "healthy",
+  "database": "connected",
+  "timestamp": "2024-..."
+}
 ```
 
 ---
 
-## Migration Strategy
+## Как проверить, что прод настроен правильно
 
-### Development (master)
-```bash
-bun run db:push  # Push schema changes directly to SQLite
-```
+### 1. Проверка environment variables
 
-### Production (main)
-```bash
-bunx prisma migrate dev --name description  # Create migration
-bunx prisma migrate deploy  # Apply to production
-```
+В Vercel Dashboard должны быть:
+- ✅ `DATABASE_URL` (port 6543, pooling)
+- ✅ `DIRECT_DATABASE_URL` (port 5432, direct)
+- ✅ `TELEGRAM_BOT_TOKEN`
+
+### 2. Проверка схемы
+
+Код в `main` ветке должен использовать PostgreSQL-совместимые типы:
+- UUID вместо CUID
+- Timestamptz вместо DateTime
+- BigInt для Telegram ID
+
+### 3. Проверка таблиц в Supabase
+
+Таблицы должны существовать и иметь правильную структуру:
+- Используйте `SUPABASE_CHECKLIST.md`
+- Проверьте Foreign Keys
+- Проверьте индексы
 
 ---
 
 ## CI/CD Flow
 
 ```
-master (local dev)
+master (локальная разработка)
     ↓
-  [testing]
+  [тестирование в SQLite]
     ↓
   PR to main
     ↓
-  [review]
+  [code review]
     ↓
   merge to main
     ↓
   Vercel auto-deploy
     ↓
-  Production (leakfixer-miniapp.vercel.app)
+  Production (leak-fixer-buddy.vercel.app)
 ```
 
 ---
 
-## Future Auth Integration
+## Важные ограничения
 
-The schema supports future authentication methods:
+### Из песочницы НЕЛЬЗЯ:
 
-1. **Current**: Telegram Mini App only
-2. **Phase 2**: Add phone verification (Supabase Auth)
-3. **Phase 3**: Add email verification (Supabase Auth)
+1. ❌ Подключиться к Supabase PostgreSQL
+2. ❌ Запустить миграции на прод базу
+3. ❌ Использовать реальный Telegram Bot API
 
-Fields already in schema:
-- `email`, `phone` (unique, nullable)
-- `emailVerified`, `phoneVerified` (timestamps)
-- `authProvider` (telegram | email | phone)
+### Что можно делать в песочнице:
+
+1. ✅ Разрабатывать UI/UX
+2. ✅ Тестировать с SQLite
+3. ✅ Мокать внешние API
+4. ✅ Валидировать PostgreSQL схему
+
+---
+
+## История изменений
+
+| Дата | Изменение |
+|------|-----------|
+| 2024-XX-XX | Добавлены отдельные npm scripts для sandbox/prod |
+| 2024-XX-XX | Создан SUPABASE_CHECKLIST.md |
