@@ -241,7 +241,11 @@ export const useAppStore = create<AppState>()(
 
           return true
         } catch (error) {
+          const message = error instanceof Error ? error.message : 'Auth failed'
           console.error('Login error:', error)
+          if (typeof window !== 'undefined') {
+            ;(window as unknown as { __leakfixerAuthError?: string }).__leakfixerAuthError = message
+          }
           set({ isLoading: false })
           return false
         }

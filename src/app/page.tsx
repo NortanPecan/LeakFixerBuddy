@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useAppStore, Screen } from '@/lib/store'
 import { BottomNav } from '@/components/BottomNav'
 import { HomeScreen } from '@/components/screens/HomeScreen'
@@ -96,6 +96,7 @@ export default function Home() {
     login,
     setIsLoading
   } = useAppStore()
+  const [authError, setAuthError] = useState<string | null>(null)
 
   useEffect(() => {
     const initApp = async () => {
@@ -112,7 +113,13 @@ export default function Home() {
         }
       }
       // Login decision is handled in store (Telegram first, demo fallback only in regular browser)
-      await login()
+      const ok = await login()
+      if (!ok && typeof window !== 'undefined') {
+        const message = (window as unknown as { __leakfixerAuthError?: string }).__leakfixerAuthError
+        setAuthError(message || 'Auth failed')
+      } else {
+        setAuthError(null)
+      }
 
       setIsLoading(false)
     }
@@ -120,7 +127,15 @@ export default function Home() {
     initApp()
   }, [isInitialized, login, setIsLoading])
 
-  if (!isInitialized || isLoading) {
+  if (isLoading) {
+    return <LoadingScreen />
+  }
+
+  if (!isInitialized && authError) {
+    return <AuthErrorScreen message={authError} />
+  }
+
+  if (!isInitialized) {
     return <LoadingScreen />
   }
 
@@ -132,6 +147,35 @@ export default function Home() {
         <ScreenRouter screen={currentScreen} contentId={selectedContentId} />
       </div>
       {showBottomNav && <BottomNav />}
+    </main>
+  )
+}
+
+function AuthErrorScreen({ message }: { message: string }) {
+  const { login, setIsLoading } = useAppStore()
+
+  return (
+    <main className="min-h-screen bg-background">
+      <div className="max-w-md mx-auto px-4 py-8 space-y-4">
+        <h1 className="text-xl font-semibold">Ошибка авторизации</h1>
+        <p className="text-sm text-muted-foreground break-words">{message}</p>
+        <div className="grid grid-cols-1 gap-2">
+          <Button onClick={async () => {
+            setIsLoading(true)
+            await login()
+            setIsLoading(false)
+          }}>
+            Повторить
+          </Button>
+          <Button variant="outline" onClick={async () => {
+            setIsLoading(true)
+            await login(true)
+            setIsLoading(false)
+          }}>
+            Войти как демо
+          </Button>
+        </div>
+      </div>
     </main>
   )
 }
