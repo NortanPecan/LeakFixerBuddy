@@ -1,0 +1,242 @@
+// LeakFixer Mini App - Prisma Schema for Supabase (Production)
+// PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+// ============================================
+// CORE DOMAIN (Match existing Supabase tables)
+// ============================================
+
+/// Canonical app user mapped to Telegram ID
+model AppUser {
+  id          String    @id @default(uuid()) @db.Uuid
+  telegramId  BigInt?   @unique @map("telegram_id") @db.BigInt
+  username    String?
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  users       User[]
+  dailyLogs   DailyLog[]
+  dailyStates DailyState[]
+  fitnessDaily FitnessDaily[]
+  fitnessProfile FitnessProfile?
+  measurements Measurement[]
+  userProfile UserProfile?
+  userAccessOwner  UserAccess[] @relation("UserAccessOwner")
+  userAccessViewer  UserAccess[] @relation("UserAccessViewer")
+
+  @@map("app_users")
+}
+
+/// Legacy users table (linked to app_users)
+model User {
+  id          BigInt   @id @default(autoincrement())
+  telegramId  BigInt   @unique @map("telegram_id") @db.BigInt
+  username    String?
+  day         Int      @default(1)
+  streak      Int      @default(0)
+  points      Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp
+  appUserId   String?  @map("app_user_id") @db.Uuid
+
+  // Relations
+  appUser     AppUser? @relation(fields: [appUserId], references: [id])
+  dailyLogs   DailyLog[]
+  habitLogs   HabitLog[]
+  buddies1    Buddy[]  @relation("BuddyUser1")
+  buddies2    Buddy[]  @relation("BuddyUser2")
+
+  @@map("users")
+}
+
+/// Lessons for 30-day loop
+model Lesson {
+  id          Int      @id @default(autoincrement())
+  day         Int      @unique
+  title       String
+  description String?
+  videoUrl    String?  @map("video_url")
+
+  // Relations
+  dailyLogs   DailyLog[]
+
+  @@map("lessons")
+}
+
+/// Daily lesson completion logs
+model DailyLog {
+  id          BigInt    @id @default(autoincrement())
+  userId      BigInt?   @map("user_id") @db.BigInt
+  day         Int?
+  completed   Boolean   @default(false)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp
+  appUserId   String?   @map("app_user_id") @db.Uuid
+
+  // Relations
+  user        User?     @relation(fields: [userId], references: [telegramId])
+  appUser     AppUser?  @relation(fields: [appUserId], references: [id])
+  lesson      Lesson?   @relation(fields: [day], references: [day])
+
+  @@map("daily_logs")
+}
+
+// ============================================
+// BUDDIES (accountability partners)
+// ============================================
+
+model Buddy {
+  id            BigInt   @id @default(autoincrement())
+  user1Id       BigInt?  @map("user1_id") @db.BigInt
+  user2Id       BigInt?  @map("user2_id") @db.BigInt
+  day           Int?
+  bothCompleted Boolean  @default(false) @map("both_completed")
+
+  // Relations
+  user1         User?    @relation("BuddyUser1", fields: [user1Id], references: [telegramId])
+  user2         User?    @relation("BuddyUser2", fields: [user2Id], references: [telegramId])
+
+  @@map("buddies")
+}
+
+// ============================================
+// HABITS DOMAIN
+// ============================================
+
+/// Predefined habits catalog
+model Habit {
+  id        Int         @id @default(autoincrement())
+  code      String      @unique
+  title     String
+  logs      HabitLog[]
+
+  @@map("habits")
+}
+
+/// Habit completion logs
+model HabitLog {
+  id        BigInt   @id @default(autoincrement())
+  userId    BigInt   @map("user_id") @db.BigInt
+  habitId   Int?     @map("habit_id")
+  day       Int
+  completed Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  appUserId String?  @map("app_user_id") @db.Uuid
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [telegramId])
+  habit  Habit? @relation(fields: [habitId], references: [id])
+
+  @@map("habit_logs")
+}
+
+// ============================================
+// FITNESS DOMAIN
+// ============================================
+
+/// User fitness profile
+model FitnessProfile {
+  appUserId   String   @id @map("app_user_id") @db.Uuid
+  weight      Float?
+  height      Float?
+  age         Int?
+  targetWeight Float?  @map("target_weight")
+  workProfile String?  @map("work_profile")
+  setupDone   Boolean  @default(false) @map("setup_done")
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz
+
+  // Relations
+  appUser     AppUser  @relation(fields: [appUserId], references: [id], onDelete: Cascade)
+
+  @@map("fitness_profiles")
+}
+
+/// User profile (additional info)
+model UserProfile {
+  appUserId         String   @id @map("app_user_id") @db.Uuid
+  birthDate        DateTime? @map("birth_date") @db.Date
+  gender           String?
+  currentWeight    Float?    @map("current_weight")
+  currentHeight    Float?    @map("current_height")
+  currentWorkProfile String? @map("current_work_profile")
+  settings         Json?     @db.JsonB
+  updatedAt        DateTime  @default(now()) @map("updated_at") @db.Timestamptz
+
+  // Relations
+  appUser          AppUser   @relation(fields: [appUserId], references: [id], onDelete: Cascade)
+
+  @@map("user_profile")
+}
+
+/// Daily fitness data snapshot
+model FitnessDaily {
+  id         String   @id @default(uuid()) @db.Uuid
+  appUserId  String   @map("app_user_id") @db.Uuid
+  dateKey    String   @map("date_key")
+  waterMl    Int      @default(0) @map("water_ml")
+  workDay    String?  @default("normal") @map("work_day")
+  data       Json?    @db.JsonB
+  updatedAt  DateTime @default(now()) @map("updated_at") @db.Timestamptz
+
+  // Relations
+  appUser    AppUser  @relation(fields: [appUserId], references: [id], onDelete: Cascade)
+
+  @@map("fitness_daily")
+}
+
+/// Daily aggregated state for leak/progress model
+model DailyState {
+  id        String   @id @default(uuid()) @db.Uuid
+  appUserId String   @map("app_user_id") @db.Uuid
+  date      DateTime @db.Date
+  mood      Float?
+  streak    Int?
+  notes     String?
+  data      Json?    @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz
+
+  // Relations
+  appUser   AppUser  @relation(fields: [appUserId], references: [id], onDelete: Cascade)
+
+  @@map("daily_state")
+}
+
+/// Measurements log (weight, body measurements, etc.)
+model Measurement {
+  id         String   @id @default(uuid()) @db.Uuid
+  appUserId  String   @map("app_user_id") @db.Uuid
+  measuredAt DateTime @map("measured_at") @db.Timestamptz
+  type       String
+  value      Float?
+  textValue  String?  @map("text_value")
+  meta       Json?    @db.JsonB
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  appUser    AppUser  @relation(fields: [appUserId], references: [id], onDelete: Cascade)
+
+  @@map("measurements")
+}
+
+/// User access permissions (for sharing)
+model UserAccess {
+  id              String   @id @default(uuid()) @db.Uuid
+  ownerAppUserId  String   @map("owner_app_user_id") @db.Uuid
+  viewerAppUserId String   @map("viewer_app_user_id") @db.Uuid
+  canEdit         Boolean  @default(false) @map("can_edit")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  owner           AppUser  @relation("UserAccessOwner", fields: [ownerAppUserId], references: [id], onDelete: Cascade)
+  viewer          AppUser  @relation("UserAccessViewer", fields: [viewerAppUserId], references: [id], onDelete: Cascade)
+
+  @@map("user_access")
+}
