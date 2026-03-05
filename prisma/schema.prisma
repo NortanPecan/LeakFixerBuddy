@@ -63,11 +63,13 @@ model AppUser {
 model UserProfile {
   id            String   @id @default(cuid())
   userId        String   @unique
-  weight        Float?
-  height        Float?
-  age           Int?
+  weight        Float?   // kg
+  height        Float?   // cm
+  age           Int?     // years
+  sex           String?  // "male" or "female" - for BMR calculation
   targetWeight  Float?
-  workProfile   String?
+  targetCalories Int?   // Optional override for daily calorie target
+  workProfile   String?  // sedentary, mixed, physical, variable
   waterBaseline Int      @default(2000)
   waist         Float?
   hips          Float?

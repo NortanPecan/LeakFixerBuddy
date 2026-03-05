@@ -271,3 +271,39 @@ Stage Summary:
 - No duplicate data entry required
 - BottomNav updated with Challenges tab
 - Ready for production use
+
+---
+Task ID: 8
+Agent: Main Agent
+Task: Migrate Health module (Supplements, Food, Water) from old MiniApp and add Body Energy block
+
+Work Log:
+- Fixed import naming mismatch in water/route.ts (was importing `endOfDay`, should be `getEndOfDay`)
+- Fixed foreign key constraint error by ensuring proper user creation flow
+- Added new fields to UserProfile in Prisma schema:
+  - `sex` (male/female) - for BMR calculation
+  - `targetCalories` - optional override for daily calorie target
+- Ran `bun run db:push` to apply schema changes
+- Created /api/energy endpoint:
+  - Calculates BMR using Mifflin-St Jeor formula: `10*weight + 6.25*height - 5*age + sexOffset`
+  - Calculates TDEE using work activity multipliers (sedentary=1.2, mixed=1.4, physical=1.6, variable=1.3)
+  - Returns calories eaten from FoodEntry table
+  - Returns balance (eaten - target) with status (deficit/balanced/surplus)
+- Created BodyEnergyBlock component:
+  - Displays BMR, TDEE, and calories eaten
+  - Shows balance with color coding (green for deficit, red for surplus, yellow for balanced)
+  - Settings dialog for profile data (weight, height, age, sex, workProfile)
+  - Warning banner if profile incomplete
+- Integrated BodyEnergyBlock into FitnessScreen (replaced old Calories card)
+- Updated /api/user to support new profile fields (sex, targetCalories)
+
+Stage Summary:
+- Health module working: Supplements, Food, Water tracking
+- Body Energy block shows:
+  - BMR (базовый метаболизм)
+  - TDEE (суточный расход энергии)
+  - Съеденные калории (из FoodEntry)
+  - Баланс (дефицит/профицит)
+- Profile can be configured with weight, height, age, sex, work type
+- Automatic calculation based on Mifflin-St Jeor formula
+- Ready for production use

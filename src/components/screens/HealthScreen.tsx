@@ -775,7 +775,7 @@ export function HealthScreen() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Калории</Label>
+                <Label>Калории <span className="text-muted-foreground text-xs">(для энергии тела)</span></Label>
                 <Input
                   type="number"
                   placeholder="300"

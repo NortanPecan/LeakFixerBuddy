@@ -48,7 +48,9 @@ export async function GET(request: NextRequest) {
         weight: user.profile.weight,
         height: user.profile.height,
         age: user.profile.age,
+        sex: user.profile.sex,
         targetWeight: user.profile.targetWeight,
+        targetCalories: user.profile.targetCalories,
         workProfile: user.profile.workProfile,
         waterBaseline: user.profile.waterBaseline,
         bio: user.profile.bio,
@@ -98,7 +100,9 @@ export async function PATCH(request: NextRequest) {
       if (profile.weight !== undefined) profileData.weight = profile.weight
       if (profile.height !== undefined) profileData.height = profile.height
       if (profile.age !== undefined) profileData.age = profile.age
+      if (profile.sex !== undefined) profileData.sex = profile.sex
       if (profile.targetWeight !== undefined) profileData.targetWeight = profile.targetWeight
+      if (profile.targetCalories !== undefined) profileData.targetCalories = profile.targetCalories
       if (profile.workProfile !== undefined) profileData.workProfile = profile.workProfile
       if (profile.waterBaseline !== undefined) profileData.waterBaseline = profile.waterBaseline
       if (profile.bio !== undefined) profileData.bio = profile.bio

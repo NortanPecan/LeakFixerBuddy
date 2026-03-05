@@ -552,6 +552,16 @@ export function ProfileScreen() {
         <CardContent className="space-y-2">
           <button
             className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+            onClick={() => setScreen('fitness')}
+          >
+            <div className="flex items-center gap-3">
+              <Flame className="w-5 h-5 text-orange-400" />
+              <span className="font-medium">Фитнес</span>
+            </div>
+            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+          </button>
+          <button
+            className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
             onClick={() => setScreen('health')}
           >
             <div className="flex items-center gap-3">
