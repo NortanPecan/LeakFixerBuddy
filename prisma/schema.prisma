@@ -51,6 +51,7 @@ model AppUser {
   accounts     Account[]
   categories   Category[]
   transactions Transaction[]
+  challenges   Challenge[]
 
   @@map("app_users")
 }
@@ -641,4 +642,48 @@ model Transaction {
   category Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@map("transactions")
+}
+
+// ============================================
+// CHALLENGES MODULE
+// ============================================
+
+/// Personal challenge (ritual streak, chain completion, custom goal)
+model Challenge {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  type        String   // "ritual", "chain", "custom"
+  zone        String   @default("general")
+  chainId     String?  // For chain challenges
+  config      String   @default("{}") // JSON: ritualIds, targetSteps, targetCount, periodDays, etc.
+  duration    Int      @default(30) // Duration in days
+  progress    Int      @default(0) // Progress percentage
+  startDate   DateTime @default(now())
+  endDate     DateTime?
+  status      String   @default("active") // "active", "completed", "failed"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  progressDetails ChallengeProgress[]
+
+  @@map("challenges")
+}
+
+/// Challenge progress tracking
+model ChallengeProgress {
+  id             String   @id @default(cuid())
+  challengeId    String
+  daysCompleted  Int      @default(0)
+  currentStreak  Int      @default(0)
+  lastCheckedAt  DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@map("challenge_progress")
 }

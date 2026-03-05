@@ -184,3 +184,46 @@ Stage Summary:
 - Activity statistics computed from DB
 - All changes working in dev mode
 - Ready for GitHub commit and next module development
+
+---
+Task ID: 6
+Agent: Main Agent (GLM-5)
+Task: Implement Finance module (YNAB-lite)
+
+Work Log:
+- Updated Prisma schema:
+  - Created Account model (cash, card, poker, steam, other types)
+  - Created Category model (zones: steam, leakfixer, ai, poker, health, life, savings)
+  - Created Transaction model (amount, date, account, category, zone)
+  - Added relations to AppUser
+- Created API routes:
+  - GET/POST/PATCH/DELETE /api/accounts
+  - GET/POST/PATCH/DELETE /api/categories
+  - GET/POST/PATCH/DELETE /api/transactions
+  - GET /api/finance - summary with balances, categories, recent transactions
+- Created FinanceScreen with:
+  - Total balance card with income/expense summary
+  - Accounts list with current balances
+  - Categories/envelopes with spending tracking
+  - Transactions list with filters
+  - Add account dialog
+  - Add transaction dialog
+  - Zone-based categorization (Steam, LeakFixer, AI, Poker, Health, Life, Savings)
+- Updated BottomNav:
+  - Replaced "Развитие" with "Финансы" tab
+  - Wallet icon for finance
+- Updated store.ts with 'finance' screen type
+- Updated page.tsx with FinanceScreen import and route
+- All APIs tested:
+  - POST /api/accounts creates accounts
+  - POST /api/transactions creates transactions
+  - GET /api/finance returns summary
+- Committed to GitHub: cd23a86
+
+Stage Summary:
+- Finance module fully implemented
+- Accounts can be created with initial balance
+- Transactions can be added with account/category
+- Balance calculated from transactions
+- Categories auto-created from zones
+- Ready for production use

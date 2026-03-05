@@ -18,11 +18,12 @@ import { NotesScreen } from '@/components/screens/NotesScreen'
 import { DevelopmentScreen } from '@/components/screens/DevelopmentScreen'
 import { ContentDetailScreen } from '@/components/screens/ContentDetailScreen'
 import { FinanceScreen } from '@/components/screens/FinanceScreen'
+import { ChallengesScreen } from '@/components/screens/ChallengesScreen'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 
 // Screens that show bottom nav
-const MAIN_SCREENS: Screen[] = ['home', 'fitness', 'rituals', 'gym', 'profile', 'tasks', 'notes', 'development', 'finance']
+const MAIN_SCREENS: Screen[] = ['home', 'fitness', 'rituals', 'gym', 'profile', 'tasks', 'notes', 'development', 'finance', 'challenges']
 
 // Screen router component
 function ScreenRouter({ screen, contentId }: { screen: Screen; contentId?: string | null }) {
@@ -57,6 +58,8 @@ function ScreenRouter({ screen, contentId }: { screen: Screen; contentId?: strin
       return <ContentDetailScreen contentId={contentId || undefined} />
     case 'finance':
       return <FinanceScreen />
+    case 'challenges':
+      return <ChallengesScreen />
     case 'all-rituals':
       return <AllRitualsScreen />
     default:
