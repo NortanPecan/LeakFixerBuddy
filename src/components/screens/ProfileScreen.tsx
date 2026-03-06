@@ -47,7 +47,8 @@ import {
   Sparkles,
   Wallet,
   StickyNote,
-  BookOpen
+  BookOpen,
+  Download
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
@@ -607,6 +608,36 @@ export function ProfileScreen() {
             <div className="flex items-center gap-3">
               <Calendar className="w-5 h-5 text-primary" />
               <span className="font-medium">GYM / Тренировки</span>
+            </div>
+            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+          </button>
+          <button
+            className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+            onClick={() => setScreen('skills')}
+          >
+            <div className="flex items-center gap-3">
+              <Star className="w-5 h-5 text-yellow-400" />
+              <span className="font-medium">Навыки</span>
+            </div>
+            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+          </button>
+          <button
+            className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+            onClick={() => setScreen('traits')}
+          >
+            <div className="flex items-center gap-3">
+              <Heart className="w-5 h-5 text-pink-400" />
+              <span className="font-medium">Черты характера</span>
+            </div>
+            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+          </button>
+          <button
+            className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+            onClick={() => setScreen('export')}
+          >
+            <div className="flex items-center gap-3">
+              <Download className="w-5 h-5 text-cyan-400" />
+              <span className="font-medium">Экспорт в AI</span>
             </div>
             <ChevronRight className="w-5 h-5 text-muted-foreground" />
           </button>

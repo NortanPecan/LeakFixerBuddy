@@ -22,12 +22,16 @@ import { ChallengesScreen } from '@/components/screens/ChallengesScreen'
 import { ChallengeDetailScreen } from '@/components/screens/ChallengeDetailScreen'
 import { HealthScreen } from '@/components/screens/HealthScreen'
 import { DailySummaryScreen } from '@/components/screens/DailySummaryScreen'
+import { GoalsScreen } from '@/components/screens/GoalsScreen'
+import { SkillsScreen } from '@/components/screens/SkillsScreen'
+import { TraitsScreen } from '@/components/screens/TraitsScreen'
+import { ExportScreen } from '@/components/screens/ExportScreen'
 import { DatePicker, DateBadge } from '@/components/DatePicker'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 
 // Screens that show bottom nav
-const MAIN_SCREENS: Screen[] = ['home', 'fitness', 'rituals', 'gym', 'profile', 'tasks', 'notes', 'development', 'finance', 'challenges', 'health', 'daily-summary']
+const MAIN_SCREENS: Screen[] = ['home', 'fitness', 'rituals', 'gym', 'profile', 'tasks', 'notes', 'development', 'finance', 'challenges', 'health', 'daily-summary', 'goals', 'skills', 'traits', 'export']
 
 // Screen router component
 function ScreenRouter({ screen, contentId }: { screen: Screen; contentId?: string | null }) {
@@ -70,6 +74,14 @@ function ScreenRouter({ screen, contentId }: { screen: Screen; contentId?: strin
       return <HealthScreen />
     case 'daily-summary':
       return <DailySummaryScreen />
+    case 'goals':
+      return <GoalsScreen />
+    case 'skills':
+      return <SkillsScreen />
+    case 'traits':
+      return <TraitsScreen />
+    case 'export':
+      return <ExportScreen />
     case 'all-rituals':
       return <AllRitualsScreen />
     default:
