@@ -247,26 +247,27 @@ export function GymScreen() {
   const [newExerciseMuscle, setNewExerciseMuscle] = useState('')
 
   // Load gym periods
-  useEffect(() => {
-    const loadPeriods = async () => {
-      if (!user?.id) return
-      setIsLoading(true)
-      try {
-        const response = await fetch(`/api/gym?userId=${user.id}`)
-        const data = await response.json()
-        setPeriods(data.periods || [])
-        if (data.periods?.length > 0) {
-          const active = data.periods.find((p: GymPeriod) => p.isActive)
-          setActivePeriod(active || data.periods[0])
-        }
-      } catch (error) {
-        console.error('Failed to load gym periods:', error)
-      } finally {
-        setIsLoading(false)
+  const loadPeriods = useCallback(async () => {
+    if (!user?.id) return
+    setIsLoading(true)
+    try {
+      const response = await fetch(`/api/gym?userId=${user.id}`)
+      const data = await response.json()
+      setPeriods(data.periods || [])
+      if (data.periods?.length > 0) {
+        const active = data.periods.find((p: GymPeriod) => p.isActive)
+        setActivePeriod(active || data.periods[0])
       }
+    } catch (error) {
+      console.error('Failed to load gym periods:', error)
+    } finally {
+      setIsLoading(false)
     }
-    loadPeriods()
   }, [user?.id])
+
+  useEffect(() => {
+    loadPeriods()
+  }, [loadPeriods])
 
   // Load workouts for active period
   useEffect(() => {
