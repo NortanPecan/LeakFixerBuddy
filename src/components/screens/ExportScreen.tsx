@@ -7,14 +7,16 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Input } from '@/components/ui/input'
 import { 
   Download, Copy, FileText, Brain, Sparkles, CheckCircle,
-  Database, Zap
+  Database, RefreshCw, Calendar
 } from 'lucide-react'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 const AI_PROVIDERS = [
   { value: 'claude', label: 'Claude (Anthropic)', placeholder: 'Вставь это в Claude для контекста...' },
@@ -23,89 +25,96 @@ const AI_PROVIDERS = [
   { value: 'generic', label: 'Универсальный', placeholder: 'Контекст для любого AI помощника...' },
 ]
 
+const DATE_PRESETS = [
+  { value: '7', label: 'Последняя неделя' },
+  { value: '14', label: 'Последние 2 недели' },
+  { value: '30', label: 'Последний месяц' },
+  { value: 'custom', label: 'Свой диапазон' },
+]
+
+const ENTITIES = [
+  { id: 'rituals', label: 'Ритуалы', icon: '🔥' },
+  { id: 'tasks', label: 'Задачи', icon: '✅' },
+  { id: 'challenges', label: 'Челенджи', icon: '🏆' },
+  { id: 'skills', label: 'Навыки', icon: '⭐' },
+  { id: 'traits', label: 'Качества', icon: '💚' },
+  { id: 'notes', label: 'Заметки', icon: '📝' },
+]
+
 export function ExportScreen() {
   const { user } = useAppStore()
   const [selectedProvider, setSelectedProvider] = useState('claude')
   const [exportData, setExportData] = useState('')
   const [isExporting, setIsExporting] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [exportType, setExportType] = useState<'full' | 'profile' | 'rituals' | 'challenges'>('full')
+  const [error, setError] = useState<string | null>(null)
+  
+  // Date range
+  const [datePreset, setDatePreset] = useState('7')
+  const [customStartDate, setCustomStartDate] = useState('')
+  const [customEndDate, setCustomEndDate] = useState('')
+  
+  // Entity selection
+  const [selectedEntities, setSelectedEntities] = useState<string[]>(['rituals', 'tasks', 'challenges', 'skills', 'traits', 'notes'])
+
+  const getDateRange = () => {
+    const end = new Date()
+    let start = new Date()
+
+    if (datePreset === 'custom') {
+      if (customStartDate) start = new Date(customStartDate)
+      if (customEndDate) {
+        return { 
+          start: customStartDate ? new Date(customStartDate) : start, 
+          end: new Date(customEndDate) 
+        }
+      }
+    } else {
+      const days = parseInt(datePreset)
+      start.setDate(start.getDate() - days)
+    }
+
+    return { start, end }
+  }
+
+  const formatDate = (d: Date) => d.toISOString().split('T')[0]
 
   const handleExport = async () => {
     if (!user?.id) return
     setIsExporting(true)
+    setError(null)
     
     try {
-      const endpoints: Record<string, string> = {
-        full: `/api/stats?userId=${user.id}&full=true`,
-        profile: `/api/user?userId=${user.id}`,
-        rituals: `/api/rituals?userId=${user.id}`,
-        challenges: `/api/challenges?userId=${user.id}`,
-      }
+      const { start, end } = getDateRange()
+      const params = new URLSearchParams({
+        userId: user.id,
+        startDate: formatDate(start),
+        endDate: formatDate(end),
+        entities: selectedEntities.join(',')
+      })
       
-      const res = await fetch(endpoints[exportType])
+      const res = await fetch(`/api/export?${params}`)
+      if (!res.ok) throw new Error('Failed to export')
       const data = await res.json()
       
-      const provider = AI_PROVIDERS.find(p => p.value === selectedProvider)
-      const prompt = generatePrompt(data, exportType, provider?.label || 'AI')
-      
-      setExportData(prompt)
-    } catch (error) {
-      console.error('Export error:', error)
-    } finally {
-      setIsExporting(false)
-    }
-  }
-
-  const generatePrompt = (data: any, type: string, provider: string): string => {
-    const header = `# Контекст пользователя для ${provider}
+      if (data.markdown) {
+        const provider = AI_PROVIDERS.find(p => p.value === selectedProvider)
+        const header = `# Контекст для ${provider?.label || 'AI'}
 
 Это данные пользователя приложения LeakFixer Buddy — личного ассистента для развития привычек, целей и навыков.
 
 `
 
-    const sections: Record<string, string> = {
-      full: `
-## Полный профиль
-
-### Основная информация
-- Имя: ${data.user?.firstName || 'Не указано'}
-- Прогресс: День ${data.user?.day || 1}, Серия: ${data.user?.streak || 0}
-
-### Активность (7 дней)
-- Ритуалов: ${data.stats?.rituals?.completed || 0} выполнено
-- Задач: ${data.stats?.tasks?.completed || 0} выполнено
-- Цепочек: ${data.stats?.chains?.active || 0} активных
-
-### Навыки и черты
-${JSON.stringify(data.skills || [], null, 2)}
-
-### Направления и челенджи
-${JSON.stringify(data.directions || [], null, 2)}
-${JSON.stringify(data.challenges || [], null, 2)}
-`,
-      profile: `
-## Профиль пользователя
-
-- Имя: ${data.firstName || 'Не указано'}
-- О себе: ${data.bio || 'Не указано'}
-- Прогресс: День ${data.day || 1}
-- Серия: ${data.streak || 0}
-- Очки: ${data.points || 0}
-`,
-      rituals: `
-## Ритуалы пользователя
-
-${JSON.stringify(data.rituals || [], null, 2)}
-`,
-      challenges: `
-## Челенджи пользователя
-
-${JSON.stringify(data.challenges || [], null, 2)}
-`,
+        setExportData(header + data.markdown)
+      } else {
+        setError('Не удалось сгенерировать данные')
+      }
+    } catch (err) {
+      console.error('Export error:', err)
+      setError('Ошибка при экспорте данных')
+    } finally {
+      setIsExporting(false)
     }
-
-    return header + (sections[type] || sections.full)
   }
 
   const handleCopy = async () => {
@@ -124,10 +133,31 @@ ${JSON.stringify(data.challenges || [], null, 2)}
     URL.revokeObjectURL(url)
   }
 
+  const toggleEntity = (id: string) => {
+    setSelectedEntities(prev => 
+      prev.includes(id) 
+        ? prev.filter(e => e !== id)
+        : [...prev, id]
+    )
+  }
+
+  const selectAllEntities = () => {
+    setSelectedEntities(ENTITIES.map(e => e.id))
+  }
+
+  const clearAllEntities = () => {
+    setSelectedEntities([])
+  }
+
+  // Calculate date range for display
+  const { start, end } = getDateRange()
+  const displayDateRange = `${formatDate(start)} — ${formatDate(end)}`
+
   return (
     <div className="flex flex-col gap-4 pb-20">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Экспорт в AI</h1>
+        <h1 className="text-2xl font-bold text-foreground">Экспорт в AI</h1>
       </div>
 
       {/* Info */}
@@ -146,61 +176,152 @@ ${JSON.stringify(data.challenges || [], null, 2)}
         </CardContent>
       </Card>
 
-      {/* Export Options */}
+      {/* Error state */}
+      {error && (
+        <Card className="bg-red-500/10 border-red-500/30">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <p className="text-red-400 text-sm">{error}</p>
+              <Button size="sm" variant="outline" onClick={handleExport}>
+                <RefreshCw className="w-4 h-4 mr-1" /> Повторить
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Date Range Selection */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Настройки экспорта</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Calendar className="w-4 h-4" />
+            Период выгрузки
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>AI Провайдер</Label>
-            <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+            <Label>Пресет</Label>
+            <Select value={datePreset} onValueChange={setDatePreset}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {AI_PROVIDERS.map(p => (
-                  <SelectItem key={p.value} value={p.value}>
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4" />
-                      {p.label}
-                    </div>
-                  </SelectItem>
+                {DATE_PRESETS.map(p => (
+                  <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label>Что экспортировать</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { value: 'full', label: 'Всё', icon: Database },
-                { value: 'profile', label: 'Профиль', icon: FileText },
-                { value: 'rituals', label: 'Ритуалы', icon: Zap },
-                { value: 'challenges', label: 'Челенджи', icon: Target },
-              ].map(opt => (
-                <Button
-                  key={opt.value}
-                  variant={exportType === opt.value ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setExportType(opt.value as any)}
-                  className="justify-start"
-                >
-                  <opt.icon className="w-4 h-4 mr-2" />
-                  {opt.label}
-                </Button>
-              ))}
+          {datePreset === 'custom' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>С</Label>
+                <Input 
+                  type="date"
+                  value={customStartDate}
+                  onChange={e => setCustomStartDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>По</Label>
+                <Input 
+                  type="date"
+                  value={customEndDate}
+                  onChange={e => setCustomEndDate(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="text-sm text-muted-foreground">
+            Период: {displayDateRange}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Entity Selection */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Database className="w-4 h-4" />
+              Что включить
+            </CardTitle>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={selectAllEntities}>
+                Все
+              </Button>
+              <Button variant="ghost" size="sm" onClick={clearAllEntities}>
+                Очистить
+              </Button>
             </div>
           </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-2">
+            {ENTITIES.map(entity => (
+              <label
+                key={entity.id}
+                className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                  selectedEntities.includes(entity.id) 
+                    ? 'bg-primary/10 border-primary' 
+                    : 'bg-muted/30 border-transparent'
+                }`}
+              >
+                <Checkbox
+                  checked={selectedEntities.includes(entity.id)}
+                  onCheckedChange={() => toggleEntity(entity.id)}
+                />
+                <span className="text-sm">{entity.icon}</span>
+                <span className="text-sm">{entity.label}</span>
+              </label>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* AI Provider Selection */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Sparkles className="w-4 h-4" />
+            AI Провайдер
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {AI_PROVIDERS.map(p => (
+                <SelectItem key={p.value} value={p.value}>
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" />
+                    {p.label}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           <Button 
             className="w-full" 
             onClick={handleExport}
-            disabled={isExporting}
+            disabled={isExporting || selectedEntities.length === 0}
           >
-            <Download className="w-4 h-4 mr-2" />
-            {isExporting ? 'Экспорт...' : 'Сгенерировать'}
+            {isExporting ? (
+              <>
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                Генерация...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4 mr-2" />
+                Сгенерировать
+              </>
+            )}
           </Button>
         </CardContent>
       </Card>
@@ -220,7 +341,7 @@ ${JSON.stringify(data.challenges || [], null, 2)}
                   )}
                 </Button>
                 <Button variant="outline" size="sm" onClick={handleDownload}>
-                  <Download className="w-4 h-4 mr-1" /> Скачать
+                  <Download className="w-4 h-4 mr-1" /> Скачать .md
                 </Button>
               </div>
             </div>
@@ -232,19 +353,31 @@ ${JSON.stringify(data.challenges || [], null, 2)}
               className="min-h-[300px] font-mono text-sm"
               placeholder={AI_PROVIDERS.find(p => p.value === selectedProvider)?.placeholder}
             />
+            <div className="flex items-center justify-between mt-2">
+              <Badge variant="outline">
+                {exportData.length} символов
+              </Badge>
+              <Badge variant="outline">
+                {selectedEntities.length} разделов
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Loading skeleton */}
+      {isExporting && (
+        <Card>
+          <CardContent className="pt-4">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
           </CardContent>
         </Card>
       )}
     </div>
-  )
-}
-
-function Target({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="10" />
-      <circle cx="12" cy="12" r="6" />
-      <circle cx="12" cy="12" r="2" />
-    </svg>
   )
 }

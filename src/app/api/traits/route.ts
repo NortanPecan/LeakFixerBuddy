@@ -19,7 +19,26 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ traits })
+    // Calculate gaps and sort by largest gap first (for positive traits)
+    const traitsWithGap = traits.map(trait => ({
+      ...trait,
+      gap: trait.targetScore ? trait.targetScore - trait.score : 0
+    }))
+
+    // Sort positive traits by gap (largest first)
+    const sortedTraits = [
+      ...traitsWithGap.filter(t => t.type === 'positive').sort((a, b) => b.gap - a.gap),
+      ...traitsWithGap.filter(t => t.type === 'negative'),
+      ...traitsWithGap.filter(t => t.type === 'neutral')
+    ]
+
+    // Get top 3 gaps
+    const topGaps = traitsWithGap
+      .filter(t => t.type === 'positive' && t.targetScore && t.gap > 0)
+      .sort((a, b) => b.gap - a.gap)
+      .slice(0, 3)
+
+    return NextResponse.json({ traits: sortedTraits, topGaps })
   } catch (error) {
     console.error('Fetch traits error:', error)
     return NextResponse.json({ error: 'Failed to fetch traits' }, { status: 500 })
@@ -30,22 +49,23 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, name, description, type, category, icon, color, score } = body
+    const { userId, name, description, type, category, icon, color, score, targetScore } = body
 
-    if (!userId || !name) {
+    if (!userId || !name || !name.trim()) {
       return NextResponse.json({ error: 'userId and name required' }, { status: 400 })
     }
 
     const trait = await db.trait.create({
       data: {
         userId,
-        name,
-        description,
+        name: name.trim(),
+        description: description?.trim() || null,
         type: type || 'positive',
         category: category || 'general',
         icon,
         color,
-        score: score || 5
+        score: score || 5,
+        targetScore: targetScore || null
       }
     })
 
@@ -60,13 +80,13 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, name, description, type, category, icon, color, scoreChange, reason, sourceId, isArchived } = body
+    const { id, name, description, type, category, icon, color, scoreChange, reason, sourceId, isArchived, targetScore, score } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
 
-    // If score change
+    // If score change via delta
     if (scoreChange !== undefined) {
       const trait = await db.trait.findUnique({ where: { id } })
       if (!trait) {
@@ -95,9 +115,20 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ trait: { ...trait, score: newScore } })
     }
 
+    const updateData: Record<string, unknown> = {}
+    if (name !== undefined) updateData.name = name.trim()
+    if (description !== undefined) updateData.description = description?.trim() || null
+    if (type !== undefined) updateData.type = type
+    if (category !== undefined) updateData.category = category
+    if (icon !== undefined) updateData.icon = icon
+    if (color !== undefined) updateData.color = color
+    if (isArchived !== undefined) updateData.isArchived = isArchived
+    if (targetScore !== undefined) updateData.targetScore = targetScore
+    if (score !== undefined) updateData.score = Math.max(1, Math.min(10, score))
+
     const trait = await db.trait.update({
       where: { id },
-      data: { name, description, type, category, icon, color, isArchived }
+      data: updateData
     })
 
     return NextResponse.json({ trait })

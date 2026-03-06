@@ -998,9 +998,150 @@ Work Log:
    - store.ts: новые типы экранов
    - page.tsx: маршрутизация
 
+---
+Task ID: 27
+Agent: Main Agent
+Task: Реализация модулей «Навыки», «Качества», «Выгрузка в ИИ» v1.1 — полное соответствие брифу
+
+Work Log:
+- Обновлён Prisma schema:
+  - Skill: добавлено поле `importance` (1-3, где 3 — самое важное)
+  - Trait: добавлено поле `targetScore` (целевой уровень 1-10)
+- Обновлён API /api/skills:
+  - Добавлена поддержка importance в CRUD
+  - Фильтрация по category и importance
+  - Proper validation и error handling
+- Обновлён API /api/traits:
+  - Добавлена поддержка targetScore
+  - Сортировка по разрыву (gap = targetScore - score)
+  - Возврат topGaps (ТОП-3 качества с наибольшим разрывом)
+- Создан API /api/export:
+  - Принимает userId, startDate, endDate, entities (чекбоксы)
+  - Генерирует структурированный markdown:
+    - Ритуалы: % выполнения, топ стабильных, топ пропускаемых
+    - Задачи: всего/выполнено/просрочено
+    - Челенджи: прогресс по каждому
+    - Навыки: прогресс за период, важные навыки
+    - Качества: ТОП-3 с наибольшим разрывом
+    - Заметки: список за период
+- Полностью переписан SkillsScreen:
+  - Skeleton loading states (3 карточки с animate-pulse)
+  - Error state с кнопкой "Повторить"
+  - Фильтры по категории и важности
+  - Редактирование навыка (диалог)
+  - Визуальный индикатор важности (звезда для importance=3)
+  - Loading spinner при добавлении XP
+- Полностью переписан TraitsScreen:
+  - Skeleton loading states
+  - Error state с retry
+  - ТОП-3 зоны для развития (analytics card)
+  - Progress bars для качеств с targetScore
+  - Сортировка положительных качеств по разрыву
+  - Редактирование качества (диалог)
+- Полностью переписан ExportScreen:
+  - Date range selection (пресеты: неделя, 2 недели, месяц, кастом)
+  - Entity checkboxes (ритуалы, задачи, челенджи, навыки, качества, заметки)
+  - AI provider selection (Claude, ChatGPT, Gemini, Generic)
+  - Copy to clipboard + Download .md
+  - Character count + sections count
+
 Stage Summary:
-- Все модули восстановлены
-- Коммит: 310b337
+- Модуль «Навыки» полностью готов к использованию:
+  - Ведение списка навыков с уровнями
+  - Важность (1-3) для приоритизации
+  - Фильтры по категории/важности
+  - XP система с уровнем вверх
+- Модуль «Качества» полностью готов:
+  - Текущий уровень (score) + целевой (targetScore)
+  - Прогресс-бары для визуализации
+  - ТОП-3 зоны развития
+  - +/- кнопки для изменения оценки
+- Модуль «Выгрузка в ИИ» полностью готов:
+  - Выбор периода (пресеты + кастом)
+  - Выбор сущностей для включения
+  - Форматированный markdown для AI
+  - Копирование/скачивание
+
+Рекомендации и улучшения:
+
+1. **Critical UX/Dev improvements:**
+   - Добавить toast-уведомления при сохранении (требует toaster setup)
+   - Добавить optimistic updates для toggle/buttons
+   - Добавить подтверждение удаления (confirm dialog)
+   - Кэшировать данные в Zustand store
+
+2. **Suggested refactors:**
+   - Создать общий хук useApiData<T> для loading/error/fetch логики
+   - Вынести Skeleton компоненты в отдельный файл
+   - Унифицировать dialog формы (общий FormDialog компонент)
+   - Добавить error boundary для каждого экрана
+
+3. **Nice-to-have ideas:**
+   - График прогресса навыка по времени (SkillHistory)
+   - Insight карточки ("Твой навык X вырос на 2 уровня за месяц")
+   - Автоматический расчёт важности навыка на основе ритуалов
+   - Экспорт в JSON для backup
+   - Импорт данных из AI (обратная связь)
 - Pushed to GitHub: master
 
 **Важно:** Всегда проверяй git status перед git reset!
+
+---
+Task ID: 27
+Agent: Main Agent
+Task: Реализация модулей «Навыки», «Качества», «Выгрузка в ИИ» v1.1 — полное соответствие брифу
+
+Work Log:
+- Обновлён Prisma schema:
+  - Skill: добавлено поле `importance` (1-3, где 3 — самое важное)
+  - Trait: добавлено поле `targetScore` (целевой уровень 1-10)
+- Обновлён API /api/skills:
+  - Добавлена поддержка importance в CRUD
+  - Фильтрация по category и importance
+  - Proper validation и error handling
+- Обновлён API /api/traits:
+  - Добавлена поддержка targetScore
+  - Сортировка по разрыву (gap = targetScore - score)
+  - Возврат topGaps (ТОП-3 качества с наибольшим разрывом)
+- Создан API /api/export:
+  - Принимает userId, startDate, endDate, entities (чекбоксы)
+  - Генерирует структурированный markdown
+- Полностью переписан SkillsScreen:
+  - Skeleton loading states
+  - Error state с кнопкой "Повторить"
+  - Фильтры по категории и важности
+  - Редактирование навыка
+  - Визуальный индикатор важности
+- Полностью переписан TraitsScreen:
+  - Skeleton loading states
+  - Error state с retry
+  - ТОП-3 зоны для развития
+  - Progress bars для качеств с targetScore
+  - Редактирование качества
+- Полностью переписан ExportScreen:
+  - Date range selection (пресеты + кастом)
+  - Entity checkboxes
+  - Copy to clipboard + Download
+
+Stage Summary:
+- Модуль «Навыки»: уровни, важность, фильтры
+- Модуль «Качества»: текущий/целевой уровень, ТОП-3 просадки
+- Модуль «Выгрузка в ИИ»: период, сущности, markdown
+
+Рекомендации и улучшения:
+
+1. **Critical UX/Dev improvements:**
+   - Добавить toast-уведомления при сохранении
+   - Добавить optimistic updates для toggle/buttons
+   - Кэшировать данные в Zustand store
+
+2. **Suggested refactors:**
+   - Создать общий хук useApiData<T>
+   - Вынести Skeleton компоненты
+   - Унифицировать dialog формы
+   - Добавить error boundary
+
+3. **Nice-to-have ideas:**
+   - График прогресса навыка по времени
+   - Insight карточки
+   - Экспорт в JSON для backup

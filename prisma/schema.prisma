@@ -839,6 +839,7 @@ model Skill {
   maxLevel     Int      @default(10)
   xp           Int      @default(0)
   xpToNext     Int      @default(100)
+  importance   Int      @default(2) // 1-3, where 3 is most important
   icon         String?
   color        String?
   isArchived   Boolean  @default(false)
@@ -881,7 +882,8 @@ model Trait {
   description String?
   type        String   @default("positive") // positive, negative, neutral
   category    String   @default("general") // health, mind, will, social, productivity
-  score       Int      @default(5) // 1-10 scale
+  score       Int      @default(5) // 1-10 scale, current level
+  targetScore Int?     // 1-10 scale, desired level
   icon        String?
   color       String?
   isArchived  Boolean  @default(false)

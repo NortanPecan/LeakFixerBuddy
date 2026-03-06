@@ -6,16 +6,32 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
+    const category = searchParams.get('category')
+    const importance = searchParams.get('importance')
 
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
 
+    const where: Record<string, unknown> = { userId, isArchived: false }
+    if (category && category !== 'all') {
+      where.category = category
+    }
+    if (importance && importance !== 'all') {
+      where.importance = parseInt(importance)
+    }
+
     const skills = await db.skill.findMany({
-      where: { userId, isArchived: false },
-      orderBy: { createdAt: 'desc' },
+      where,
+      orderBy: [
+        { importance: 'desc' },
+        { createdAt: 'desc' }
+      ],
       include: {
-        history: { orderBy: { createdAt: 'desc' }, take: 10 }
+        history: { 
+          orderBy: { createdAt: 'desc' }, 
+          take: 10 
+        }
       }
     })
 
@@ -30,20 +46,21 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, name, description, category, icon, color } = body
+    const { userId, name, description, category, icon, color, importance } = body
 
-    if (!userId || !name) {
+    if (!userId || !name || !name.trim()) {
       return NextResponse.json({ error: 'userId and name required' }, { status: 400 })
     }
 
     const skill = await db.skill.create({
       data: {
         userId,
-        name,
-        description,
+        name: name.trim(),
+        description: description?.trim() || null,
         category: category || 'general',
         icon,
-        color
+        color,
+        importance: importance || 2
       }
     })
 
@@ -58,14 +75,14 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, name, description, category, icon, color, xpGained, reason, sourceId, isArchived } = body
+    const { id, name, description, category, icon, color, xpGained, reason, sourceId, isArchived, importance } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
 
     // If XP change, handle level up logic
-    if (xpGained) {
+    if (xpGained !== undefined) {
       const skill = await db.skill.findUnique({ where: { id } })
       if (!skill) {
         return NextResponse.json({ error: 'Skill not found' }, { status: 404 })
@@ -107,9 +124,18 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ skill: { ...skill, xp: newXP, level: newLevel }, leveledUp })
     }
 
+    const updateData: Record<string, unknown> = {}
+    if (name !== undefined) updateData.name = name.trim()
+    if (description !== undefined) updateData.description = description?.trim() || null
+    if (category !== undefined) updateData.category = category
+    if (icon !== undefined) updateData.icon = icon
+    if (color !== undefined) updateData.color = color
+    if (isArchived !== undefined) updateData.isArchived = isArchived
+    if (importance !== undefined) updateData.importance = Math.max(1, Math.min(3, importance))
+
     const skill = await db.skill.update({
       where: { id },
-      data: { name, description, category, icon, color, isArchived }
+      data: updateData
     })
 
     return NextResponse.json({ skill })
