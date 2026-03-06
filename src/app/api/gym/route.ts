@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+interface DayScheduleItem {
+  type: 'workout' | 'rest'
+  dayNum: number
+  workoutNum?: number
+  name?: string
+  muscleGroups?: string[]
+}
+
 // GET - Fetch gym periods for user
 export async function GET(request: NextRequest) {
   try {
@@ -32,7 +40,16 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, name, type, cycleLength, workoutsPerCycle, totalCycles, workoutDays } = body
+    const { 
+      userId, 
+      name, 
+      type, 
+      cycleLength, 
+      workoutsPerCycle, 
+      totalCycles, 
+      workoutDays,
+      daySchedule: clientDaySchedule // Accept daySchedule from client
+    } = body
 
     if (!userId || !name) {
       return NextResponse.json({ error: 'userId and name required' }, { status: 400 })
@@ -44,18 +61,36 @@ export async function POST(request: NextRequest) {
       data: { isActive: false }
     })
 
+    const cycleLen = cycleLength || 7
+    const workoutsPerCyc = workoutsPerCycle || 4
+
+    // Use client-provided daySchedule if available, otherwise generate
+    let daySchedule: DayScheduleItem[]
+    
+    if (clientDaySchedule && Array.isArray(clientDaySchedule) && clientDaySchedule.length > 0) {
+      // Use the schedule from client - preserve exact order
+      daySchedule = clientDaySchedule.map((item: DayScheduleItem, idx: number) => ({
+        ...item,
+        dayNum: idx + 1 // Ensure dayNum matches position
+      }))
+    } else {
+      // Fallback: generate day schedule (legacy behavior)
+      daySchedule = generateDaySchedule(cycleLen, workoutsPerCyc, type, workoutDays)
+    }
+
     // Create the period
     const period = await db.gymPeriod.create({
       data: {
         userId,
         name,
         type: type || 'split',
-        cycleLength: cycleLength || 7,
-        workoutsPerCycle: workoutsPerCycle || 4,
+        cycleLength: cycleLen,
+        workoutsPerCycle: workoutsPerCyc,
         totalCycles: totalCycles || 8,
         currentCycle: 1,
         currentDay: 1,
-        isActive: true
+        isActive: true,
+        daySchedule: JSON.stringify(daySchedule)
       }
     })
 
@@ -67,43 +102,101 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    // Generate workout schedule for all cycles
+    // Generate workout schedule for all cycles based on daySchedule
     const workouts = []
     const startDate = new Date()
-    const cycleLen = cycleLength || 7
-    const workoutsPerCyc = workoutsPerCycle || 4
     const totalCyc = totalCycles || 8
     
     for (let cycle = 1; cycle <= totalCyc; cycle++) {
-      for (let workoutNum = 1; workoutNum <= workoutsPerCyc; workoutNum++) {
-        const dayOffset = Math.floor((workoutNum - 1) * (cycleLen / workoutsPerCyc))
-        const workoutDate = new Date(startDate)
-        workoutDate.setDate(workoutDate.getDate() + ((cycle - 1) * cycleLen) + dayOffset)
-        
-        // Get workout config from wizard
-        const dayConfig = workoutDays?.find((d: { workoutNum: number }) => d.workoutNum === workoutNum)
-        const workoutName = dayConfig?.name || getWorkoutName(type || 'split', workoutNum)
-        const muscleGroups = dayConfig?.muscleGroups || []
-        
-        workouts.push({
-          periodId: period.id,
-          date: workoutDate,
-          dayOfWeek: workoutDate.getDay() || 7,
-          workoutNum,
-          name: workoutName,
-          muscleGroups: JSON.stringify(muscleGroups),
-          completed: false
-        })
+      // Calculate start date of this cycle
+      const cycleStartDate = new Date(startDate)
+      cycleStartDate.setDate(cycleStartDate.getDate() + ((cycle - 1) * cycleLen))
+      
+      // Create workouts based on day schedule - preserve order
+      for (const dayItem of daySchedule) {
+        if (dayItem.type === 'workout' && dayItem.workoutNum) {
+          // Calculate workout date based on position in schedule (dayNum = position)
+          const workoutDate = new Date(cycleStartDate)
+          workoutDate.setDate(workoutDate.getDate() + (dayItem.dayNum - 1))
+          
+          workouts.push({
+            periodId: period.id,
+            date: workoutDate,
+            dayOfWeek: workoutDate.getDay() || 7,
+            workoutNum: dayItem.workoutNum,
+            name: dayItem.name || `Тренировка ${dayItem.workoutNum}`,
+            muscleGroups: JSON.stringify(dayItem.muscleGroups || []),
+            completed: false
+          })
+        }
       }
     }
 
     await db.gymWorkout.createMany({ data: workouts })
 
-    return NextResponse.json({ period })
+    return NextResponse.json({ period, daySchedule })
   } catch (error) {
     console.error('Create gym period error:', error)
     return NextResponse.json({ error: 'Failed to create period' }, { status: 500 })
   }
+}
+
+// Generate day schedule (legacy fallback)
+function generateDaySchedule(
+  cycleLen: number, 
+  workoutsPerCyc: number, 
+  type: string, 
+  workoutDays: { workoutNum: number; name: string; muscleGroups: string[] }[] | undefined
+): DayScheduleItem[] {
+  const daySchedule: DayScheduleItem[] = []
+  
+  // Distribute workout days and rest days
+  const workoutInterval = cycleLen / workoutsPerCyc
+  
+  for (let dayNum = 1; dayNum <= cycleLen; dayNum++) {
+    const position = (dayNum - 1) * workoutsPerCyc / cycleLen
+    const nextPosition = dayNum * workoutsPerCyc / cycleLen
+    const crossesWorkout = Math.floor(position) !== Math.floor(nextPosition) || 
+      (Math.floor(position) < workoutsPerCyc && position >= Math.floor(position))
+    
+    if (crossesWorkout && daySchedule.filter(d => d.type === 'workout').length < workoutsPerCyc) {
+      const workoutNum = daySchedule.filter(d => d.type === 'workout').length + 1
+      const dayConfig = workoutDays?.find(d => d.workoutNum === workoutNum)
+      
+      daySchedule.push({
+        type: 'workout',
+        dayNum,
+        workoutNum,
+        name: dayConfig?.name || getWorkoutName(type || 'split', workoutNum),
+        muscleGroups: dayConfig?.muscleGroups || []
+      })
+    } else {
+      daySchedule.push({
+        type: 'rest',
+        dayNum
+      })
+    }
+  }
+  
+  // Ensure we have exactly workoutsPerCyc workouts
+  const currentWorkouts = daySchedule.filter(d => d.type === 'workout').length
+  if (currentWorkouts < workoutsPerCyc) {
+    for (let i = 0; i < daySchedule.length && currentWorkouts + i < workoutsPerCyc; i++) {
+      if (daySchedule[i].type === 'rest') {
+        const workoutNum = daySchedule.filter(d => d.type === 'workout').length + 1
+        const dayConfig = workoutDays?.find(d => d.workoutNum === workoutNum)
+        daySchedule[i] = {
+          type: 'workout',
+          dayNum: i + 1,
+          workoutNum,
+          name: dayConfig?.name || getWorkoutName(type || 'split', workoutNum),
+          muscleGroups: dayConfig?.muscleGroups || []
+        }
+      }
+    }
+  }
+
+  return daySchedule
 }
 
 function getWorkoutName(type: string, workoutNum: number): string {

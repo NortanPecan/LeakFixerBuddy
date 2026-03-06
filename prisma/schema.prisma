@@ -246,6 +246,7 @@ model GymPeriod {
   startDate       DateTime @default(now())
   endDate         DateTime?
   isActive        Boolean  @default(true)
+  daySchedule     String?  // JSON: [{ type: "workout"|"rest", dayNum, workoutNum?, name?, muscleGroups? }]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
