@@ -28,7 +28,9 @@ import {
   GripVertical,
   SkipForward,
   CalendarClock,
-  Sparkles
+  Sparkles,
+  CalendarDays,
+  Save
 } from 'lucide-react'
 import {
   Dialog,
@@ -78,6 +80,7 @@ interface GymPeriod {
   currentDay: number
   isActive: boolean
   startDate: string
+  daySchedule?: string // JSON string with DayScheduleItem[]
 }
 
 // Constants
@@ -391,7 +394,7 @@ export function GymScreen() {
     setDaySchedule(schedule)
   }
 
-  // Drag and drop handlers
+  // Drag and drop handlers for wizard
   const handleDragStart = (index: number) => {
     setDraggedIndex(index)
   }
@@ -416,6 +419,54 @@ export function GymScreen() {
     }
     setDraggedIndex(null)
     setDragOverIndex(null)
+  }
+
+  // Drag and drop handlers for active period schedule
+  const [scheduleDraggedIdx, setScheduleDraggedIdx] = useState<number | null>(null)
+  const [scheduleDragOverIdx, setScheduleDragOverIdx] = useState<number | null>(null)
+
+  const handleScheduleDragStart = (index: number) => {
+    setScheduleDraggedIdx(index)
+  }
+
+  const handleScheduleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    setScheduleDragOverIdx(index)
+  }
+
+  const handleScheduleDragEnd = () => {
+    if (scheduleDraggedIdx !== null && scheduleDragOverIdx !== null && scheduleDraggedIdx !== scheduleDragOverIdx) {
+      const newSchedule = [...parsedDaySchedule]
+      const [draggedItem] = newSchedule.splice(scheduleDraggedIdx, 1)
+      newSchedule.splice(scheduleDragOverIdx, 0, draggedItem)
+      
+      // Update dayNum to match new positions
+      newSchedule.forEach((item, idx) => {
+        item.dayNum = idx + 1
+      })
+      
+      setParsedDaySchedule(newSchedule)
+    }
+    setScheduleDraggedIdx(null)
+    setScheduleDragOverIdx(null)
+  }
+
+  const handleSaveSchedule = async () => {
+    if (!activePeriod || parsedDaySchedule.length === 0) return
+    
+    try {
+      await fetch('/api/gym', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          periodId: activePeriod.id,
+          daySchedule: parsedDaySchedule
+        }),
+      })
+      // Show success feedback
+    } catch (error) {
+      console.error('Failed to save schedule:', error)
+    }
   }
 
   // Skip workout - shift all future workouts by 1 day
@@ -709,8 +760,13 @@ export function GymScreen() {
     }
     for (let d = 1; d <= lastDay.getDate(); d++) {
       const date = new Date(year, month, d)
-      const dateStr = date.toISOString().split('T')[0]
-      const workout = workouts.find(w => w.date.startsWith(dateStr))
+      // Use local date format to avoid timezone issues
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      const workout = workouts.find(w => {
+        // Handle both ISO string and date-only string formats
+        const wDate = w.date.split('T')[0]
+        return wDate === dateStr
+      })
       days.push({ date, workout, dayNum: d })
     }
     return days
@@ -746,17 +802,31 @@ export function GymScreen() {
             {activePeriod ? activePeriod.name : 'Нет активного периода'}
           </p>
         </div>
-        <Button
-          size="sm"
-          className="bg-primary hover:bg-primary/90"
-          onClick={() => {
-            resetWizard()
-            setShowWizard(true)
-          }}
-        >
-          <Plus className="w-4 h-4 mr-1" />
-          Новый период
-        </Button>
+        {activePeriod ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setActivePeriod(null)
+              loadPeriods()
+            }}
+          >
+            <ChevronLeft className="w-4 h-4 mr-1" />
+            К периодам
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            className="bg-primary hover:bg-primary/90"
+            onClick={() => {
+              resetWizard()
+              setShowWizard(true)
+            }}
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Новый период
+          </Button>
+        )}
       </div>
 
       {isLoading ? (
@@ -825,6 +895,112 @@ export function GymScreen() {
             </CardContent>
           </Card>
 
+          {/* Day Schedule - Days and Muscles */}
+          {parsedDaySchedule.length > 0 && (
+            <Card className="bg-card/50 backdrop-blur">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <CalendarDays className="w-5 h-5" />
+                  Дни и мышцы
+                </CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Перетащи для изменения порядка
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-1.5">
+                  {parsedDaySchedule.map((day, idx) => {
+                    const isWorkout = day.type === 'workout'
+                    const isToday = activePeriod.currentDay === idx + 1
+                    
+                    return (
+                      <div
+                        key={idx}
+                        draggable
+                        onDragStart={() => handleScheduleDragStart(idx)}
+                        onDragOver={(e) => handleScheduleDragOver(e, idx)}
+                        onDragEnd={handleScheduleDragEnd}
+                        className={`flex items-center gap-3 p-3 rounded-xl transition-all cursor-grab active:cursor-grabbing ${
+                          isToday 
+                            ? 'bg-primary/10 border border-primary/30' 
+                            : isWorkout 
+                              ? 'bg-muted/30 hover:bg-muted/50' 
+                              : 'bg-muted/10 hover:bg-muted/20'
+                        } ${
+                          scheduleDragOverIdx === idx && scheduleDraggedIdx !== idx 
+                            ? 'ring-2 ring-primary/50' 
+                            : ''
+                        }`}
+                      >
+                        <GripVertical className="w-4 h-4 text-muted-foreground/50" />
+                        
+                        <div className="flex-1 flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-medium ${
+                            isWorkout 
+                              ? 'bg-primary/20 text-primary' 
+                              : 'bg-muted text-muted-foreground'
+                          }`}>
+                            {idx + 1}
+                          </div>
+                          
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              {isWorkout ? (
+                                <>
+                                  <Dumbbell className="w-4 h-4 text-primary" />
+                                  <span className="font-medium">
+                                    {day.name || `Тренировка ${day.workoutNum}`}
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <Coffee className="w-4 h-4 text-muted-foreground" />
+                                  <span className="text-muted-foreground">Отдых</span>
+                                </>
+                              )}
+                              {isToday && (
+                                <Badge className="text-[10px] bg-primary text-primary-foreground">
+                                  Сегодня
+                                </Badge>
+                              )}
+                            </div>
+                            
+                            {isWorkout && day.muscleGroups && day.muscleGroups.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {day.muscleGroups.map(muscle => {
+                                  const group = MUSCLE_GROUPS.find(g => g.value === muscle)
+                                  return (
+                                    <Badge 
+                                      key={muscle} 
+                                      className={`text-[10px] px-1.5 py-0 ${group?.color || 'bg-muted'}`}
+                                    >
+                                      {group?.label || muscle}
+                                    </Badge>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full mt-3 text-xs"
+                  onClick={handleSaveSchedule}
+                  disabled={scheduleDraggedIdx === null && scheduleDragOverIdx === null}
+                >
+                  <Save className="w-3 h-3 mr-1" />
+                  Сохранить порядок
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Next workout */}
           {nextWorkout && (
             <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
@@ -845,6 +1021,19 @@ export function GymScreen() {
                           month: 'short'
                         })}
                       </p>
+                      {/* Muscle groups */}
+                      {nextWorkout.muscleGroups && nextWorkout.muscleGroups.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {nextWorkout.muscleGroups.map(muscle => {
+                            const group = MUSCLE_GROUPS.find(g => g.value === muscle)
+                            return (
+                              <Badge key={muscle} className={`text-[10px] px-1.5 py-0 ${group?.color || 'bg-muted'}`}>
+                                {group?.label || muscle}
+                              </Badge>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <Button
@@ -944,21 +1133,19 @@ export function GymScreen() {
               <CardTitle className="text-base">Последние тренировки</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {workouts.slice(-5).reverse().map(workout => (
+              {workouts
+                .filter(w => w.completed)
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                .slice(0, 5)
+                .map(workout => (
                 <div
                   key={workout.id}
                   className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
                   onClick={() => loadWorkoutDetails(workout)}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                      workout.completed ? 'bg-emerald-500/10' : 'bg-muted'
-                    }`}>
-                      {workout.completed ? (
-                        <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                      ) : (
-                        <Dumbbell className="w-5 h-5 text-muted-foreground" />
-                      )}
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-emerald-500/10">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                     </div>
                     <div>
                       <p className="font-medium">{workout.name || `Тренировка ${workout.workoutNum}`}</p>
@@ -974,8 +1161,8 @@ export function GymScreen() {
                   <ChevronRight className="w-4 h-4 text-muted-foreground" />
                 </div>
               ))}
-              {workouts.length === 0 && (
-                <p className="text-center text-muted-foreground py-4">Нет записей о тренировках</p>
+              {workouts.filter(w => w.completed).length === 0 && (
+                <p className="text-center text-muted-foreground py-4">Нет выполненных тренировок</p>
               )}
             </CardContent>
           </Card>
