@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getStartOfDay, getEndOfDay } from '@/lib/date-utils'
+import { normalizeToDate, getStartOfDay, getEndOfDay, formatDateKey, parseDateKey } from '@/lib/date-utils'
 
 // GET /api/water?userId=xxx - Get water for today
 // GET /api/water?userId=xxx&date=YYYY-MM-DD - Get water for specific date
@@ -14,18 +14,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const targetDate = dateParam ? new Date(dateParam) : new Date()
-    const startOfTargetDay = getStartOfDay(targetDate)
-    const endOfTargetDay = getEndOfDay(targetDate)
+    const targetDate = dateParam ? parseDateKey(dateParam) : normalizeToDate(new Date())
 
     // Find or create fitness daily record
     let fitnessDaily = await db.fitnessDaily.findFirst({
       where: {
         userId,
-        date: {
-          gte: startOfTargetDay,
-          lt: endOfTargetDay
-        }
+        date: targetDate
       }
     })
 
@@ -38,7 +33,7 @@ export async function GET(request: NextRequest) {
       fitnessDaily = await db.fitnessDaily.create({
         data: {
           userId,
-          date: startOfTargetDay,
+          date: targetDate,
           water: 0,
           waterTarget: profile?.waterBaseline || 2000
         }
@@ -47,6 +42,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      date: formatDateKey(targetDate),
       water: {
         current: fitnessDaily.water,
         target: fitnessDaily.waterTarget,
@@ -69,18 +65,13 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 })
     }
 
-    const targetDate = date ? new Date(date) : new Date()
-    const startOfTargetDay = getStartOfDay(targetDate)
-    const endOfTargetDay = getEndOfDay(targetDate)
+    const targetDate = date ? parseDateKey(date) : normalizeToDate(new Date())
 
     // Find or create fitness daily record
     let fitnessDaily = await db.fitnessDaily.findFirst({
       where: {
         userId,
-        date: {
-          gte: startOfTargetDay,
-          lt: endOfTargetDay
-        }
+        date: targetDate
       }
     })
 
@@ -92,7 +83,7 @@ export async function PATCH(request: NextRequest) {
       fitnessDaily = await db.fitnessDaily.create({
         data: {
           userId,
-          date: startOfTargetDay,
+          date: targetDate,
           water: amount || 0,
           waterTarget: target || profile?.waterBaseline || 2000
         }
@@ -111,6 +102,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      date: formatDateKey(targetDate),
       water: {
         current: fitnessDaily.water,
         target: fitnessDaily.waterTarget,

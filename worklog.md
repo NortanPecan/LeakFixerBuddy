@@ -415,3 +415,123 @@ TODO for next agent (GLM-5 in sandbox):
   - `bun run db:validate:prod`
   - smoke checks for `/api/auth` (POST + `?demo=true`) and `/api/user` on deployed environment.
 - Review and optionally clean historical legacy docs snippets in README that still mention manual schema file renaming; keep branch-script flow as the source of truth.
+
+---
+Task ID: 12
+Agent: Main Agent
+Task: Sync master with main (prod code into sandbox)
+
+Work Log:
+- Analyzed differences between main and master branches:
+  - main has 8 additional commits with production fixes
+  - Key production files missing in master: scripts/prisma-generate.cjs, enhanced auth, error handling
+- Executed `git merge origin/main` to merge production code
+- Resolved merge conflicts:
+  - package.json: kept sandbox scripts + added prisma:generate:auto from main
+  - BRANCH_STRATEGY.md: merged both versions,  - preserved DEV_RULES section
+    - added Demo Auth documentation from main
+  - SUPABASE_CHECKLIST.md: accepted main version (has sync runbook)
+  - worklog.md: combined histories from both branches
+- Key production code now in master:
+  - scripts/prisma-generate.cjs: smart schema selection for build time
+  - Enhanced auth with error classification
+  - AuthErrorScreen component in page.tsx
+  - Dynamic Telegram SDK loading with retry
+  - Better error handling in store.ts
+- Preserved sandbox configuration:
+  - SQLite as default (prisma/schema.prisma)
+  - db:*:sandbox scripts for local development
+  - DEV_RULES remain in BRANCH_STRATEGY.md
+
+Stage Summary:
+- master now contains all production code from main
+- Sandbox config preserved (SQLite, demo mode, DEV_RULES)
+- Prisma client generated successfully for SQLite
+- Lint passed with minor warning (ESM import suggestion)
+- Ready for local development with production-tested code
+
+---
+Task ID: 13
+Agent: Main Agent
+Task: Stabilize daily tracking by date - ensure proper date binding for DailyState, FitnessDaily, FoodEntry, RitualCompletion, SupplementIntake
+
+Work Log:
+- Created unified date utility module (src/lib/date-utils.ts):
+  - normalizeToDate(): Normalizes dates to start of day (00:00:00.000) for consistent DB operations
+  - parseDateKey(): Parses YYYY-MM-DD string to normalized Date
+  - formatDateKey(): Formats Date to YYYY-MM-DD string
+  - getToday(), getDaysAgo(), getDayOfWeek(), isSameDay() helpers
+- Updated /api/state/route.ts:
+  - POST now properly normalizes dates before DB operations
+  - GET now supports both single date lookup and history range
+  - Uses upsert with userId_date unique constraint
+- Updated /api/fitness/route.ts:
+  - GET now uses parseDateKey() for consistent date parsing
+  - POST now normalizes dates before upsert
+  - Uses unique constraint userId_date correctly
+- Updated /api/food/route.ts:
+  - GET now returns entries grouped by meal type with totals for target date
+  - POST now normalizes date to start of day
+  - DELETE unchanged
+- Updated /api/water/route.ts:
+  - Complete rewrite with PATCH method for updates
+  - GET finds or creates FitnessDaily record for target date
+  - PATCH updates water amount with proper date normalization
+- Updated /api/energy/route.ts:
+  - GET now accepts date parameter for historical energy calculations
+  - Properly uses getStartOfDay/getEndOfDay for food entry range queries
+  - Returns date in response for clarity
+- Updated /api/rituals/route.ts:
+  - GET now accepts date parameter to view completions for specific day
+  - Returns rituals filtered by day of week
+  - Returns completion status for target date
+  - Uses normalized date for queries
+- Updated /api/rituals/complete/route.ts:
+  - POST now uses parseDateKey() for consistent date parsing
+  - Uses upsert with ritualId_date unique constraint
+  - Proper error handling and response formatting
+- Updated /api/supplements/route.ts:
+  - GET now accepts date parameter to view intakes for specific day
+  - Filters supplements by day of week
+  - Returns intake status for target date
+- Updated /api/supplements/intake/route.ts:
+  - POST now uses normalizeToDate() for consistent date storage
+  - Proper error responses
+- Added DEV_RULES Rule 4 to BRANCH_STRATEGY.md:
+  - AI agents must to add "Recommendations and improvements" section after completing tasks
+  - Includes: explicit code improvements, implicit UX/architecture/DB ideas, potential risks/edge cases
+  - Cannot implement recommendations without explicit owner request
+
+Stage Summary:
+- All daily tracking entities now properly bound to dates:
+  - DailyState: unique(userId, date) with normalized dates
+  - FitnessDaily: unique(userId, date) with normalized dates
+  - FoodEntry: queried by date range with normalized dates
+  - RitualCompletion: unique(ritualId, date) with normalized dates
+  - SupplementIntake: unique(supplementId, date) with normalized dates
+- Date normalization ensures:
+  - Consistent comparison in SQLite (time component doesn't affect queries)
+  - Proper upsert operations using unique constraints
+  - Historical data can be queried by specific dates
+- APIs now support date parameter for historical views
+- Frontend can now load data for any date, not just "today"
+- ChallengeProgress: Not date-bound (calculated from RitualCompletion/Task data)
+
+Recommendations and improvements:
+1. **Explicit code improvements:**
+   - Create a date picker component for selecting historical dates in UI
+   - Add "previous day" / "next day" navigation in HealthScreen and RitualsScreen
+   - Consider adding timezone support for users in different timezones
+   - Add migration to add date index to RitualCompletion if not present
+
+2. **Implicit ideas:**
+   - Daily summary view showing all data for a selected date (water, food, supplements, rituals completed)
+   - Streak calculation should account for timezone
+   - Weekly/monthly aggregation endpoints for statistics
+   - Calendar view showing completion history
+
+3. **Potential risks/edge cases:**
+   - Date picker should disable future dates (can't log data for tomorrow)
+   - When user crosses midnight, "today" data should refresh
+   - Daylight saving time transitions might cause duplicate/missing hours
+   - Timezone changes when traveling could affect daily streaks

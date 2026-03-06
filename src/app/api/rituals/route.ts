@@ -1,17 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { normalizeToDate, parseDateKey, formatDateKey, getDayOfWeek } from '@/lib/date-utils'
 
-// GET - Fetch user's rituals
+// GET - Fetch user's rituals with completions for a specific date
+// /api/rituals?userId=xxx - Get rituals with today's completions
+// /api/rituals?userId=xxx&date=YYYY-MM-DD - Get rituals with completions for specific date
+// /api/rituals?userId=xxx&status=all - Get all rituals (including archived)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
     const status = searchParams.get('status') || 'active'
+    const dateParam = searchParams.get('date')
 
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
 
+    // Parse target date (default to today)
+    const targetDate = dateParam ? parseDateKey(dateParam) : normalizeToDate(new Date())
+    const targetDayOfWeek = getDayOfWeek(targetDate)
+
+    // Get all rituals for user
     const rituals = await db.ritual.findMany({
       where: { 
         userId,
@@ -21,28 +31,50 @@ export async function GET(request: NextRequest) {
       include: {
         completions: {
           where: {
-            date: {
-              gte: new Date(new Date().setHours(0, 0, 0, 0))
-            }
+            date: targetDate
           }
         }
       }
     })
 
-    // Calculate streak and today's completion
+    // Filter rituals by day of week and add completion status
     const ritualsData = rituals.map(ritual => {
-      // Check completed today
-      const completedToday = ritual.completions.some(c => c.completed)
+      const days = JSON.parse(ritual.days as string) as number[]
+      const isScheduledToday = days.length === 0 || days.includes(targetDayOfWeek)
       
-      // Calculate streak
+      // Check completed for target date
+      const completion = ritual.completions[0]
+      const completed = completion?.completed ?? false
+
+      // Calculate streak (last 30 days)
       return {
         ...ritual,
-        completedToday,
+        days: undefined, // Remove raw JSON string
+        daysArray: days,
+        isScheduledToday,
+        completed,
+        completionNote: completion?.note,
+        completionMood: completion?.mood,
         completions: undefined // Remove from response
       }
     })
 
-    return NextResponse.json({ rituals: ritualsData })
+    // Filter to only scheduled rituals for today view
+    const todayRituals = ritualsData.filter(r => r.isScheduledToday)
+    const completedToday = todayRituals.filter(r => r.completed).length
+
+    return NextResponse.json({
+      success: true,
+      date: formatDateKey(targetDate),
+      dayOfWeek: targetDayOfWeek,
+      stats: {
+        total: todayRituals.length,
+        completed: completedToday,
+        percentage: todayRituals.length > 0 ? Math.round((completedToday / todayRituals.length) * 100) : 0
+      },
+      rituals: ritualsData,
+      todayRituals
+    })
   } catch (error) {
     console.error('Fetch rituals error:', error)
     return NextResponse.json({ error: 'Failed to fetch rituals' }, { status: 500 })
@@ -105,7 +137,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    return NextResponse.json({ ritual })
+    return NextResponse.json({ success: true, ritual })
   } catch (error) {
     console.error('Create ritual error:', error)
     return NextResponse.json({ error: 'Failed to create ritual' }, { status: 500 })
@@ -151,7 +183,7 @@ export async function PATCH(request: NextRequest) {
       data: updateData
     })
 
-    return NextResponse.json({ ritual })
+    return NextResponse.json({ success: true, ritual })
   } catch (error) {
     console.error('Update ritual error:', error)
     return NextResponse.json({ error: 'Failed to update ritual' }, { status: 500 })
@@ -174,7 +206,7 @@ export async function DELETE(request: NextRequest) {
       data: { status: 'archived' }
     })
 
-    return NextResponse.json({ ritual })
+    return NextResponse.json({ success: true, ritual })
   } catch (error) {
     console.error('Archive ritual error:', error)
     return NextResponse.json({ error: 'Failed to archive ritual' }, { status: 500 })

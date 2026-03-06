@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getStartOfDay, getEndOfDay } from '@/lib/date-utils'
+import { normalizeToDate, getStartOfDay, getEndOfDay, parseDateKey } from '@/lib/date-utils'
+
+import { getStartOfDay as getStartOfDayOld, getEndOfDay as getEndOfDayOld } from '@/lib/date-utils'
 
 // Work activity multipliers
 const WORK_ACTIVITY_MULTIPLIERS: Record<string, number> = {
@@ -19,6 +21,7 @@ function calculateBMR(weight: number, height: number, age: number, sex: string):
 }
 
 // GET /api/energy?userId=xxx - Get energy summary for today
+// GET /api/energy?userId=xxx&date=YYYY-MM-DD - Get energy for specific date
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const userId = searchParams.get('userId')
@@ -29,7 +32,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const targetDate = dateParam ? new Date(dateParam) : new Date()
+    const targetDate = dateParam ? parseDateKey(dateParam) : normalizeToDate(new Date())
     const startOfTargetDay = getStartOfDay(targetDate)
     const endOfTargetDay = getEndOfDay(targetDate)
 
@@ -38,7 +41,7 @@ export async function GET(request: NextRequest) {
       where: { userId }
     })
 
-    // Get food entries for today
+    // Get food entries for the target date
     const foodEntries = await db.foodEntry.findMany({
       where: {
         userId,
@@ -63,6 +66,7 @@ export async function GET(request: NextRequest) {
     if (!profile || !profile.weight || !profile.height || !profile.age) {
       return NextResponse.json({
         success: true,
+        date: targetDate.toISOString().split('T')[0],
         energy: {
           bmr: profile?.targetCalories || defaults.bmr,
           tdee: profile?.targetCalories || defaults.tdee,
@@ -114,6 +118,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      date: targetDate.toISOString().split('T')[0],
       energy: {
         bmr,
         tdee,

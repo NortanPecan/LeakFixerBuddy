@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { normalizeToDate, parseDateKey, formatDateKey, getDaysAgo } from '@/lib/date-utils'
 
 function getMoodStatus(mood: number): string {
   if (mood >= 9) return 'Пиковое состояние! 🚀'
@@ -12,37 +13,42 @@ function getMoodStatus(mood: number): string {
 /**
  * Save or update daily state (mood, energy)
  * POST /api/state
+ * Body: { userId, date?: string, mood?: number, energy?: number }
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { userId, date, mood, energy } = body
 
-    if (!userId || !date) {
-      return NextResponse.json({ error: 'userId and date required' }, { status: 400 })
+    if (!userId) {
+      return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
 
-    const dateObj = new Date(date)
+    const targetDate = date ? parseDateKey(date) : normalizeToDate(new Date())
 
-    // Upsert daily state
-    const existing = await db.dailyState.findFirst({
-      where: { userId, date: dateObj }
+    // Use upsert to ensure atomic operation with unique constraint
+    const state = await db.dailyState.upsert({
+      where: {
+        userId_date: {
+          userId,
+          date: targetDate
+        }
+      },
+      update: {
+        ...(mood !== undefined && { mood }),
+        ...(energy !== undefined && { energy })
+      },
+      create: {
+        userId,
+        date: targetDate,
+        mood: mood ?? 5,
+        energy: energy ?? 5
+      }
     })
-
-    let state
-    if (existing) {
-      state = await db.dailyState.update({
-        where: { id: existing.id },
-        data: { mood, energy }
-      })
-    } else {
-      state = await db.dailyState.create({
-        data: { userId, date: dateObj, mood, energy }
-      })
-    }
 
     return NextResponse.json({
       success: true,
+      date: formatDateKey(targetDate),
       state: {
         mood: state.mood,
         energy: state.energy,
@@ -56,21 +62,65 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Get daily state history
- * GET /api/state?userId=xxx&days=7
+ * Get daily state for a specific date or history
+ * GET /api/state?userId=xxx&date=YYYY-MM-DD - Get state for specific date
+ * GET /api/state?userId=xxx&days=7 - Get history for last N days
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
-    const days = parseInt(searchParams.get('days') || '7')
+    const dateParam = searchParams.get('date')
+    const days = searchParams.get('days')
 
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
 
-    const startDate = new Date()
-    startDate.setDate(startDate.getDate() - days)
+    // If date is provided, get state for that specific date
+    if (dateParam) {
+      const targetDate = parseDateKey(dateParam)
+      
+      // Also get yesterday for trend calculation
+      const yesterday = new Date(targetDate)
+      yesterday.setDate(yesterday.getDate() - 1)
+
+      const [todayState, yesterdayState] = await Promise.all([
+        db.dailyState.findUnique({
+          where: {
+            userId_date: {
+              userId,
+              date: targetDate
+            }
+          }
+        }),
+        db.dailyState.findUnique({
+          where: {
+            userId_date: {
+              userId,
+              date: yesterday
+            }
+          }
+        })
+      ])
+
+      return NextResponse.json({
+        success: true,
+        date: formatDateKey(targetDate),
+        state: todayState ? {
+          mood: todayState.mood,
+          energy: todayState.energy,
+          status: todayState.mood ? getMoodStatus(todayState.mood) : null,
+          trend: todayState && yesterdayState && todayState.mood && yesterdayState.mood
+            ? todayState.mood - yesterdayState.mood
+            : 0
+        } : null
+      })
+    }
+
+    // Otherwise, get history for last N days
+    const daysCount = parseInt(days || '7')
+    const startDate = getDaysAgo(daysCount)
 
     const states = await db.dailyState.findMany({
       where: {
@@ -81,8 +131,9 @@ export async function GET(request: NextRequest) {
     })
 
     return NextResponse.json({
+      success: true,
       states: states.map(s => ({
-        date: s.date,
+        date: formatDateKey(s.date),
         mood: s.mood,
         energy: s.energy,
         status: s.mood ? getMoodStatus(s.mood) : null

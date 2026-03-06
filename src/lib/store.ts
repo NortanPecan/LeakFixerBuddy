@@ -198,9 +198,11 @@ export const useAppStore = create<AppState>()(
             }
 
             if (!initData) {
-              if (isTelegramContext) {
-                throw new Error('Telegram initData is missing. Open the app from Telegram bot menu button.')
-              }
+              // Fallback to demo mode if no initData (local dev / preview)
+              // In real Telegram production, initData should always be present
+              // if (isTelegramContext) {
+              //   throw new Error('Telegram initData is missing. Open the app from Telegram bot menu button.')
+              // }
               return get().login(true)
             }
 

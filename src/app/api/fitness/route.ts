@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-
-function formatDateKey(date: Date): string {
-  return date.toISOString().split('T')[0]
-}
+import { normalizeToDate, formatDateKey, parseDateKey, getDayOfWeek } from '@/lib/date-utils'
 
 /**
  * Get fitness data for a date
@@ -13,7 +10,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
-    const date = searchParams.get('date') || formatDateKey(new Date())
+    const dateParam = searchParams.get('date')
 
     if (!userId) {
       return NextResponse.json(
@@ -22,11 +19,13 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    const targetDate = dateParam ? parseDateKey(dateParam) : normalizeToDate(new Date())
+
     // Get fitness daily data
     const fitnessDay = await db.fitnessDaily.findFirst({
       where: {
         userId,
-        date: new Date(date)
+        date: targetDate
       }
     })
 
@@ -34,7 +33,7 @@ export async function GET(request: NextRequest) {
     const dailyState = await db.dailyState.findFirst({
       where: {
         userId,
-        date: new Date(date)
+        date: targetDate
       }
     })
 
@@ -42,14 +41,14 @@ export async function GET(request: NextRequest) {
     const measurements = await db.measurement.findMany({
       where: {
         userId,
-        date: new Date(date)
+        date: targetDate
       }
     })
 
     // Parse JSON fields
-    let activities = []
-    let foods = []
-    let supplements = []
+    let activities: unknown[] = []
+    let foods: unknown[] = []
+    let supplements: unknown[] = []
 
     if (fitnessDay?.activities) {
       try {
@@ -70,7 +69,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      date,
+      date: formatDateKey(targetDate),
       data: {
         activities,
         foods,
@@ -103,6 +102,7 @@ export async function GET(request: NextRequest) {
 /**
  * Save fitness data for a date
  * POST /api/fitness
+ * Body: { userId, date: "YYYY-MM-DD", data: { water, mood, energy, ... } }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -116,18 +116,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const dateObj = new Date(date)
+    const targetDate = parseDateKey(date)
 
-    // Upsert fitness daily
+    // Upsert fitness daily using unique constraint
     const existingDay = await db.fitnessDaily.findFirst({
-      where: { userId, date: dateObj }
+      where: { userId, date: targetDate }
     })
 
     const fitnessData = {
       userId,
-      date: dateObj,
-      water: data.water?.currentMl || 0,
-      waterTarget: data.water?.targetMl || 2000,
+      date: targetDate,
+      water: data.water?.currentMl ?? data.water ?? 0,
+      waterTarget: data.water?.targetMl ?? data.waterTarget ?? 2000,
       activities: data.activities ? JSON.stringify(data.activities) : null,
       foods: data.foods ? JSON.stringify(data.foods) : null,
       supplements: data.supplements ? JSON.stringify(data.supplements) : null,
@@ -149,12 +149,12 @@ export async function POST(request: NextRequest) {
     // Upsert daily state (mood, energy)
     if (data.mood !== undefined || data.energy !== undefined) {
       const existingState = await db.dailyState.findFirst({
-        where: { userId, date: dateObj }
+        where: { userId, date: targetDate }
       })
 
       const stateData = {
         userId,
-        date: dateObj,
+        date: targetDate,
         mood: data.mood,
         energy: data.energy,
       }
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      date,
+      date: formatDateKey(targetDate),
       saved: true
     })
   } catch (error) {

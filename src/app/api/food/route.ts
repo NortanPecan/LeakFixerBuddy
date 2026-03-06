@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getStartOfDay, getEndOfDay } from '@/lib/date-utils'
+import { normalizeToDate, getStartOfDay, getEndOfDay, formatDateKey, parseDateKey } from '@/lib/date-utils'
 
 // GET /api/food?userId=xxx - Get food entries for today
 // GET /api/food?userId=xxx&date=YYYY-MM-DD - Get food for specific date
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const targetDate = dateParam ? new Date(dateParam) : new Date()
+    const targetDate = dateParam ? parseDateKey(dateParam) : normalizeToDate(new Date())
     const startOfTargetDay = getStartOfDay(targetDate)
     const endOfTargetDay = getEndOfDay(targetDate)
 
@@ -32,9 +32,9 @@ export async function GET(request: NextRequest) {
     // Calculate totals
     const totals = {
       calories: entries.reduce((sum, e) => sum + (e.calories || 0), 0),
-      protein: entries.reduce((sum, e) => sum + (e.protein || 1), 0),
-      fat: entries.reduce((sum, e) => sum + (e.fat || 1), 0),
-      carbs: entries.reduce((sum, e) => sum + (e.carbs || 1), 0)
+      protein: entries.reduce((sum, e) => sum + (e.protein || 0), 0),
+      fat: entries.reduce((sum, e) => sum + (e.fat || 0), 0),
+      carbs: entries.reduce((sum, e) => sum + (e.carbs || 0), 0)
     }
 
     // Group by meal type
@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      date: formatDateKey(targetDate),
       entries,
       totals,
       byMealType
@@ -67,6 +68,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'userId and name are required' }, { status: 400 })
     }
 
+    const targetDate = date ? parseDateKey(date) : normalizeToDate(new Date())
+
     const entry = await db.foodEntry.create({
       data: {
         userId,
@@ -79,7 +82,7 @@ export async function POST(request: NextRequest) {
         amount,
         quality,
         note,
-        date: date ? new Date(date) : new Date()
+        date: targetDate
       }
     })
 
