@@ -226,6 +226,15 @@ export const useAppStore = create<AppState>()(
       login: async (isDemo = false, isOwner = false) => {
         set({ isLoading: true })
 
+        // Save auth mode to localStorage for persistence
+        if (typeof window !== 'undefined') {
+          if (isOwner) {
+            localStorage.setItem('leakfixer-auth-mode', 'owner')
+          } else if (isDemo) {
+            localStorage.setItem('leakfixer-auth-mode', 'demo')
+          }
+        }
+
         try {
           let endpoint = '/api/auth'
           if (isOwner) {
@@ -258,6 +267,10 @@ export const useAppStore = create<AppState>()(
               // if (isTelegramContext) {
               //   throw new Error('Telegram initData is missing. Open the app from Telegram bot menu button.')
               // }
+              // Save demo mode to localStorage for persistence
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('leakfixer-auth-mode', 'demo')
+              }
               return get().login(true)
             }
 

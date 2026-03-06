@@ -149,8 +149,35 @@ export default function Home() {
           }
         }
 
-        // Login decision is handled in store (Telegram first, demo fallback only in regular browser)
-        const ok = await login()
+        // Check for owner mode from URL or localStorage
+        const urlParams = new URLSearchParams(window.location.search)
+        const ownerParam = urlParams.get('owner')
+        const storedMode = localStorage.getItem('leakfixer-auth-mode')
+        
+        // Determine login mode
+        let isDemo = false
+        let isOwner = false
+        
+        if (ownerParam === 'true') {
+          isOwner = true
+          localStorage.setItem('leakfixer-auth-mode', 'owner')
+        } else if (storedMode === 'owner') {
+          isOwner = true
+        } else if (storedMode === 'demo') {
+          isDemo = true
+        }
+        
+        // Clear URL param after reading
+        if (ownerParam) {
+          urlParams.delete('owner')
+          const newUrl = urlParams.toString() 
+            ? `${window.location.pathname}?${urlParams.toString()}`
+            : window.location.pathname
+          window.history.replaceState({}, '', newUrl)
+        }
+
+        // Login with determined mode
+        const ok = await login(isDemo, isOwner)
         if (!ok && typeof window !== 'undefined') {
           const message = (window as unknown as { __leakfixerAuthError?: string }).__leakfixerAuthError
           setAuthError(message || 'Auth failed')

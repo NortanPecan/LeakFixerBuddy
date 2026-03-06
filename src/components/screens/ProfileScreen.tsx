@@ -144,7 +144,7 @@ interface ActivityStats {
 }
 
 export function ProfileScreen() {
-  const { user, profile, isDemoMode, setScreen } = useAppStore()
+  const { user, profile, isDemoMode, isOwnerMode, setScreen } = useAppStore()
   const [stats, setStats] = useState({
     totalWorkouts: 0,
     totalCaloriesBurned: 0,
@@ -897,9 +897,52 @@ export function ProfileScreen() {
       {isDemoMode && (
         <Card className="bg-amber-500/10 border-amber-500/30">
           <CardContent className="pt-4">
-            <p className="text-sm text-amber-400">
-              🎮 Демо-режим активен. Данные сохраняются локально в браузере.
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-amber-400">
+                🎮 Демо-режим активен
+              </p>
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="text-xs"
+                onClick={() => {
+                  if (confirm('Переключиться на Owner-режим? Демо-данные будут недоступны.')) {
+                    localStorage.removeItem('leakfixer-auth-mode')
+                    localStorage.setItem('leakfixer-auth-mode', 'owner')
+                    window.location.reload()
+                  }
+                }}
+              >
+                Owner
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Owner notice */}
+      {isOwnerMode && (
+        <Card className="bg-emerald-500/10 border-emerald-500/30">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-emerald-400">
+                👤 Owner-режим (тестовый профиль)
+              </p>
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="text-xs"
+                onClick={() => {
+                  if (confirm('Переключиться на Демо-режим?')) {
+                    localStorage.removeItem('leakfixer-auth-mode')
+                    localStorage.setItem('leakfixer-auth-mode', 'demo')
+                    window.location.reload()
+                  }
+                }}
+              >
+                Demo
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
