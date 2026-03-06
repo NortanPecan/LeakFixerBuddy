@@ -426,3 +426,23 @@ Stage Summary:
 - npm scripts clearly distinguish between environments
 - Sandbox works without any external network access
 - Production requires: DATABASE_URL, DIRECT_DATABASE_URL, TELEGRAM_BOT_TOKEN in Vercel
+
+---
+Task ID: 12
+Agent: Main Agent
+Task: Add DEV_RULES to BRANCH_STRATEGY.md and worklog.md
+
+Work Log:
+- Added DEV_RULES section to BRANCH_STRATEGY.md:
+  - Rule 1: master = sandbox (active development, SQLite only)
+  - Rule 2: main = production (read-only, no changes allowed)
+  - Rule 3: Supabase schema off-limits (describe changes as TODO)
+  - Memory instructions for new sessions
+- Updated worklog.md with this task
+- Committed to GitHub after resolving git history conflict
+
+Stage Summary:
+- DEV_RULES now documented in BRANCH_STRATEGY.md
+- Rules apply to all future AI sessions
+- Clear separation: sandbox (active) vs production (read-only)
+- Supabase changes go through owner or separate agent
