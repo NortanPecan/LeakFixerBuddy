@@ -107,3 +107,43 @@
 - `src/components/screens/GymScreen.tsx` - Complete rewrite with v1.1 features
 - `src/app/api/gym/route.ts` - Added PATCH endpoint
 - `src/app/api/gym/workouts/skip/route.ts` - Improved skip logic with shift option
+
+---
+
+## Task ID: AI-GIT-RULES
+## Agent: Main Agent
+## Task: Создание конституции Git-правил для AI-помощника
+
+---
+
+### Work Log:
+
+1. **Создан файл `docs/ai-git-rules.md`**
+   - Расположение: `/docs/ai-git-rules.md`
+   - Содержит полные правила работы с Git
+
+2. **Записанные правила:**
+   - Полный запрет на `git reset`, `git rebase`, `git push --force` без подтверждения
+   - По умолчанию использовать `git revert` для отката
+   - Осмысленные коммиты, не работать «в воздухе»
+   - Обязательное согласование опасных действий (миграции БД, массовые удаления, рефакторинг)
+   - Крупные изменения в отдельных ветках, `master`/`main` — стабильная ветка
+
+3. **Добавлен обязательный пункт:**
+   > «Перед каждым новым этапом работы (новый модуль, крупной рефакторинг, изменения GYM/Skills/Traits/Export) я обязан перечитать этот файл и свериться, не нарушаю ли правила»
+
+4. **Обновлён README.md**
+   - Добавлена ссылка: `🤖 **AI Git Rules**: [docs/ai-git-rules.md](./docs/ai-git-rules.md) — **обязательно к прочтению AI‑помощником**`
+
+---
+
+### Stage Summary:
+
+**Файл-конституция:** `docs/ai-git-rules.md`
+
+**Обязательство:**
+Перед каждым новым этапом работы я (GLM‑5) буду перечитывать `docs/ai-git-rules.md` и сверяться с правилами. Это моя «конституция по Git».
+
+**Файлы созданы/изменены:**
+- `docs/ai-git-rules.md` — новый файл с правилами
+- `README.md` — добавлена ссылка на правила

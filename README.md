@@ -7,8 +7,9 @@
 ![Prisma](https://img.shields.io/badge/Prisma-ORM-green)
 ![Tailwind](https://img.shields.io/badge/Tailwind-4-cyan)
 
-> 📱 **Продакшен**: [leak-fixer-buddy.vercel.app](https://leak-fixer-buddy.vercel.app/)  
+> 📱 **Продакшен**: [leak-fixer-buddy.vercel.app](https://leak-fixer-buddy.vercel.app/)
 > 📖 **Настройка Telegram**: [TELEGRAM_SETUP.md](./TELEGRAM_SETUP.md)
+> 🤖 **AI Git Rules**: [docs/ai-git-rules.md](./docs/ai-git-rules.md) — **обязательно к прочтению AI‑помощником**
 
 ---
 
