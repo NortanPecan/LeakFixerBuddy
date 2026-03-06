@@ -1145,3 +1145,60 @@ Stage Summary:
    - График прогресса навыка по времени
    - Insight карточки
    - Экспорт в JSON для backup
+
+---
+Task ID: 28
+Agent: Main Agent
+Task: Модуль «Цели» как система челенджей + видение
+
+Work Log:
+- Обновлена Prisma схема Challenge:
+  - Добавлено поле description (контекст: зачем я это делаю)
+  - Поле config расширено для linkedRitualIds, linkedSkillIds, linkedTraitIds
+- Обновлён API /api/challenges:
+  - Поддержка description, directionId при создании/обновлении
+  - Возврат linked entities (rituals, skills, traits) из config
+  - Расчёт прогресса для ritual/chain/custom типов
+  - Статусы: active, planned, completed, failed
+- API /api/directions уже поддерживает _count.challenges
+- Переписан GoalsScreen:
+  - Блок «Направления» с горизонтальным скроллом
+  - Карточки направлений с цветом и счётчиком челенджей
+  - Список челенджей по статусам (активные, запланированные, завершённые)
+  - Формы создания направлений и челенджей
+  - Skeleton loading, error state с retry
+  - Empty state с понятным CTA
+- Обновлён ChallengeDetailScreen:
+  - Отображение description (зачем я это делаю)
+  - Связь с направлением (цвет, название)
+  - Связанные ритуалы/навыки/качества
+  - Прогресс с серией (streak)
+  - Skeleton loading, error state
+- Обновлена навигация: BottomNav теперь ведёт на 'goals'
+
+Stage Summary:
+- Модуль «Цели» = Направления + Челенджи
+- Направления: большие цели с цветом и описанием видения
+- Челенджи: системные инструменты для движения к направлениям
+- Связи: челендж связан с направлением, может иметь linked rituals/skills/traits
+- Полный набор состояний: loading, error, empty
+
+Рекомендации и улучшения:
+
+1. **Critical UX/Dev improvements:**
+   - Добавить экран детального просмотра Direction с списком челенджей
+   - Добавить автоматический расчёт endDate при создании челенджа
+   - Добавить проверку истечения срока челенджа (auto-fail)
+   - Добавить уведомления о завершении челенджа
+
+2. **Suggested refactors:**
+   - Вынести расчёт прогресса в отдельный service
+   - Создать общий хук useChallengeProgress
+   - Добавить WebSocket для real-time обновлений прогресса
+
+3. **Nice-to-have ideas:**
+   - Календарь челенджей с heatmap
+   - График прогресса по дням
+   - Аналитика по направлениям
+   - Шаблоны челенджей
+   - Связь челенджей с навыками (прогресс навыка растёт при выполнении челенджа)

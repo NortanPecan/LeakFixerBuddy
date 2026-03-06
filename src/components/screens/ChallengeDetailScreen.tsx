@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   ArrowLeft,
   Trophy,
@@ -16,20 +17,23 @@ import {
   XCircle,
   Timer,
   Trash2,
-  Zap
+  Zap,
+  Compass,
+  RefreshCw,
+  Heart,
+  TrendingUp
 } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
 
 // Zone config
-const ZONE_CONFIG: Record<string, { label: string; emoji: string; color: string }> = {
-  steam: { label: 'Steam', emoji: '🎮', color: '#1b2838' },
-  leakfixer: { label: 'LeakFixer', emoji: '🔧', color: '#4a5568' },
-  ai: { label: 'ИИ', emoji: '🤖', color: '#6366f1' },
-  poker: { label: 'Покер', emoji: '♠️', color: '#059669' },
-  health: { label: 'Здоровье', emoji: '💪', color: '#dc2626' },
-  life: { label: 'Жизнь', emoji: '🏠', color: '#f59e0b' },
-  savings: { label: 'Резерв', emoji: '💰', color: '#10b981' },
-  general: { label: 'Общее', emoji: '📦', color: '#6b7280' },
+const ZONE_CONFIG: Record<string, { label: string; emoji: string }> = {
+  health: { label: 'Здоровье', emoji: '💪' },
+  money: { label: 'Деньги', emoji: '💰' },
+  learning: { label: 'Обучение', emoji: '📚' },
+  relationships: { label: 'Отношения', emoji: '👥' },
+  mind: { label: 'Мышление', emoji: '🧠' },
+  productivity: { label: 'Продуктивность', emoji: '⚡' },
+  general: { label: 'Общее', emoji: '📦' },
 }
 
 // Challenge type config
@@ -54,54 +58,63 @@ const TYPE_CONFIG: Record<string, { label: string; icon: typeof Trophy; descript
 interface Challenge {
   id: string
   name: string
+  description?: string
   type: string
   zone: string
-  chainId?: string
+  directionId?: string
   config: string
   duration: number
   progress: number
-  startDate: string
-  endDate?: string
-  status: string
-  createdAt: string
   progressPercentage: number
   daysCompleted: number
   currentStreak: number
-  lastCheckedAt?: string
+  startDate: string
+  endDate?: string
+  status: string
+  direction?: { id: string; title: string; color: string }
+  linkedRituals?: Array<{ id: string; title: string; category: string }>
+  linkedSkills?: Array<{ id: string; name: string; level: number }>
+  linkedTraits?: Array<{ id: string; name: string; score: number }>
 }
 
 export function ChallengeDetailScreen() {
   const { selectedContentId, setScreen } = useAppStore()
   const [challenge, setChallenge] = useState<Challenge | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadChallenge = async () => {
+    if (!selectedContentId) return
+    
+    setLoading(true)
+    setError(null)
+    
+    try {
+      const res = await fetch(`/api/challenges?id=${selectedContentId}`)
+      const data = await res.json()
+      if (data.success && data.challenge) {
+        setChallenge(data.challenge)
+      } else {
+        setError('Челендж не найден')
+      }
+    } catch (err) {
+      console.error('Failed to load challenge:', err)
+      setError('Не удалось загрузить челендж')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const loadChallenge = async () => {
-      if (!selectedContentId) return
-      
-      setLoading(true)
-      try {
-        const res = await fetch(`/api/challenges?id=${selectedContentId}`)
-        const data = await res.json()
-        if (data.success && data.challenge) {
-          setChallenge(data.challenge)
-        }
-      } catch (error) {
-        console.error('Failed to load challenge:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
     loadChallenge()
   }, [selectedContentId])
 
   const handleDelete = async () => {
-    if (!challenge || !confirm('Удалить челендж?')) return
+    if (!challenge || !confirm('Отменить челендж?')) return
     
     try {
       await fetch(`/api/challenges?id=${challenge.id}`, { method: 'DELETE' })
-      setScreen('challenges')
+      setScreen('goals')
     } catch (error) {
       console.error('Failed to delete challenge:', error)
     }
@@ -122,28 +135,53 @@ export function ChallengeDetailScreen() {
     return Math.max(0, remaining)
   }
 
+  // Loading skeleton
   if (loading) {
     return (
       <div className="flex flex-col gap-4 pb-20">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => setScreen('challenges')}>
+          <Button variant="ghost" size="icon" onClick={() => setScreen('goals')}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <h1 className="text-xl font-bold">Загрузка...</h1>
+          <Skeleton className="h-6 w-40" />
         </div>
+        <Card className="bg-card/50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3 mb-4">
+              <Skeleton className="w-12 h-12 rounded-full" />
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-3 w-16" />
+              </div>
+            </div>
+            <Skeleton className="h-3 w-full mb-2" />
+            <Skeleton className="h-3 w-2/3" />
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
-  if (!challenge) {
+  // Error state
+  if (error || !challenge) {
     return (
       <div className="flex flex-col gap-4 pb-20">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => setScreen('challenges')}>
+          <Button variant="ghost" size="icon" onClick={() => setScreen('goals')}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <h1 className="text-xl font-bold">Челендж не найден</h1>
+          <h1 className="text-xl font-bold">Ошибка</h1>
         </div>
+        <Card className="bg-red-500/10 border-red-500/30">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <p className="text-red-400">{error || 'Челендж не найден'}</p>
+              <Button size="sm" variant="outline" onClick={loadChallenge}>
+                <RefreshCw className="w-4 h-4 mr-1" /> Повторить
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -157,19 +195,49 @@ export function ChallengeDetailScreen() {
     <div className="flex flex-col gap-4 pb-20">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => setScreen('challenges')}>
+        <Button variant="ghost" size="icon" onClick={() => setScreen('goals')}>
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <h1 className="text-xl font-bold truncate">{challenge.name}</h1>
       </div>
+
+      {/* Direction link */}
+      {challenge.direction && (
+        <Card 
+          className="cursor-pointer hover:bg-card/80 transition-colors"
+          style={{ borderLeftWidth: 3, borderLeftColor: challenge.direction.color }}
+          onClick={() => setScreen('goals')}
+        >
+          <CardContent className="pt-3 pb-3">
+            <div className="flex items-center gap-3">
+              <Compass className="w-4 h-4 text-muted-foreground" />
+              <div className="flex-1">
+                <div className="text-sm text-muted-foreground">Направление</div>
+                <div className="font-medium">{challenge.direction.title}</div>
+              </div>
+              <ArrowLeft className="w-4 h-4 text-muted-foreground rotate-180" />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Status card */}
       <Card className="bg-card/50 backdrop-blur">
         <CardContent className="pt-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full flex items-center justify-center bg-primary/20">
-                <TypeIcon className="w-6 h-6 text-primary" />
+              <div 
+                className="w-12 h-12 rounded-full flex items-center justify-center"
+                style={{ 
+                  backgroundColor: challenge.direction?.color 
+                    ? `${challenge.direction.color}20` 
+                    : 'hsl(var(--primary) / 0.2)'
+                }}
+              >
+                <TypeIcon 
+                  className="w-6 h-6" 
+                  style={{ color: challenge.direction?.color || 'hsl(var(--primary))' }} 
+                />
               </div>
               <div>
                 <div className="font-medium">{typeConfig.label}</div>
@@ -226,6 +294,18 @@ export function ChallengeDetailScreen() {
         </CardContent>
       </Card>
 
+      {/* Description / Context */}
+      {challenge.description && (
+        <Card className="bg-card/50 backdrop-blur">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground">Зачем я это делаю</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm">{challenge.description}</p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Details */}
       <Card className="bg-card/50 backdrop-blur">
         <CardContent className="pt-6 space-y-4">
@@ -257,7 +337,65 @@ export function ChallengeDetailScreen() {
         </CardContent>
       </Card>
 
-      {/* Description based on type */}
+      {/* Linked entities - what supports this challenge */}
+      {(challenge.linkedRituals?.length || challenge.linkedSkills?.length || challenge.linkedTraits?.length) ? (
+        <Card className="bg-card/50 backdrop-blur">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-emerald-500" />
+              Что помогает достижению
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Linked Rituals */}
+            {challenge.linkedRituals && challenge.linkedRituals.length > 0 && (
+              <div>
+                <div className="text-xs text-muted-foreground mb-2">Ритуалы</div>
+                <div className="flex flex-wrap gap-2">
+                  {challenge.linkedRituals.map(r => (
+                    <Badge key={r.id} variant="outline" className="text-xs">
+                      <Flame className="w-3 h-3 mr-1" />
+                      {r.title}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Linked Skills */}
+            {challenge.linkedSkills && challenge.linkedSkills.length > 0 && (
+              <div>
+                <div className="text-xs text-muted-foreground mb-2">Навыки</div>
+                <div className="flex flex-wrap gap-2">
+                  {challenge.linkedSkills.map(s => (
+                    <Badge key={s.id} variant="outline" className="text-xs">
+                      <Star className="w-3 h-3 mr-1" />
+                      {s.name} (Lvl {s.level})
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Linked Traits */}
+            {challenge.linkedTraits && challenge.linkedTraits.length > 0 && (
+              <div>
+                <div className="text-xs text-muted-foreground mb-2">Качества</div>
+                <div className="flex flex-wrap gap-2">
+                  {challenge.linkedTraits.map(t => (
+                    <Badge key={t.id} variant="outline" className="text-xs">
+                      <Heart className="w-3 h-3 mr-1" />
+                      {t.name} ({t.score}/10)
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {/* How it works */}
       <Card className="bg-card/50 backdrop-blur">
         <CardContent className="pt-6">
           <h3 className="font-medium mb-2">Как это работает</h3>

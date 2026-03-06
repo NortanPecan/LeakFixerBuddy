@@ -8,7 +8,7 @@ const NAV_ITEMS: { screen: Screen; icon: typeof Home; label: string }[] = [
   { screen: 'home', icon: Home, label: 'Главная' },
   { screen: 'tasks', icon: ListTodo, label: 'Дела' },
   { screen: 'rituals', icon: Flame, label: 'Ритуалы' },
-  { screen: 'challenges', icon: Trophy, label: 'Цели' },
+  { screen: 'goals', icon: Trophy, label: 'Цели' },
   { screen: 'profile', icon: User, label: 'Профиль' },
 ]
 

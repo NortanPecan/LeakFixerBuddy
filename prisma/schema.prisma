@@ -695,11 +695,12 @@ model Challenge {
   id          String   @id @default(cuid())
   userId      String
   name        String
+  description String?  // Context: why I'm doing this
   type        String   // "ritual", "chain", "custom"
   zone        String   @default("general")
   directionId String?  // Link to Direction (vision)
   chainId     String?  // For chain challenges
-  config      String   @default("{}") // JSON: ritualIds, targetSteps, targetCount, periodDays, etc.
+  config      String   @default("{}") // JSON: ritualIds, targetSteps, targetCount, periodDays, linkedRitualIds, linkedSkillIds, linkedTraitIds, etc.
   duration    Int      @default(30) // Duration in days
   progress    Int      @default(0) // Progress percentage
   startDate   DateTime @default(now())
