@@ -107,6 +107,15 @@ bun run db:generate:prod     # Сгенерировать Prisma Client для P
 
 ---
 
+## Schema files
+
+- `prisma/schema.prisma`: sandbox schema (SQLite)
+- `prisma/schema.supabase.prisma`: production schema (Supabase/PostgreSQL)
+
+Both schemas must describe the same domain models. Differences are only DB-specific types/constraints.
+
+---
+
 ## Переменные окружения
 
 ### Master (.env для sandbox)
@@ -226,28 +235,24 @@ GET https://your-app.vercel.app/api/health
 
 ---
 
-## Как проверить, что прод настроен правильно
+## Demo Auth (Production)
 
-### 1. Проверка environment variables
+Endpoint: `GET /api/auth?demo=true`
 
-В Vercel Dashboard должны быть:
-- ✅ `DATABASE_URL` (port 6543, pooling)
-- ✅ `DIRECT_DATABASE_URL` (port 5432, direct)
-- ✅ `TELEGRAM_BOT_TOKEN`
+Purpose:
+- Fallback login path when Telegram `initData` is unavailable.
+- Works in production with Supabase, independent from Telegram signature validation.
 
-### 2. Проверка схемы
+Environment expectations:
+- Required: `DATABASE_URL`
+- Recommended for Supabase: `DIRECT_DATABASE_URL`
+- Optional: `DEMO_MODE`
+- Not required for demo GET: `TELEGRAM_BOT_TOKEN` (required only for Telegram POST login)
 
-Код в `main` ветке должен использовать PostgreSQL-совместимые типы:
-- UUID вместо CUID
-- Timestamptz вместо DateTime
-- BigInt для Telegram ID
-
-### 3. Проверка таблиц в Supabase
-
-Таблицы должны существовать и иметь правильную структуру:
-- Используйте `SUPABASE_CHECKLIST.md`
-- Проверьте Foreign Keys
-- Проверьте индексы
+Failure policy:
+- Missing DB env -> clear HTTP 500 config error.
+- DB connection issue -> clear HTTP 503 error.
+- Schema mismatch -> clear HTTP 500 error with regeneration/sync hint.
 
 ---
 
@@ -294,3 +299,4 @@ master (локальная разработка)
 |------|-----------|
 | 2024-XX-XX | Добавлены отдельные npm scripts для sandbox/prod |
 | 2024-XX-XX | Создан SUPABASE_CHECKLIST.md |
+| 2024-XX-XX | Sync master with main (prod code into sandbox) |

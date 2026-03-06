@@ -390,59 +390,28 @@ Stage Summary:
 
 ---
 Task ID: 11
-Agent: Main Agent
-Task: Separate sandbox/prod schemas and create Supabase checklist
+Agent: Codex (GPT-5)
+Task: Validate production API path (Mini App -> backend -> Supabase) on `main`
 
 Work Log:
-- Updated package.json with separate scripts for sandbox and prod:
-  - db:push:sandbox, db:push:prod (separate schemas)
-  - db:generate:sandbox, db:generate:prod
-  - db:migrate:sandbox, db:migrate:prod
-  - db:studio:sandbox, db:studio:prod
-  - db:validate:sandbox, db:validate:prod
-- Created SUPABASE_CHECKLIST.md:
-  - Complete list of 34 tables with creation order
-  - Detailed field descriptions for each table (name, type, nullable, unique, default, notes)
-  - Foreign key relationships and indexes
-  - SQL template for app_users table
-  - Instructions for Row Level Security
-  - History of changes section
-- Rewrote BRANCH_STRATEGY.md:
-  - Clear sandbox vs prod workflow
-  - Command reference tables for both environments
-  - Environment variables documentation
-  - Deployment verification guide
-  - Important limitations from sandbox
-- Created .env.example with clear instructions for:
-  - Sandbox: SQLite + demo mode
-  - Production: Supabase URLs + Telegram bot token
-- Validated SQLite schema: passes
-- PostgreSQL schema validation: requires DIRECT_DATABASE_URL (expected in sandbox)
+- Audited production API handlers on `main` for login and user lifecycle:
+  - `/api/auth` (POST Telegram initData, GET `?demo=true`)
+  - `/api/user`, `/api/fitness`, `/api/energy`, `/api/food`, `/api/tasks`, `/api/state`, `/api/water`, and other API routes under `src/app/api/*`.
+- Verified API handlers use Prisma via `@/lib/db` and model calls (`db.appUser`, `db.userProfile`, `db.dailyState`, etc.), with no direct SQLite driver usage in production API routes.
+- Kept Telegram auth flow unchanged (initData parsing/validation and signature checks were not modified).
+- Hardened Prisma client generation for production deployments:
+  - Updated `scripts/prisma-generate.cjs` to choose `prisma/schema.supabase.prisma` when either:
+    - environment is production (`VERCEL=1` or `NODE_ENV=production`), or
+    - `DATABASE_URL` is PostgreSQL (`postgres://` or `postgresql://`).
+  - This reduces risk of generating a SQLite client for a PostgreSQL runtime.
 
 Stage Summary:
-- Complete separation of sandbox (SQLite) and prod (PostgreSQL) workflows
-- Supabase checklist with all 34 tables documented
-- User can now create tables in Supabase manually using the checklist
-- npm scripts clearly distinguish between environments
-- Sandbox works without any external network access
-- Production requires: DATABASE_URL, DIRECT_DATABASE_URL, TELEGRAM_BOT_TOKEN in Vercel
+- Production API DB access path is Prisma -> Supabase (PostgreSQL schema) on `main`.
+- Auth and demo-auth endpoints remain compatible with existing Telegram integration.
+- Build-time Prisma schema selection is now safer for production-like environments.
 
----
-Task ID: 12
-Agent: Main Agent
-Task: Add DEV_RULES to BRANCH_STRATEGY.md and worklog.md
-
-Work Log:
-- Added DEV_RULES section to BRANCH_STRATEGY.md:
-  - Rule 1: master = sandbox (active development, SQLite only)
-  - Rule 2: main = production (read-only, no changes allowed)
-  - Rule 3: Supabase schema off-limits (describe changes as TODO)
-  - Memory instructions for new sessions
-- Updated worklog.md with this task
-- Committed to GitHub after resolving git history conflict
-
-Stage Summary:
-- DEV_RULES now documented in BRANCH_STRATEGY.md
-- Rules apply to all future AI sessions
-- Clear separation: sandbox (active) vs production (read-only)
-- Supabase changes go through owner or separate agent
+TODO for next agent (GLM-5 in sandbox):
+- Run branch-specific validation commands in target environment and capture outputs in worklog:
+  - `bun run db:validate:prod`
+  - smoke checks for `/api/auth` (POST + `?demo=true`) and `/api/user` on deployed environment.
+- Review and optionally clean historical legacy docs snippets in README that still mention manual schema file renaming; keep branch-script flow as the source of truth.

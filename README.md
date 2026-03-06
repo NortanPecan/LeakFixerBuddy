@@ -368,3 +368,63 @@ MIT
 - [Telegram Mini Apps Docs](https://core.telegram.org/bots/webapps)
 - [Supabase Docs](https://supabase.com/docs)
 - [Next.js Docs](https://nextjs.org/docs)
+
+---
+
+## Branch-aware DB Commands (2026-03-06)
+
+Use these scripts explicitly by environment:
+
+### Sandbox (SQLite, `prisma/schema.prisma`)
+
+```bash
+bun run db:generate:sandbox
+bun run db:push:sandbox
+bun run db:migrate:sandbox
+bun run db:studio:sandbox
+bun run db:validate:sandbox
+```
+
+### Production (Supabase, `prisma/schema.supabase.prisma`)
+
+```bash
+bun run db:generate:prod
+bun run db:push:prod
+bun run db:migrate:prod
+bun run db:studio:prod
+bun run db:validate:prod
+```
+
+### Manual Supabase Sync Policy
+
+Production Supabase is synchronized manually by the project owner.
+
+1. Update `prisma/schema.supabase.prisma`.
+2. Update `SUPABASE_CHECKLIST.md`.
+3. Apply SQL manually in Supabase SQL Editor.
+4. Re-run validation and compare table/column lists.
+
+## Demo Auth in Production
+
+`GET /api/auth?demo=true` is supported in production as an explicit fallback login path.
+
+How it works:
+
+- It does not require Telegram `initData`.
+- It does not require `TELEGRAM_BOT_TOKEN`.
+- It requires working DB connectivity (`DATABASE_URL`; for Supabase also `DIRECT_DATABASE_URL` recommended).
+- It creates or reuses a dedicated demo user (`demo@leakfixer.local`).
+
+Required env for stable demo auth in prod:
+
+- `DATABASE_URL` (required)
+- `DIRECT_DATABASE_URL` (recommended for Supabase)
+- `DEMO_MODE` (optional flag for product logic; endpoint itself does not hard-block by this flag)
+- `TELEGRAM_BOT_TOKEN` (not required for `?demo=true`, required for Telegram POST auth)
+
+Error behavior:
+
+- If DB env is missing: HTTP 500 with explicit config error text.
+- If DB is unreachable: HTTP 503 with connectivity hint.
+- If Prisma schema/runtime mismatch: HTTP 500 with schema mismatch hint.
+- Response contains `error`, `reason`, `hint`, `details`, and safe config booleans.

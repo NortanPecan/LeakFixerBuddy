@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useAppStore, Screen } from '@/lib/store'
 import { BottomNav } from '@/components/BottomNav'
 import { HomeScreen } from '@/components/screens/HomeScreen'
@@ -96,35 +96,84 @@ export default function Home() {
     login,
     setIsLoading
   } = useAppStore()
+  const [authError, setAuthError] = useState<string | null>(null)
 
   useEffect(() => {
+    const ensureTelegramSdkLoaded = async () => {
+      if (typeof window === 'undefined') return
+
+      const hasTelegram = !!(window as unknown as { Telegram?: unknown }).Telegram
+      if (hasTelegram) return
+
+      const existing = document.querySelector<HTMLScriptElement>('script[data-telegram-web-app="true"]')
+      if (existing) {
+        if ((window as unknown as { Telegram?: unknown }).Telegram) return
+        await new Promise<void>((resolve) => {
+          existing.addEventListener('load', () => resolve(), { once: true })
+          existing.addEventListener('error', () => resolve(), { once: true })
+          setTimeout(() => resolve(), 1500)
+        })
+        return
+      }
+
+      await new Promise<void>((resolve) => {
+        const script = document.createElement('script')
+        script.src = 'https://telegram.org/js/telegram-web-app.js'
+        script.async = true
+        script.dataset.telegramWebApp = 'true'
+        script.onload = () => resolve()
+        script.onerror = () => resolve()
+        document.head.appendChild(script)
+        setTimeout(() => resolve(), 1500)
+      })
+    }
+
     const initApp = async () => {
       if (isInitialized) return
 
       setIsLoading(true)
 
-      // Initialize Telegram WebApp if available
-      if (typeof window !== 'undefined') {
-        const tg = (window as unknown as { Telegram?: { WebApp?: { ready?: () => void; expand?: () => void; initData?: string } } }).Telegram
-        if (tg?.WebApp) {
-          tg.WebApp.ready?.()
-          tg.WebApp.expand?.()
+      try {
+        await ensureTelegramSdkLoaded()
+
+        // Initialize Telegram WebApp if available
+        if (typeof window !== 'undefined') {
+          const tg = (window as unknown as { Telegram?: { WebApp?: { ready?: () => void; expand?: () => void; initData?: string } } }).Telegram
+          if (tg?.WebApp) {
+            tg.WebApp.ready?.()
+            tg.WebApp.expand?.()
+          }
         }
+
+        // Login decision is handled in store (Telegram first, demo fallback only in regular browser)
+        const ok = await login()
+        if (!ok && typeof window !== 'undefined') {
+          const message = (window as unknown as { __leakfixerAuthError?: string }).__leakfixerAuthError
+          setAuthError(message || 'Auth failed')
+        } else {
+          setAuthError(null)
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Auth initialization failed'
+        console.error('Init app error:', error)
+        setAuthError(message)
+      } finally {
+        setIsLoading(false)
       }
-
-      // Login (will fall back to demo if not in Telegram)
-      const isTelegram = typeof window !== 'undefined' && 
-        !!(window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData
-
-      await login(!isTelegram)
-
-      setIsLoading(false)
     }
 
     initApp()
   }, [isInitialized, login, setIsLoading])
 
-  if (!isInitialized || isLoading) {
+  if (isLoading) {
+    return <LoadingScreen />
+  }
+
+  if (!isInitialized && authError) {
+    return <AuthErrorScreen message={authError} />
+  }
+
+  if (!isInitialized) {
     return <LoadingScreen />
   }
 
@@ -136,6 +185,35 @@ export default function Home() {
         <ScreenRouter screen={currentScreen} contentId={selectedContentId} />
       </div>
       {showBottomNav && <BottomNav />}
+    </main>
+  )
+}
+
+function AuthErrorScreen({ message }: { message: string }) {
+  const { login, setIsLoading } = useAppStore()
+
+  return (
+    <main className="min-h-screen bg-background">
+      <div className="max-w-md mx-auto px-4 py-8 space-y-4">
+        <h1 className="text-xl font-semibold">Ошибка авторизации</h1>
+        <p className="text-sm text-muted-foreground break-words">{message}</p>
+        <div className="grid grid-cols-1 gap-2">
+          <Button onClick={async () => {
+            setIsLoading(true)
+            await login()
+            setIsLoading(false)
+          }}>
+            Повторить
+          </Button>
+          <Button variant="outline" onClick={async () => {
+            setIsLoading(true)
+            await login(true)
+            setIsLoading(false)
+          }}>
+            Войти как демо
+          </Button>
+        </div>
+      </div>
     </main>
   )
 }
