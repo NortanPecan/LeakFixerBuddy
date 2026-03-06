@@ -21,11 +21,13 @@ import { FinanceScreen } from '@/components/screens/FinanceScreen'
 import { ChallengesScreen } from '@/components/screens/ChallengesScreen'
 import { ChallengeDetailScreen } from '@/components/screens/ChallengeDetailScreen'
 import { HealthScreen } from '@/components/screens/HealthScreen'
+import { DailySummaryScreen } from '@/components/screens/DailySummaryScreen'
+import { DatePicker, DateBadge } from '@/components/DatePicker'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 
 // Screens that show bottom nav
-const MAIN_SCREENS: Screen[] = ['home', 'fitness', 'rituals', 'gym', 'profile', 'tasks', 'notes', 'development', 'finance', 'challenges', 'health']
+const MAIN_SCREENS: Screen[] = ['home', 'fitness', 'rituals', 'gym', 'profile', 'tasks', 'notes', 'development', 'finance', 'challenges', 'health', 'daily-summary']
 
 // Screen router component
 function ScreenRouter({ screen, contentId }: { screen: Screen; contentId?: string | null }) {
@@ -66,6 +68,8 @@ function ScreenRouter({ screen, contentId }: { screen: Screen; contentId?: strin
       return <ChallengeDetailScreen />
     case 'health':
       return <HealthScreen />
+    case 'daily-summary':
+      return <DailySummaryScreen />
     case 'all-rituals':
       return <AllRitualsScreen />
     default:

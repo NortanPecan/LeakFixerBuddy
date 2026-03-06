@@ -16,7 +16,13 @@ import {
   CheckCircle2,
   TrendingUp,
   TrendingDown,
-  Minus
+  Minus,
+  Droplets,
+  Apple,
+  Pill,
+  Heart,
+  Zap,
+  ChevronLeft
 } from 'lucide-react'
 import {
   Dialog,
@@ -25,6 +31,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Slider } from '@/components/ui/slider'
+import { DatePicker, DateBadge } from '@/components/DatePicker'
 
 interface Lesson {
   id: string
@@ -33,8 +40,24 @@ interface Lesson {
   description: string | null
 }
 
+interface DailySummary {
+  water: { current: number; target: number; percentage: number }
+  food: { calories: number; entriesCount: number; qualityBreakdown: { good: number; neutral: number; bad: number } }
+  rituals: { completed: number; total: number; percentage: number }
+  state: { mood: number | null; energy: number | null }
+  supplements: { checked: number; total: number; percentage: number }
+  flags: {
+    isOvereating: boolean
+    isLowEnergy: boolean
+    isBadMood: boolean
+    isRitualsFailed: boolean
+    isDehydrated: boolean
+    hasNoData: boolean
+  }
+}
+
 export function HomeScreen() {
-  const { user, globalState, updateGlobalState, updateProgress, isDemoMode } = useAppStore()
+  const { user, globalState, updateGlobalState, updateProgress, isDemoMode, selectedDate, setScreen } = useAppStore()
   const [lesson, setLesson] = useState<Lesson | null>(null)
   const [upcomingLessons, setUpcomingLessons] = useState<Lesson[]>([])
   const [lessonCompleted, setLessonCompleted] = useState(false)
@@ -42,6 +65,8 @@ export function HomeScreen() {
   const [showMoodDialog, setShowMoodDialog] = useState(false)
   const [moodValue, setMoodValue] = useState(globalState?.mood || 5)
   const [energyValue, setEnergyValue] = useState(globalState?.energy || 5)
+  const [dailySummary, setDailySummary] = useState<DailySummary | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(true)
 
   const currentDay = user?.day || 1
   const progress = ((currentDay - 1) / 30) * 100
@@ -64,6 +89,26 @@ export function HomeScreen() {
     }
     loadLesson()
   }, [user?.id, currentDay])
+
+  // Load daily summary
+  useEffect(() => {
+    const loadSummary = async () => {
+      if (!user?.id) return
+      setSummaryLoading(true)
+      try {
+        const response = await fetch(`/api/daily-summary?userId=${user.id}&date=${selectedDate}`)
+        const data = await response.json()
+        if (data.success) {
+          setDailySummary(data.summary)
+        }
+      } catch (error) {
+        console.error('Failed to load daily summary:', error)
+      } finally {
+        setSummaryLoading(false)
+      }
+    }
+    loadSummary()
+  }, [user?.id, selectedDate])
 
   const handleCompleteLesson = async () => {
     if (!user?.id) return
@@ -198,6 +243,75 @@ export function HomeScreen() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Daily Summary Block */}
+      {!summaryLoading && dailySummary && !dailySummary.flags.hasNoData && (
+        <Card className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors" onClick={() => setScreen('daily-summary')}>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Сводка за день</CardTitle>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-4 gap-2">
+              {/* Water */}
+              <div className="text-center p-2 rounded-lg bg-muted/30">
+                <Droplets className="w-4 h-4 mx-auto mb-1 text-cyan-400" />
+                <div className="text-xs text-muted-foreground">Вода</div>
+                <div className="text-sm font-bold">{dailySummary.water.percentage}%</div>
+              </div>
+              
+              {/* Food */}
+              <div className="text-center p-2 rounded-lg bg-muted/30">
+                <Apple className="w-4 h-4 mx-auto mb-1 text-green-400" />
+                <div className="text-xs text-muted-foreground">Еда</div>
+                <div className="text-sm font-bold">{dailySummary.food.calories}</div>
+              </div>
+              
+              {/* Rituals */}
+              <div className="text-center p-2 rounded-lg bg-muted/30">
+                <CheckCircle2 className="w-4 h-4 mx-auto mb-1 text-purple-400" />
+                <div className="text-xs text-muted-foreground">Ритуалы</div>
+                <div className="text-sm font-bold">{dailySummary.rituals.completed}/{dailySummary.rituals.total}</div>
+              </div>
+              
+              {/* Supplements */}
+              <div className="text-center p-2 rounded-lg bg-muted/30">
+                <Pill className="w-4 h-4 mx-auto mb-1 text-blue-400" />
+                <div className="text-xs text-muted-foreground">БАДы</div>
+                <div className="text-sm font-bold">{dailySummary.supplements.checked}/{dailySummary.supplements.total}</div>
+              </div>
+            </div>
+
+            {/* Warning flags */}
+            {(dailySummary.flags.isOvereating || dailySummary.flags.isLowEnergy || dailySummary.flags.isBadMood || dailySummary.flags.isRitualsFailed || dailySummary.flags.isDehydrated) && (
+              <div className="mt-3 flex flex-wrap gap-1">
+                {dailySummary.flags.isDehydrated && (
+                  <Badge variant="outline" className="text-[10px] bg-cyan-500/10 text-cyan-400 border-cyan-500/30">
+                    💧 Обезвоживание
+                  </Badge>
+                )}
+                {dailySummary.flags.isOvereating && (
+                  <Badge variant="outline" className="text-[10px] bg-red-500/10 text-red-400 border-red-500/30">
+                    🍔 Переедание
+                  </Badge>
+                )}
+                {dailySummary.flags.isLowEnergy && (
+                  <Badge variant="outline" className="text-[10px] bg-orange-500/10 text-orange-400 border-orange-500/30">
+                    🪫 Низкая энергия
+                  </Badge>
+                )}
+                {dailySummary.flags.isRitualsFailed && (
+                  <Badge variant="outline" className="text-[10px] bg-yellow-500/10 text-yellow-400 border-yellow-500/30">
+                    ⚠️ Ритуалы
+                  </Badge>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Quick stats */}
       <div className="grid grid-cols-2 gap-3">

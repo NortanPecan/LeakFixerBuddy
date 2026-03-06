@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { formatDateKey, normalizeToDate, getToday } from '@/lib/date-utils'
 
 // Navigation state
-export type Screen = 'home' | 'fitness' | 'rituals' | 'gym' | 'profile' | 'create-ritual' | 'catalog' | 'all-rituals' | 'tasks' | 'chain' | 'create-task' | 'create-chain' | 'notes' | 'note-detail' | 'development' | 'content-detail' | 'finance' | 'challenges' | 'challenge-detail' | 'health'
+export type Screen = 'home' | 'fitness' | 'rituals' | 'gym' | 'profile' | 'create-ritual' | 'catalog' | 'all-rituals' | 'tasks' | 'chain' | 'create-task' | 'create-chain' | 'notes' | 'note-detail' | 'development' | 'content-detail' | 'finance' | 'challenges' | 'challenge-detail' | 'health' | 'daily-summary'
 
 interface User {
   id: string
@@ -75,6 +76,16 @@ interface AppState {
   selectedContentId: string | null
   setSelectedContentId: (id: string | null) => void
 
+  // Date selection (for daily tracking)
+  selectedDate: string // YYYY-MM-DD format
+  selectedDateObj: Date // Date object for convenience
+  setSelectedDate: (date: Date) => void
+  goToPrevDay: () => void
+  goToNextDay: () => void
+  goToToday: () => void
+  isToday: () => boolean
+  isFutureDate: () => boolean
+
   // User
   user: User | null
   profile: UserProfile | null
@@ -137,6 +148,41 @@ export const useAppStore = create<AppState>()(
       setScreen: (screen) => set({ currentScreen: screen }),
       selectedContentId: null,
       setSelectedContentId: (id) => set({ selectedContentId: id }),
+
+      // Date selection
+      selectedDate: formatDateKey(getToday()),
+      selectedDateObj: getToday(),
+      setSelectedDate: (date) => set({
+        selectedDate: formatDateKey(date),
+        selectedDateObj: normalizeToDate(date)
+      }),
+      goToPrevDay: () => {
+        const current = get().selectedDateObj
+        const prev = new Date(current)
+        prev.setDate(prev.getDate() - 1)
+        set({
+          selectedDate: formatDateKey(prev),
+          selectedDateObj: normalizeToDate(prev)
+        })
+      },
+      goToNextDay: () => {
+        const current = get().selectedDateObj
+        const next = new Date(current)
+        next.setDate(next.getDate() + 1)
+        // Don't allow future dates
+        const today = getToday()
+        if (next > today) return
+        set({
+          selectedDate: formatDateKey(next),
+          selectedDateObj: normalizeToDate(next)
+        })
+      },
+      goToToday: () => set({
+        selectedDate: formatDateKey(getToday()),
+        selectedDateObj: getToday()
+      }),
+      isToday: () => get().selectedDate === formatDateKey(getToday()),
+      isFutureDate: () => get().selectedDateObj > getToday(),
 
       // User
       user: null,
@@ -375,7 +421,8 @@ export const useAppStore = create<AppState>()(
         dailyData: state.dailyData,
         buddies: state.buddies,
         activeGymPeriod: state.activeGymPeriod,
-        selectedContentId: state.selectedContentId
+        selectedContentId: state.selectedContentId,
+        selectedDate: state.selectedDate
       })
     }
   )

@@ -30,6 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { DatePicker, DateBadge } from '@/components/DatePicker'
 import { CATEGORY_LABELS, TIME_WINDOW_LABELS, type Ritual, type RitualCategory, type AttributeKey } from '@/lib/rituals/data'
 
 const CATEGORY_ICONS: Record<RitualCategory, React.ElementType> = {
@@ -42,7 +43,7 @@ const CATEGORY_ICONS: Record<RitualCategory, React.ElementType> = {
 }
 
 export function RitualsScreen() {
-  const { user, setScreen } = useAppStore()
+  const { user, setScreen, selectedDate, selectedDateObj } = useAppStore()
   const [rituals, setRituals] = useState<Ritual[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showPresetModal, setShowPresetModal] = useState(false)
@@ -65,22 +66,22 @@ export function RitualsScreen() {
       if (!user?.id) return
       setIsLoading(true)
       try {
-        const response = await fetch(`/api/rituals?userId=${user.id}`)
+        const response = await fetch(`/api/rituals?userId=${user.id}&date=${selectedDate}`)
         const data = await response.json()
         setRituals(data.rituals || [])
 
-        // Calculate stats
-        const today = new Date().getDay() || 7
-        const todayRituals = (data.rituals || []).filter((r: Ritual) => {
+        // Calculate stats based on selected date
+        const selectedDay = selectedDateObj.getDay() || 7
+        const selectedDayRituals = (data.rituals || []).filter((r: Ritual) => {
           const days = JSON.parse(r.days as string)
-          return days.includes(today) || days.length === 0
+          return days.includes(selectedDay) || days.length === 0
         })
-        const completed = todayRituals.filter((r: Ritual & { completedToday: boolean }) => r.completedToday).length
+        const completed = selectedDayRituals.filter((r: Ritual & { completedToday: boolean }) => r.completedToday).length
 
         setStats(prev => ({
           ...prev,
           todayCompleted: completed,
-          todayTotal: todayRituals.length
+          todayTotal: selectedDayRituals.length
         }))
 
         // Check if preset was offered before
@@ -96,19 +97,18 @@ export function RitualsScreen() {
       }
     }
     loadRituals()
-  }, [user?.id])
+  }, [user?.id, selectedDate, selectedDateObj])
 
   // Toggle ritual completion
   const handleToggleComplete = async (ritual: Ritual, completed: boolean) => {
     try {
-      const today = new Date().toISOString().split('T')[0]
       await fetch('/api/rituals/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ritualId: ritual.id,
           userId: user?.id,
-          date: today,
+          date: selectedDate,
           completed
         })
       })
@@ -144,7 +144,7 @@ export function RitualsScreen() {
       
       if (data.success) {
         // Reload rituals
-        const ritualsResponse = await fetch(`/api/rituals?userId=${user.id}`)
+        const ritualsResponse = await fetch(`/api/rituals?userId=${user.id}&date=${selectedDate}`)
         const ritualsData = await ritualsResponse.json()
         setRituals(ritualsData.rituals || [])
       }
@@ -163,12 +163,12 @@ export function RitualsScreen() {
     localStorage.setItem('ritual_preset_offered', 'true')
   }
 
-  // Get today's rituals
-  const todayDay = new Date().getDay() || 7
+  // Get selected day's rituals
+  const selectedDay = selectedDateObj.getDay() || 7
   const todayRituals = rituals.filter(r => {
     if (r.status !== 'active') return false
     const days = JSON.parse(r.days as string)
-    return days.includes(todayDay) || days.length === 0
+    return days.includes(selectedDay) || days.length === 0
   })
 
   // Group by time window
@@ -193,23 +193,29 @@ export function RitualsScreen() {
             {isLoading ? 'Загрузка...' : `${rituals.length} активных`}
           </p>
         </div>
-        <Button
-          size="sm"
-          className="bg-primary hover:bg-primary/90"
-          onClick={() => setScreen('create-ritual')}
-        >
-          <Plus className="w-4 h-4 mr-1" />
-          Создать
-        </Button>
+        <div className="flex items-center gap-2">
+          <DateBadge />
+          <Button
+            size="sm"
+            className="bg-primary hover:bg-primary/90"
+            onClick={() => setScreen('create-ritual')}
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Создать
+          </Button>
+        </div>
       </div>
 
-      {/* Today's progress */}
+      {/* Date Picker */}
+      <DatePicker variant="compact" />
+
+      {/* Progress for selected day */}
       {!isLoading && stats.todayTotal > 0 && (
         <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
           <CardContent className="pt-4">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <p className="text-sm text-muted-foreground">Прогресс на сегодня</p>
+                <p className="text-sm text-muted-foreground">Прогресс</p>
                 <p className="text-2xl font-bold">
                   {stats.todayCompleted} / {stats.todayTotal}
                 </p>

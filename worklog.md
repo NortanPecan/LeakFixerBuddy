@@ -535,3 +535,89 @@ Recommendations and improvements:
    - When user crosses midnight, "today" data should refresh
    - Daylight saving time transitions might cause duplicate/missing hours
    - Timezone changes when traveling could affect daily streaks
+
+---
+Task ID: 14
+Agent: Main Agent
+Task: DatePicker + Daily Summary + LeakFix Analytics Preparation
+
+Work Log:
+- Updated store.ts with selectedDate state:
+  - Added selectedDate (YYYY-MM-DD format) and selectedDateObj (Date object)
+  - Implemented navigation methods: goToPrevDay(), goToNextDay(), goToToday()
+  - Added helper methods: isToday(), isFutureDate()
+  - Persisted selectedDate in localStorage for session continuity
+- Created DatePicker component (src/components/DatePicker.tsx):
+  - Two variants: 'default' (full width card) and 'compact' (inline buttons)
+  - DateBadge component for compact "not today" indicator
+  - Russian date formatting (Пт, 7 марта)
+  - Prevents navigation to future dates
+  - "Go to today" button when viewing historical dates
+- Created /api/daily-summary endpoint:
+  - Aggregates all daily tracking data in single request
+  - Returns: water, food (calories, macros, quality), rituals, mood/energy, supplements
+  - Calculates LeakFix flags: isOvereating, isLowEnergy, isBadMood, isRitualsFailed, isDehydrated, hasNoData
+  - Efficient parallel data fetching with Promise.all
+- Created DailySummaryScreen (src/components/screens/DailySummaryScreen.tsx):
+  - Full daily overview with all metrics
+  - Warning flags for LeakFix indicators
+  - Empty state for days with no data
+  - Quick navigation to Health and Rituals screens
+- Updated HealthScreen to use selectedDate:
+  - All API calls now pass selectedDate parameter
+  - Added DatePicker component (compact variant)
+  - Water, food, supplements all respect selected date
+- Updated RitualsScreen to use selectedDate:
+  - Ritual completions now tied to selectedDate
+  - Added DatePicker component (compact variant)
+  - Stats calculated for selected day, not just "today"
+- Updated HomeScreen with daily summary block:
+  - Shows water %, calories, rituals completed, supplements
+  - Warning badges for LeakFix flags
+  - Clickable to navigate to full DailySummaryScreen
+- Added LeakFix preparation fields to DailyState model:
+  - stress (1-10 scale)
+  - sleepHours, sleepQuality
+  - isFailureDay boolean flag
+  - failureReasons JSON array
+  - Added date index for efficient queries
+- Applied schema changes with prisma db push
+
+Stage Summary:
+- DatePicker component provides unified date selection across all screens
+- Daily Summary API aggregates all tracking data efficiently
+- DailySummaryScreen shows comprehensive daily overview
+- All date-sensitive screens now respect selectedDate from store
+- LeakFix analytics fields prepared in schema for future module
+- Ready for weekly/monthly LeakFix analytics implementation
+
+Recommendations and improvements:
+
+1. **Explicit code improvements:**
+   - Add timezone support with user's timezone preference stored in profile
+   - Implement date range picker for weekly/monthly views in LeakFix module
+   - Add "copy yesterday's data" feature for quick logging
+   - Cache daily summary data in store to reduce API calls
+   - Add pull-to-refresh on DailySummaryScreen
+
+2. **Ideas for UX of diary and future LeakFix screen:**
+   - Calendar heatmap view showing completion/streak status
+   - Weekly summary with comparison to previous week
+   - Pattern detection alerts (e.g., "You tend to skip rituals on Fridays")
+   - Correlation insights (e.g., "Low sleep correlates with bad mood next day")
+   - Quick logging widgets on home screen for common actions
+   - Voice input for quick food/ritual logging
+   - Reminder notifications based on historical patterns
+
+3. **Potential risks/edge cases for dates:**
+   - **Timezone handling:** User traveling across timezones may see different "today"
+     - Solution: Store all dates in UTC, display in user's local timezone
+   - **Midnight crossover:** User logging data at 23:59 vs 00:01 creates different days
+     - Solution: Allow "grace period" for late logging (e.g., log yesterday's data until 3am)
+   - **Future dates:** Prevented in goToNextDay(), but API should also reject future dates
+   - **Daylight Saving Time:** 23-hour or 25-hour days can affect streak calculations
+     - Solution: Use date-only comparison, ignore time component
+   - **Data migration:** Existing data without proper date normalization
+     - Solution: Run migration to normalize all dates to start of day
+   - **Concurrent edits:** Multiple tabs/devices editing same day
+     - Solution: Optimistic locking with updatedAt timestamp

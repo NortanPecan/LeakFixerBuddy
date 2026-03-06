@@ -197,6 +197,12 @@ model DailyState {
   mood      Int?
   energy    Int?
   notes     String?
+  // LeakFix analytics preparation fields
+  stress    Int?     // 1-10 scale for stress level
+  sleepHours Float?  // Hours of sleep
+  sleepQuality Int?  // 1-10 scale for sleep quality
+  isFailureDay Boolean @default(false) // Flag for days with major setbacks
+  failureReasons String? // JSON array: ["overeating", "missed_rituals", "low_energy"]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -204,6 +210,7 @@ model DailyState {
   user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, date])
+  @@index([date])
   @@map("daily_state")
 }
 

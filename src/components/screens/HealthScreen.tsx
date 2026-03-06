@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DatePicker, DateBadge } from '@/components/DatePicker'
 import { Plus, CheckCircle2, Circle, Droplets, Apple, Pill, Clock, ChevronRight, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
@@ -97,7 +98,7 @@ interface WaterData {
 }
 
 export function HealthScreen() {
-  const { user } = useAppStore()
+  const { user, selectedDate, isToday } = useAppStore()
   
   // Data state
   const [supplementsData, setSupplementsData] = useState<SupplementsData | null>(null)
@@ -133,22 +134,22 @@ export function HealthScreen() {
       
       setLoading(true)
       try {
-        // Load supplements
-        const supplementsRes = await fetch(`/api/supplements?userId=${user.id}`)
+        // Load supplements for selected date
+        const supplementsRes = await fetch(`/api/supplements?userId=${user.id}&date=${selectedDate}`)
         const supplementsJson = await supplementsRes.json()
         if (supplementsJson.success) {
           setSupplementsData(supplementsJson)
         }
         
-        // Load food
-        const foodRes = await fetch(`/api/food?userId=${user.id}`)
+        // Load food for selected date
+        const foodRes = await fetch(`/api/food?userId=${user.id}&date=${selectedDate}`)
         const foodJson = await foodRes.json()
         if (foodJson.success) {
           setFoodData(foodJson)
         }
         
-        // Load water
-        const waterRes = await fetch(`/api/water?userId=${user.id}`)
+        // Load water for selected date
+        const waterRes = await fetch(`/api/water?userId=${user.id}&date=${selectedDate}`)
         const waterJson = await waterRes.json()
         if (waterJson.success) {
           setWaterData(waterJson.water)
@@ -161,7 +162,7 @@ export function HealthScreen() {
     }
     
     loadData()
-  }, [user?.id])
+  }, [user?.id, selectedDate])
 
   // Toggle supplement intake
   const handleToggleSupplement = async (supplement: Supplement) => {
@@ -174,12 +175,13 @@ export function HealthScreen() {
         body: JSON.stringify({
           supplementId: supplement.id,
           userId: user.id,
+          date: selectedDate,
           checked: !supplement.checked
         })
       })
       
       // Reload supplements
-      const res = await fetch(`/api/supplements?userId=${user.id}`)
+      const res = await fetch(`/api/supplements?userId=${user.id}&date=${selectedDate}`)
       const json = await res.json()
       if (json.success) {
         setSupplementsData(json)
@@ -208,7 +210,7 @@ export function HealthScreen() {
       })
       
       // Reload supplements
-      const res = await fetch(`/api/supplements?userId=${user.id}`)
+      const res = await fetch(`/api/supplements?userId=${user.id}&date=${selectedDate}`)
       const json = await res.json()
       if (json.success) {
         setSupplementsData(json)
@@ -235,7 +237,7 @@ export function HealthScreen() {
       await fetch(`/api/supplements?id=${id}`, { method: 'DELETE' })
       
       // Reload supplements
-      const res = await fetch(`/api/supplements?userId=${user.id}`)
+      const res = await fetch(`/api/supplements?userId=${user.id}&date=${selectedDate}`)
       const json = await res.json()
       if (json.success) {
         setSupplementsData(json)
@@ -255,6 +257,7 @@ export function HealthScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: user.id,
+          date: selectedDate,
           name: newFood.name,
           mealType: newFood.mealType,
           calories: newFood.calories ? parseInt(newFood.calories) : null,
@@ -264,7 +267,7 @@ export function HealthScreen() {
       })
       
       // Reload food
-      const res = await fetch(`/api/food?userId=${user.id}`)
+      const res = await fetch(`/api/food?userId=${user.id}&date=${selectedDate}`)
       const json = await res.json()
       if (json.success) {
         setFoodData(json)
@@ -291,7 +294,7 @@ export function HealthScreen() {
       await fetch(`/api/food?id=${id}`, { method: 'DELETE' })
       
       // Reload food
-      const res = await fetch(`/api/food?userId=${user.id}`)
+      const res = await fetch(`/api/food?userId=${user.id}&date=${selectedDate}`)
       const json = await res.json()
       if (json.success) {
         setFoodData(json)
@@ -313,6 +316,7 @@ export function HealthScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: user.id,
+          date: selectedDate,
           amount: newAmount
         })
       })
@@ -349,7 +353,13 @@ export function HealthScreen() {
   return (
     <div className="flex flex-col gap-4 pb-20">
       {/* Header */}
-      <h1 className="text-2xl font-bold text-foreground">Здоровье</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-foreground">Здоровье</h1>
+        <DateBadge />
+      </div>
+
+      {/* Date Picker */}
+      <DatePicker variant="compact" />
 
       {/* SUPPLEMENTS SECTION */}
       <Card className="bg-card/50 backdrop-blur">
