@@ -940,3 +940,30 @@ Stage Summary:
   - Пропуск тренировки → /skip
   - Перенос на дату → /reschedule
 - Коммит запушен: c37514a
+
+---
+Task ID: 25
+Agent: Main Agent
+Task: GYM v1.1 — Frontend UI for templates, drag-drop, skip/reschedule
+
+Work Log:
+- Added 4 WORKOUT_TEMPLATES: Upper/Lower, PPL, Classic Split, Full Body
+- Added DayScheduleItem interface with type/workoutNum/name/muscleGroups
+- Added selectedTemplate, daySchedule, draggedIndex, dragOverIndex states
+- Added parsedDaySchedule for displaying saved schedule from API
+- Added applyTemplate() function to auto-fill wizard from template
+- Added drag-and-drop handlers: handleDragStart, handleDragOver, handleDragEnd
+- Added handleSkipWorkout() - calls /api/gym/workouts/skip
+- Added handleRescheduleWorkout() - calls /api/gym/workouts/reschedule
+- Updated handleCreatePeriod() to send daySchedule to backend
+- Updated resetWizard() to clear daySchedule and selectedTemplate
+
+Stage Summary:
+- All GYM v1.1 features ready for testing:
+  - Templates: 4 ready-to-use workout splits
+  - Drag-drop: reorder days in wizard step 3
+  - Skip: shifts all future workouts +1 day
+  - Reschedule: move workout to specific date (with swap)
+- Commits pushed:
+  - c37514a Backend API
+  - 9009efb Frontend UI
