@@ -36,6 +36,69 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// PATCH - Update period (daySchedule, etc.)
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { periodId, daySchedule } = body
+
+    if (!periodId) {
+      return NextResponse.json({ error: 'periodId required' }, { status: 400 })
+    }
+
+    // Update the period's daySchedule
+    const period = await db.gymPeriod.update({
+      where: { id: periodId },
+      data: {
+        daySchedule: daySchedule ? JSON.stringify(daySchedule) : undefined,
+        updatedAt: new Date()
+      }
+    })
+
+    // If daySchedule changed, update future workouts accordingly
+    if (daySchedule && Array.isArray(daySchedule)) {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      
+      // Get all future uncompleted workouts
+      const futureWorkouts = await db.gymWorkout.findMany({
+        where: {
+          periodId,
+          date: { gte: today },
+          completed: false
+        },
+        orderBy: { date: 'asc' }
+      })
+      
+      // Update workout names and muscle groups based on new schedule
+      for (const workout of futureWorkouts) {
+        // Calculate which day in cycle this workout falls on
+        const startDate = new Date(period.startDate)
+        const daysSinceStart = Math.floor((new Date(workout.date).getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+        const dayInCycle = (daysSinceStart % period.cycleLength)
+        
+        // Find the schedule item for this day
+        const scheduleItem = daySchedule.find((item: DayScheduleItem) => item.dayNum - 1 === dayInCycle)
+        
+        if (scheduleItem && scheduleItem.type === 'workout') {
+          await db.gymWorkout.update({
+            where: { id: workout.id },
+            data: {
+              name: scheduleItem.name || workout.name,
+              muscleGroups: JSON.stringify(scheduleItem.muscleGroups || [])
+            }
+          })
+        }
+      }
+    }
+
+    return NextResponse.json({ success: true, period })
+  } catch (error) {
+    console.error('Update gym period error:', error)
+    return NextResponse.json({ error: 'Failed to update period' }, { status: 500 })
+  }
+}
+
 // POST - Create new gym period
 export async function POST(request: NextRequest) {
   try {

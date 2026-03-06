@@ -30,7 +30,10 @@ import {
   CalendarClock,
   Sparkles,
   CalendarDays,
-  Save
+  Save,
+  Repeat,
+  Shuffle,
+  Zap
 } from 'lucide-react'
 import {
   Dialog,
@@ -38,6 +41,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 // Types
 interface GymExerciseSet {
@@ -67,6 +77,7 @@ interface GymWorkout {
   duration: number | null
   completed: boolean
   exercises?: GymExercise[]
+  skipped?: boolean
 }
 
 interface GymPeriod {
@@ -188,6 +199,23 @@ const WORKOUT_TEMPLATES = [
       { type: 'rest' as const },
     ],
   },
+  {
+    id: 'intense_5',
+    name: 'Интенсив (5 за 5)',
+    description: '5 дней тренировок подряд, 2 дня отдых',
+    cycleLength: 7,
+    workoutsPerCycle: 5,
+    splitType: 'split',
+    daySchedule: [
+      { type: 'workout' as const, workoutNum: 1, name: 'Грудь', muscleGroups: ['chest'] },
+      { type: 'workout' as const, workoutNum: 2, name: 'Спина', muscleGroups: ['back'] },
+      { type: 'workout' as const, workoutNum: 3, name: 'Ноги', muscleGroups: ['legs'] },
+      { type: 'workout' as const, workoutNum: 4, name: 'Плечи', muscleGroups: ['shoulders'] },
+      { type: 'workout' as const, workoutNum: 5, name: 'Руки', muscleGroups: ['biceps', 'triceps'] },
+      { type: 'rest' as const },
+      { type: 'rest' as const },
+    ],
+  },
 ]
 
 // Day schedule item type
@@ -245,6 +273,9 @@ export function GymScreen() {
   const [showExerciseEditor, setShowExerciseEditor] = useState(false)
   const [newExerciseName, setNewExerciseName] = useState('')
   const [newExerciseMuscle, setNewExerciseMuscle] = useState('')
+  
+  // Schedule edit mode
+  const [scheduleEdited, setScheduleEdited] = useState(false)
 
   // Load gym periods
   const loadPeriods = useCallback(async () => {
@@ -300,25 +331,28 @@ export function GymScreen() {
     loadWorkouts()
   }, [activePeriod?.id])
 
-  // Parse day schedule when activePeriod changes
+  // Parse day schedule when activePeriod changes - preserve exact order
   useEffect(() => {
     if (activePeriod?.daySchedule) {
       try {
         const schedule = typeof activePeriod.daySchedule === 'string'
           ? JSON.parse(activePeriod.daySchedule)
           : activePeriod.daySchedule
-        setParsedDaySchedule(schedule)
+        // Sort by dayNum to ensure correct order (this is the fix for the bug)
+        const sortedSchedule = [...schedule].sort((a, b) => a.dayNum - b.dayNum)
+        setParsedDaySchedule(sortedSchedule)
       } catch {
         setParsedDaySchedule([])
       }
     } else {
       setParsedDaySchedule([])
     }
+    setScheduleEdited(false)
   }, [activePeriod?.daySchedule])
 
   // Initialize workout days when wizard config changes
   useEffect(() => {
-    if (wizardStep === 2 && workoutDays.length === 0) {
+    if (wizardStep === 2 && workoutDays.length === 0 && !selectedTemplate) {
       const days: WorkoutDayConfig[] = []
       for (let i = 1; i <= wizardConfig.workoutsPerCycle; i++) {
         days.push({
@@ -332,16 +366,21 @@ export function GymScreen() {
     
     // Initialize day schedule when entering step 3
     if (wizardStep === 3 && daySchedule.length === 0) {
-      const schedule = generateInitialSchedule(wizardConfig.cycleLength, wizardConfig.workoutsPerCycle)
+      const schedule = generateInitialSchedule(wizardConfig.cycleLength, wizardConfig.workoutsPerCycle, workoutDays)
       setDaySchedule(schedule)
     }
-  }, [wizardStep, wizardConfig.cycleLength, wizardConfig.workoutsPerCycle, wizardConfig.splitType, workoutDays.length, daySchedule.length])
+  }, [wizardStep, wizardConfig.cycleLength, wizardConfig.workoutsPerCycle, wizardConfig.splitType, workoutDays.length, daySchedule.length, selectedTemplate])
 
   // Generate initial schedule with even distribution
-  const generateInitialSchedule = (cycleLen: number, workoutsCount: number): DayScheduleItem[] => {
+  const generateInitialSchedule = (
+    cycleLen: number, 
+    workoutsCount: number, 
+    days?: WorkoutDayConfig[]
+  ): DayScheduleItem[] => {
     const schedule: DayScheduleItem[] = []
     const workoutPositions: number[] = []
     
+    // Calculate evenly distributed positions
     for (let i = 0; i < workoutsCount; i++) {
       workoutPositions.push(Math.floor((i * cycleLen) / workoutsCount) + 1)
     }
@@ -349,10 +388,13 @@ export function GymScreen() {
     for (let dayNum = 1; dayNum <= cycleLen; dayNum++) {
       if (workoutPositions.includes(dayNum)) {
         const workoutNum = workoutPositions.indexOf(dayNum) + 1
+        const dayConfig = days?.find(d => d.dayNum === workoutNum)
         schedule.push({
           type: 'workout',
           dayNum,
-          workoutNum
+          workoutNum,
+          name: dayConfig?.name || `Тренировка ${workoutNum}`,
+          muscleGroups: dayConfig?.muscles || []
         })
       } else {
         schedule.push({
@@ -364,7 +406,7 @@ export function GymScreen() {
     return schedule
   }
 
-  // Apply template
+  // Apply template - preserves exact order from template
   const applyTemplate = (templateId: string) => {
     const template = WORKOUT_TEMPLATES.find(t => t.id === templateId)
     if (!template) return
@@ -387,10 +429,10 @@ export function GymScreen() {
       }))
     setWorkoutDays(days)
     
-    // Set day schedule
+    // Set day schedule - preserve exact order from template
     const schedule: DayScheduleItem[] = template.daySchedule.map((item, idx) => ({
       ...item,
-      dayNum: idx + 1,
+      dayNum: idx + 1, // Position in array = dayNum
     }))
     setDaySchedule(schedule)
   }
@@ -447,6 +489,7 @@ export function GymScreen() {
       })
       
       setParsedDaySchedule(newSchedule)
+      setScheduleEdited(true)
     }
     setScheduleDraggedIdx(null)
     setScheduleDragOverIdx(null)
@@ -464,13 +507,15 @@ export function GymScreen() {
           daySchedule: parsedDaySchedule
         }),
       })
-      // Show success feedback
+      setScheduleEdited(false)
+      // Reload period to reflect changes
+      loadPeriods()
     } catch (error) {
       console.error('Failed to save schedule:', error)
     }
   }
 
-  // Skip workout - shift all future workouts by 1 day
+  // Skip workout - mark as skipped and shift
   const handleSkipWorkout = async () => {
     if (!selectedWorkout || !activePeriod) return
     
@@ -480,12 +525,12 @@ export function GymScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           workoutId: selectedWorkout.id,
-          periodId: activePeriod.id 
+          periodId: activePeriod.id,
+          shiftSchedule: true
         }),
       })
       const data = await response.json()
       if (data.success) {
-        // Refresh workouts
         setShowWorkoutDetail(false)
         // Reload workouts
         const workoutsResponse = await fetch(`/api/gym/workouts?periodId=${activePeriod.id}`)
@@ -529,21 +574,6 @@ export function GymScreen() {
     }
   }
 
-  // Initialize workout days when wizard config changes
-  useEffect(() => {
-    if (wizardStep === 2 && workoutDays.length === 0) {
-      const days: WorkoutDayConfig[] = []
-      for (let i = 1; i <= wizardConfig.workoutsPerCycle; i++) {
-        days.push({
-          dayNum: i,
-          muscles: [],
-          name: getWorkoutName(wizardConfig.splitType, i),
-        })
-      }
-      setWorkoutDays(days)
-    }
-  }, [wizardStep, wizardConfig.workoutsPerCycle, wizardConfig.splitType, workoutDays.length])
-
   // Create period
   const handleCreatePeriod = async () => {
     if (!user?.id) return
@@ -558,8 +588,8 @@ export function GymScreen() {
         return {
           ...item,
           dayNum: idx + 1,
-          name: dayConfig?.name || `Тренировка ${item.workoutNum}`,
-          muscleGroups: dayConfig?.muscles || []
+          name: dayConfig?.name || item.name || `Тренировка ${item.workoutNum}`,
+          muscleGroups: dayConfig?.muscles || item.muscleGroups || []
         }
       }
       return { ...item, dayNum: idx + 1 }
@@ -581,7 +611,7 @@ export function GymScreen() {
             name: d.name,
             muscleGroups: d.muscles,
           })),
-          daySchedule: finalSchedule, // Send the complete schedule
+          daySchedule: finalSchedule,
         }),
       })
       const data = await response.json()
@@ -633,7 +663,6 @@ export function GymScreen() {
       const response = await fetch(`/api/gym/workouts/${workout.id}`)
       const data = await response.json()
       
-      // Parse muscleGroups if it's a JSON string
       let muscleGroups: string[] = []
       if (data.workout?.muscleGroups) {
         try {
@@ -653,7 +682,6 @@ export function GymScreen() {
       setShowWorkoutDetail(true)
     } catch (error) {
       console.error('Failed to load workout details:', error)
-      // Also parse muscleGroups for the fallback
       let muscleGroups: string[] = []
       if (workout.muscleGroups) {
         try {
@@ -761,10 +789,8 @@ export function GymScreen() {
     }
     for (let d = 1; d <= lastDay.getDate(); d++) {
       const date = new Date(year, month, d)
-      // Use local date format to avoid timezone issues
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
       const workout = workouts.find(w => {
-        // Handle both ISO string and date-only string formats
         const wDate = w.date.split('T')[0]
         return wDate === dateStr
       })
@@ -784,7 +810,7 @@ export function GymScreen() {
     if (!activePeriod) return null
     const today = new Date().toISOString().split('T')[0]
     return workouts
-      .filter(w => !w.completed && w.date >= today)
+      .filter(w => !w.completed && w.date.split('T')[0] >= today)
       .sort((a, b) => a.date.localeCompare(b.date))[0] || null
   }, [activePeriod, workouts])
 
@@ -792,6 +818,65 @@ export function GymScreen() {
   const periodProgress = getPeriodProgress()
   const nextWorkout = getNextWorkout()
   const completedWorkouts = workouts.filter(w => w.completed).length
+
+  // Generate calendar preview for wizard
+  const generateCalendarPreview = useCallback(() => {
+    if (daySchedule.length === 0) return []
+    
+    const today = new Date()
+    const days: { date: Date; item: DayScheduleItem; isToday: boolean }[] = []
+    
+    // Show 2 weeks
+    for (let i = 0; i < 14; i++) {
+      const date = new Date(today)
+      date.setDate(date.getDate() + i)
+      const scheduleIdx = i % daySchedule.length
+      days.push({
+        date,
+        item: daySchedule[scheduleIdx],
+        isToday: i === 0
+      })
+    }
+    return days
+  }, [daySchedule])
+
+  const calendarPreview = generateCalendarPreview()
+
+  // Toggle day type in wizard
+  const toggleDayType = (index: number) => {
+    const newSchedule = [...daySchedule]
+    const item = newSchedule[index]
+    
+    if (item.type === 'rest') {
+      // Find next available workoutNum
+      const maxWorkoutNum = Math.max(
+        ...newSchedule.filter(d => d.type === 'workout').map(d => d.workoutNum || 0),
+        0
+      )
+      newSchedule[index] = {
+        type: 'workout',
+        dayNum: item.dayNum,
+        workoutNum: maxWorkoutNum + 1,
+        name: `Тренировка ${maxWorkoutNum + 1}`,
+        muscleGroups: []
+      }
+    } else {
+      newSchedule[index] = {
+        type: 'rest',
+        dayNum: item.dayNum
+      }
+      // Renumber workouts
+      let workoutCount = 0
+      newSchedule.forEach((d, idx) => {
+        if (d.type === 'workout') {
+          workoutCount++
+          d.workoutNum = workoutCount
+        }
+      })
+    }
+    
+    setDaySchedule(newSchedule)
+  }
 
   return (
     <div className="flex flex-col gap-4 pb-20">
@@ -988,16 +1073,17 @@ export function GymScreen() {
                   })}
                 </div>
                 
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full mt-3 text-xs"
-                  onClick={handleSaveSchedule}
-                  disabled={scheduleDraggedIdx === null && scheduleDragOverIdx === null}
-                >
-                  <Save className="w-3 h-3 mr-1" />
-                  Сохранить порядок
-                </Button>
+                {scheduleEdited && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="w-full mt-3 bg-primary"
+                    onClick={handleSaveSchedule}
+                  >
+                    <Save className="w-3 h-3 mr-1" />
+                    Сохранить изменения
+                  </Button>
+                )}
               </CardContent>
             </Card>
           )}
@@ -1022,7 +1108,6 @@ export function GymScreen() {
                           month: 'short'
                         })}
                       </p>
-                      {/* Muscle groups */}
                       {nextWorkout.muscleGroups && nextWorkout.muscleGroups.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
                           {nextWorkout.muscleGroups.map(muscle => {
@@ -1175,12 +1260,54 @@ export function GymScreen() {
         <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {wizardStep === 1 ? 'Новый период' : 'Дни и мышцы'}
+              {wizardStep === 1 ? 'Новый период' : 
+               wizardStep === 2 ? 'Настройка тренировок' : 
+               'Порядок дней'}
             </DialogTitle>
           </DialogHeader>
           
           {wizardStep === 1 ? (
             <div className="space-y-4 pt-4">
+              {/* Templates */}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground flex items-center gap-2">
+                  <Zap className="w-3 h-3" />
+                  Быстрый старт (шаблоны)
+                </Label>
+                <div className="space-y-2">
+                  {WORKOUT_TEMPLATES.map(template => (
+                    <label
+                      key={template.id}
+                      className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
+                        selectedTemplate === template.id ? 'bg-primary/20 border border-primary/30' : 'bg-muted/30'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="template"
+                        value={template.id}
+                        checked={selectedTemplate === template.id}
+                        onChange={() => applyTemplate(template.id)}
+                        className="accent-primary"
+                      />
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">{template.name}</div>
+                        <div className="text-xs text-muted-foreground">{template.description}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">или настрой вручную</span>
+                </div>
+              </div>
+
               {/* Training type */}
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">Тип периода</Label>
@@ -1189,15 +1316,18 @@ export function GymScreen() {
                     <label
                       key={type.value}
                       className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
-                        wizardConfig.type === type.value ? 'bg-primary/20 border border-primary/30' : 'bg-muted/30'
+                        wizardConfig.type === type.value && !selectedTemplate ? 'bg-primary/20 border border-primary/30' : 'bg-muted/30'
                       }`}
                     >
                       <input
                         type="radio"
                         name="periodType"
                         value={type.value}
-                        checked={wizardConfig.type === type.value}
-                        onChange={() => setWizardConfig(prev => ({ ...prev, type: type.value }))}
+                        checked={wizardConfig.type === type.value && !selectedTemplate}
+                        onChange={() => {
+                          setSelectedTemplate(null)
+                          setWizardConfig(prev => ({ ...prev, type: type.value }))
+                        }}
                         className="accent-primary"
                       />
                       <div>
@@ -1210,7 +1340,7 @@ export function GymScreen() {
               </div>
 
               {/* Custom name */}
-              {wizardConfig.type === 'custom' && (
+              {wizardConfig.type === 'custom' && !selectedTemplate && (
                 <Input
                   placeholder="Название периода"
                   value={wizardConfig.customName}
@@ -1219,29 +1349,32 @@ export function GymScreen() {
               )}
 
               {/* Cycle length */}
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Длина цикла (дней)</Label>
-                <Input
-                  type="number"
-                  min={3}
-                  max={14}
-                  value={wizardConfig.cycleLength}
-                  onChange={e => setWizardConfig(prev => ({ ...prev, cycleLength: parseInt(e.target.value) || 7 }))}
-                />
-                <p className="text-xs text-muted-foreground">По умолчанию 7 дней, можно изменить под свой график</p>
-              </div>
+              {!selectedTemplate && (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Длина цикла (дней)</Label>
+                  <Input
+                    type="number"
+                    min={3}
+                    max={14}
+                    value={wizardConfig.cycleLength}
+                    onChange={e => setWizardConfig(prev => ({ ...prev, cycleLength: parseInt(e.target.value) || 7 }))}
+                  />
+                </div>
+              )}
 
               {/* Workouts per cycle */}
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Тренировок в цикле</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={7}
-                  value={wizardConfig.workoutsPerCycle}
-                  onChange={e => setWizardConfig(prev => ({ ...prev, workoutsPerCycle: parseInt(e.target.value) || 3 }))}
-                />
-              </div>
+              {!selectedTemplate && (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Тренировок в цикле</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={7}
+                    value={wizardConfig.workoutsPerCycle}
+                    onChange={e => setWizardConfig(prev => ({ ...prev, workoutsPerCycle: parseInt(e.target.value) || 3 }))}
+                  />
+                </div>
+              )}
 
               {/* Total cycles */}
               <div className="space-y-2">
@@ -1256,32 +1389,26 @@ export function GymScreen() {
               </div>
 
               {/* Split type */}
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Формат тренировок</Label>
+              {!selectedTemplate && (
                 <div className="space-y-2">
-                  {SPLIT_TYPES.map(split => (
-                    <label
-                      key={split.value}
-                      className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
-                        wizardConfig.splitType === split.value ? 'bg-primary/20 border border-primary/30' : 'bg-muted/30'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="splitType"
-                        value={split.value}
-                        checked={wizardConfig.splitType === split.value}
-                        onChange={() => setWizardConfig(prev => ({ ...prev, splitType: split.value }))}
-                        className="accent-primary"
-                      />
-                      <div>
-                        <div className="font-medium text-sm">{split.label}</div>
-                        <div className="text-xs text-muted-foreground">{split.desc}</div>
-                      </div>
-                    </label>
-                  ))}
+                  <Label className="text-xs text-muted-foreground">Формат тренировок</Label>
+                  <Select
+                    value={wizardConfig.splitType}
+                    onValueChange={(value) => setWizardConfig(prev => ({ ...prev, splitType: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SPLIT_TYPES.map(split => (
+                        <SelectItem key={split.value} value={split.value}>
+                          {split.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
+              )}
 
               <div className="flex gap-2 pt-2">
                 <Button variant="outline" className="flex-1" onClick={() => setShowWizard(false)}>
@@ -1297,17 +1424,17 @@ export function GymScreen() {
                 </Button>
               </div>
             </div>
-          ) : (
+          ) : wizardStep === 2 ? (
             <div className="space-y-4 pt-4">
               <p className="text-sm text-muted-foreground">
-                Для первого цикла выбери, какие группы мышц тренировать в каждый тренировочный день.
+                Настрой названия и группы мышц для каждой тренировки.
               </p>
 
               <div className="space-y-3">
                 {workoutDays.map((day, idx) => (
                   <div key={idx} className="p-3 rounded-xl bg-muted/30 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="font-medium text-sm">День {day.dayNum}</span>
+                      <span className="font-medium text-sm">Тренировка {day.dayNum}</span>
                       <Input
                         className="w-40 h-8 text-sm"
                         placeholder="Название"
@@ -1353,6 +1480,124 @@ export function GymScreen() {
                 </Button>
                 <Button
                   className="flex-1 bg-primary"
+                  onClick={() => setWizardStep(3)}
+                >
+                  Далее
+                  <ArrowRight className="w-4 h-4 ml-1" />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 pt-4">
+              <p className="text-sm text-muted-foreground">
+                Перетащи дни, чтобы изменить порядок. Нажми на день, чтобы сменить тип (тренировка/отдых).
+              </p>
+
+              {/* Day schedule editor */}
+              <div className="space-y-1.5">
+                {daySchedule.map((item, idx) => {
+                  const isWorkout = item.type === 'workout'
+                  const dayConfig = isWorkout ? workoutDays.find(d => d.dayNum === item.workoutNum) : null
+                  
+                  return (
+                    <div
+                      key={idx}
+                      draggable
+                      onDragStart={() => handleDragStart(idx)}
+                      onDragOver={(e) => handleDragOver(e, idx)}
+                      onDragEnd={handleDragEnd}
+                      onClick={() => toggleDayType(idx)}
+                      className={`flex items-center gap-3 p-3 rounded-xl transition-all cursor-grab active:cursor-grabbing ${
+                        isWorkout 
+                          ? 'bg-primary/10 hover:bg-primary/20' 
+                          : 'bg-muted/20 hover:bg-muted/30'
+                      } ${
+                        dragOverIndex === idx && draggedIndex !== idx 
+                          ? 'ring-2 ring-primary/50' 
+                          : ''
+                      }`}
+                    >
+                      <GripVertical className="w-4 h-4 text-muted-foreground/50" />
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-medium ${
+                        isWorkout 
+                          ? 'bg-primary/20 text-primary' 
+                          : 'bg-muted text-muted-foreground'
+                      }`}>
+                        {idx + 1}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          {isWorkout ? (
+                            <>
+                              <Dumbbell className="w-4 h-4 text-primary" />
+                              <span className="font-medium">
+                                {dayConfig?.name || item.name || `Тренировка ${item.workoutNum}`}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <Coffee className="w-4 h-4 text-muted-foreground" />
+                              <span className="text-muted-foreground">Отдых</span>
+                            </>
+                          )}
+                        </div>
+                        {isWorkout && (dayConfig?.muscles || item.muscleGroups)?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {(dayConfig?.muscles || item.muscleGroups || []).map(muscle => {
+                              const group = MUSCLE_GROUPS.find(g => g.value === muscle)
+                              return (
+                                <Badge 
+                                  key={muscle} 
+                                  className={`text-[10px] px-1.5 py-0 ${group?.color || 'bg-muted'}`}
+                                >
+                                  {group?.label || muscle}
+                                </Badge>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Calendar preview */}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground flex items-center gap-2">
+                  <Calendar className="w-3 h-3" />
+                  Превью календаря (2 недели)
+                </Label>
+                <div className="grid grid-cols-7 gap-1">
+                  {WEEKDAYS.map(day => (
+                    <div key={day} className="text-center text-[10px] font-medium text-muted-foreground py-1">
+                      {day}
+                    </div>
+                  ))}
+                  {calendarPreview.map((day, i) => (
+                    <div
+                      key={i}
+                      className={`aspect-square flex items-center justify-center rounded text-xs ${
+                        day.isToday ? 'ring-1 ring-primary' : ''
+                      } ${
+                        day.item.type === 'workout' 
+                          ? 'bg-primary/20 text-primary' 
+                          : 'bg-muted/20 text-muted-foreground'
+                      }`}
+                    >
+                      {day.date.getDate()}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button variant="outline" className="flex-1" onClick={() => setWizardStep(2)}>
+                  <ChevronLeft className="w-4 h-4 mr-1" />
+                  Назад
+                </Button>
+                <Button
+                  className="flex-1 bg-primary"
                   onClick={handleCreatePeriod}
                 >
                   Создать период
@@ -1364,7 +1609,13 @@ export function GymScreen() {
       </Dialog>
 
       {/* Workout Detail Dialog */}
-      <Dialog open={showWorkoutDetail} onOpenChange={setShowWorkoutDetail}>
+      <Dialog open={showWorkoutDetail} onOpenChange={(open) => {
+        setShowWorkoutDetail(open)
+        if (!open) {
+          setShowReschedule(false)
+          setRescheduleDate('')
+        }
+      }}>
         <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
@@ -1402,6 +1653,63 @@ export function GymScreen() {
                   )
                 })}
               </div>
+            )}
+
+            {/* Reschedule section */}
+            {showReschedule ? (
+              <div className="p-3 rounded-xl bg-muted/30 space-y-3">
+                <Label className="text-sm">Выберите новую дату</Label>
+                <Input
+                  type="date"
+                  value={rescheduleDate}
+                  onChange={e => setRescheduleDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                />
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => {
+                      setShowReschedule(false)
+                      setRescheduleDate('')
+                    }}
+                  >
+                    Отмена
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    className="flex-1 bg-primary"
+                    onClick={handleRescheduleWorkout}
+                    disabled={!rescheduleDate}
+                  >
+                    Перенести
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              !selectedWorkout?.completed && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => setShowReschedule(true)}
+                  >
+                    <CalendarClock className="w-4 h-4 mr-1" />
+                    Перенести
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 text-orange-400 hover:text-orange-300"
+                    onClick={handleSkipWorkout}
+                  >
+                    <SkipForward className="w-4 h-4 mr-1" />
+                    Пропустить
+                  </Button>
+                </div>
+              )
             )}
 
             {/* Exercises */}
