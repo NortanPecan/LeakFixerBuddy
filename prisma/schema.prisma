@@ -695,8 +695,10 @@ model Challenge {
   id          String   @id @default(cuid())
   userId      String
   name        String
+  title       String?  // Short display name (optional, uses name if not set)
   description String?  // Context: why I'm doing this
   type        String   // "ritual", "chain", "custom"
+  category    String   @default("general") // health, money, projects, relationships, learning, lifestyle, career, general
   zone        String   @default("general")
   directionId String?  // Link to Direction (vision)
   chainId     String?  // For chain challenges
@@ -705,7 +707,7 @@ model Challenge {
   progress    Int      @default(0) // Progress percentage
   startDate   DateTime @default(now())
   endDate     DateTime?
-  status      String   @default("active") // "active", "planned", "completed", "failed"
+  status      String   @default("active") // "planned", "active", "completed", "failed"
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -810,7 +812,8 @@ model Direction {
   id          String   @id @default(cuid())
   userId      String
   title       String
-  description String?
+  description String?  // Vision: where I want to be, why it's important
+  horizon     String   @default("year") // year, season, quarter, month
   color       String   @default("#10b981")
   icon        String?
   status      String   @default("active") // active, paused, completed

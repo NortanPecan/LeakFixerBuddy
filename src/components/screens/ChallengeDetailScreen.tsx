@@ -7,6 +7,9 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from '@/components/ui/select'
+import {
   ArrowLeft,
   Trophy,
   Flame,
@@ -21,20 +24,22 @@ import {
   Compass,
   RefreshCw,
   Heart,
-  TrendingUp
+  TrendingUp,
+  Play
 } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
 
-// Zone config
-const ZONE_CONFIG: Record<string, { label: string; emoji: string }> = {
-  health: { label: 'Здоровье', emoji: '💪' },
-  money: { label: 'Деньги', emoji: '💰' },
-  learning: { label: 'Обучение', emoji: '📚' },
-  relationships: { label: 'Отношения', emoji: '👥' },
-  mind: { label: 'Мышление', emoji: '🧠' },
-  productivity: { label: 'Продуктивность', emoji: '⚡' },
-  general: { label: 'Общее', emoji: '📦' },
-}
+// 8 categories with emojis
+const CATEGORY_OPTIONS = [
+  { value: 'health', label: 'Здоровье', emoji: '💪' },
+  { value: 'money', label: 'Деньги', emoji: '💰' },
+  { value: 'projects', label: 'Проекты', emoji: '🚀' },
+  { value: 'relationships', label: 'Отношения', emoji: '❤️' },
+  { value: 'learning', label: 'Обучение', emoji: '📚' },
+  { value: 'lifestyle', label: 'Образ жизни', emoji: '🏠' },
+  { value: 'career', label: 'Карьера', emoji: '👔' },
+  { value: 'general', label: 'Общее', emoji: '📦' },
+]
 
 // Challenge type config
 const TYPE_CONFIG: Record<string, { label: string; icon: typeof Trophy; description: string }> = {
@@ -55,11 +60,20 @@ const TYPE_CONFIG: Record<string, { label: string; icon: typeof Trophy; descript
   },
 }
 
+const STATUS_OPTIONS = [
+  { value: 'planned', label: 'Запланирован', icon: Calendar, color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+  { value: 'active', label: 'Активен', icon: Timer, color: 'bg-primary/20 text-primary border-primary/30' },
+  { value: 'completed', label: 'Выполнен', icon: CheckCircle, color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
+  { value: 'failed', label: 'Провален', icon: XCircle, color: 'bg-red-500/20 text-red-400 border-red-500/30' },
+]
+
 interface Challenge {
   id: string
   name: string
+  title?: string
   description?: string
   type: string
+  category: string
   zone: string
   directionId?: string
   config: string
@@ -82,6 +96,7 @@ export function ChallengeDetailScreen() {
   const [challenge, setChallenge] = useState<Challenge | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isUpdating, setIsUpdating] = useState(false)
 
   const loadChallenge = async () => {
     if (!selectedContentId) return
@@ -120,6 +135,38 @@ export function ChallengeDetailScreen() {
     }
   }
 
+  const handleStatusChange = async (newStatus: string) => {
+    if (!challenge || isUpdating) return
+    setIsUpdating(true)
+    
+    try {
+      const updateData: Record<string, unknown> = { id: challenge.id, status: newStatus }
+      
+      // If starting a planned challenge, reset start date
+      if (challenge.status === 'planned' && newStatus === 'active') {
+        updateData.startDate = new Date().toISOString()
+      }
+      
+      const res = await fetch('/api/challenges', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData)
+      })
+      const data = await res.json()
+      if (data.challenge) {
+        setChallenge(data.challenge)
+      }
+    } catch (err) {
+      console.error('Failed to update status:', err)
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const handleStartChallenge = async () => {
+    await handleStatusChange('active')
+  }
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
     return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
@@ -134,6 +181,9 @@ export function ChallengeDetailScreen() {
     const remaining = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
     return Math.max(0, remaining)
   }
+
+  const getCategoryInfo = (category: string) => 
+    CATEGORY_OPTIONS.find(c => c.value === category) || CATEGORY_OPTIONS[7]
 
   // Loading skeleton
   if (loading) {
@@ -187,9 +237,10 @@ export function ChallengeDetailScreen() {
   }
 
   const typeConfig = TYPE_CONFIG[challenge.type] || TYPE_CONFIG.custom
-  const zoneConfig = ZONE_CONFIG[challenge.zone] || ZONE_CONFIG.general
+  const catInfo = getCategoryInfo(challenge.category)
   const TypeIcon = typeConfig.icon
   const daysRemaining = getDaysRemaining()
+  const statusOption = STATUS_OPTIONS.find(s => s.value === challenge.status) || STATUS_OPTIONS[1]
 
   return (
     <div className="flex flex-col gap-4 pb-20">
@@ -221,6 +272,23 @@ export function ChallengeDetailScreen() {
         </Card>
       )}
 
+      {/* Start Challenge Button for Planned */}
+      {challenge.status === 'planned' && (
+        <Card className="bg-blue-500/10 border-blue-500/30">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-medium">Готов начать?</div>
+                <div className="text-sm text-muted-foreground">Челендж стартует с сегодняшнего дня</div>
+              </div>
+              <Button onClick={handleStartChallenge} disabled={isUpdating}>
+                <Play className="w-4 h-4 mr-1" /> Начать
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Status card */}
       <Card className="bg-card/50 backdrop-blur">
         <CardContent className="pt-6">
@@ -242,23 +310,30 @@ export function ChallengeDetailScreen() {
               <div>
                 <div className="font-medium">{typeConfig.label}</div>
                 <div className="text-sm text-muted-foreground">
-                  {zoneConfig.emoji} {zoneConfig.label}
+                  {catInfo.emoji} {catInfo.label}
                 </div>
               </div>
             </div>
-            {challenge.status === 'completed' ? (
-              <Badge className="bg-emerald-500/20 text-emerald-400">
-                <CheckCircle className="w-3 h-3 mr-1" /> Выполнен
-              </Badge>
-            ) : challenge.status === 'failed' ? (
-              <Badge className="bg-red-500/20 text-red-400">
-                <XCircle className="w-3 h-3 mr-1" /> Провален
-              </Badge>
-            ) : (
-              <Badge className="bg-primary/20 text-primary">
-                <Timer className="w-3 h-3 mr-1" /> Активен
-              </Badge>
-            )}
+            
+            {/* Status Selector */}
+            <Select value={challenge.status} onValueChange={handleStatusChange} disabled={isUpdating}>
+              <SelectTrigger className="w-36 h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map(s => {
+                  const Icon = s.icon
+                  return (
+                    <SelectItem key={s.value} value={s.value}>
+                      <div className="flex items-center gap-2">
+                        <Icon className="w-3 h-3" />
+                        {s.label}
+                      </div>
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Progress */}
@@ -413,7 +488,7 @@ export function ChallengeDetailScreen() {
           )}
           {challenge.type === 'custom' && (
             <p className="text-sm text-muted-foreground">
-              Выполняй действия в зоне «{zoneConfig.label}». Прогресс считается на основе созданных и выполненных задач 
+              Выполняй действия в зоне «{catInfo.label}». Прогресс считается на основе созданных и выполненных задач 
               в этой зоне. Установи свою цель и достигай её!
             </p>
           )}

@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Plus, Target, ChevronRight, Sparkles, Trash2, Edit2, Check,
-  Compass, Trophy, Flame, Calendar, Clock, RefreshCw, ArrowRight
+  Compass, Trophy, Flame, Calendar, Clock, RefreshCw, ArrowRight, Play
 } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
@@ -26,6 +26,7 @@ interface Direction {
   id: string
   title: string
   description?: string
+  horizon: string
   color: string
   icon?: string
   status: string
@@ -35,8 +36,10 @@ interface Direction {
 interface Challenge {
   id: string
   name: string
+  title?: string
   description?: string
   type: string
+  category: string
   zone: string
   status: string
   progress: number
@@ -50,20 +53,45 @@ interface Challenge {
   direction?: { id: string; title: string; color: string }
 }
 
-// Config
+interface LinkedEntity {
+  id: string
+  title?: string
+  name?: string
+  category?: string
+  level?: number
+  score?: number
+}
+
+// Config - 8 categories with emojis
 const CATEGORY_OPTIONS = [
   { value: 'health', label: 'Здоровье', emoji: '💪' },
   { value: 'money', label: 'Деньги', emoji: '💰' },
+  { value: 'projects', label: 'Проекты', emoji: '🚀' },
+  { value: 'relationships', label: 'Отношения', emoji: '❤️' },
   { value: 'learning', label: 'Обучение', emoji: '📚' },
-  { value: 'relationships', label: 'Отношения', emoji: '👥' },
-  { value: 'mind', label: 'Мышление', emoji: '🧠' },
-  { value: 'productivity', label: 'Продуктивность', emoji: '⚡' },
+  { value: 'lifestyle', label: 'Образ жизни', emoji: '🏠' },
+  { value: 'career', label: 'Карьера', emoji: '👔' },
+  { value: 'general', label: 'Общее', emoji: '📦' },
+]
+
+const HORIZON_OPTIONS = [
+  { value: 'year', label: 'Год' },
+  { value: 'season', label: 'Сезон' },
+  { value: 'quarter', label: 'Квартал' },
+  { value: 'month', label: 'Месяц' },
 ]
 
 const CHALLENGE_TYPES = [
   { value: 'custom', label: 'Свободный', icon: Sparkles },
   { value: 'ritual', label: 'На ритуалы', icon: Flame },
   { value: 'chain', label: 'На цепочку', icon: Target },
+]
+
+const STATUS_OPTIONS = [
+  { value: 'planned', label: 'Запланирован', color: 'bg-blue-500/20 text-blue-400' },
+  { value: 'active', label: 'Активен', color: 'bg-primary/20 text-primary' },
+  { value: 'completed', label: 'Выполнен', color: 'bg-emerald-500/20 text-emerald-400' },
+  { value: 'failed', label: 'Провален', color: 'bg-red-500/20 text-red-400' },
 ]
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
@@ -75,6 +103,11 @@ export function GoalsScreen() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
+  // Linked entities for challenge dialog
+  const [availableRituals, setAvailableRituals] = useState<LinkedEntity[]>([])
+  const [availableSkills, setAvailableSkills] = useState<LinkedEntity[]>([])
+  const [availableTraits, setAvailableTraits] = useState<LinkedEntity[]>([])
+  
   // Dialogs
   const [showDirectionDialog, setShowDirectionDialog] = useState(false)
   const [showChallengeDialog, setShowChallengeDialog] = useState(false)
@@ -83,16 +116,20 @@ export function GoalsScreen() {
   
   // Forms
   const [directionForm, setDirectionForm] = useState({
-    title: '', description: '', color: '#10b981'
+    title: '', description: '', horizon: 'year', color: '#10b981'
   })
   const [challengeForm, setChallengeForm] = useState({
     name: '', 
     description: '',
     type: 'custom', 
+    category: 'general',
     directionId: '', 
     duration: 30,
     zone: 'general',
-    status: 'active'
+    status: 'active',
+    linkedRitualIds: [] as string[],
+    linkedSkillIds: [] as string[],
+    linkedTraitIds: [] as string[]
   })
 
   // Load data
@@ -126,6 +163,32 @@ export function GoalsScreen() {
   useEffect(() => {
     loadData()
   }, [user?.id])
+
+  // Load linked entities when challenge dialog opens
+  useEffect(() => {
+    if (showChallengeDialog && user?.id) {
+      const loadLinkedEntities = async () => {
+        try {
+          const [ritualsRes, skillsRes, traitsRes] = await Promise.all([
+            fetch(`/api/rituals?userId=${user.id}`),
+            fetch(`/api/skills?userId=${user.id}`),
+            fetch(`/api/traits?userId=${user.id}`)
+          ])
+          
+          const ritualsData = await ritualsRes.json()
+          const skillsData = await skillsRes.json()
+          const traitsData = await traitsRes.json()
+          
+          setAvailableRituals(ritualsData.rituals || [])
+          setAvailableSkills(skillsData.skills || [])
+          setAvailableTraits(traitsData.traits || [])
+        } catch (err) {
+          console.error('Failed to load linked entities:', err)
+        }
+      }
+      loadLinkedEntities()
+    }
+  }, [showChallengeDialog, user?.id])
 
   // Direction CRUD
   const handleCreateDirection = async () => {
@@ -188,6 +251,7 @@ export function GoalsScreen() {
     setDirectionForm({
       title: dir.title,
       description: dir.description || '',
+      horizon: dir.horizon || 'year',
       color: dir.color
     })
     setShowDirectionDialog(true)
@@ -196,7 +260,7 @@ export function GoalsScreen() {
   const closeDirectionDialog = () => {
     setShowDirectionDialog(false)
     setEditingDirection(null)
-    setDirectionForm({ title: '', description: '', color: '#10b981' })
+    setDirectionForm({ title: '', description: '', horizon: 'year', color: '#10b981' })
   }
 
   // Challenge CRUD
@@ -205,6 +269,13 @@ export function GoalsScreen() {
     setIsSaving(true)
     
     try {
+      // Build config with linked entities
+      const config = {
+        linkedRitualIds: challengeForm.linkedRitualIds,
+        linkedSkillIds: challengeForm.linkedSkillIds,
+        linkedTraitIds: challengeForm.linkedTraitIds
+      }
+      
       const res = await fetch('/api/challenges', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -213,10 +284,12 @@ export function GoalsScreen() {
           name: challengeForm.name,
           description: challengeForm.description,
           type: challengeForm.type,
+          category: challengeForm.category,
           zone: challengeForm.zone,
           duration: challengeForm.duration,
           status: challengeForm.status,
-          directionId: challengeForm.directionId || null
+          directionId: challengeForm.directionId || null,
+          config
         })
       })
       const data = await res.json()
@@ -245,8 +318,26 @@ export function GoalsScreen() {
   const closeChallengeDialog = () => {
     setShowChallengeDialog(false)
     setChallengeForm({
-      name: '', description: '', type: 'custom', directionId: '', duration: 30, zone: 'general', status: 'active'
+      name: '', description: '', type: 'custom', category: 'general', directionId: '', duration: 30, zone: 'general', status: 'active',
+      linkedRitualIds: [], linkedSkillIds: [], linkedTraitIds: []
     })
+  }
+
+  // Start planned challenge
+  const handleStartChallenge = async (id: string) => {
+    try {
+      const res = await fetch('/api/challenges', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status: 'active', startDate: new Date().toISOString() })
+      })
+      const data = await res.json()
+      if (data.challenge) {
+        setChallenges(prev => prev.map(c => c.id === id ? data.challenge : c))
+      }
+    } catch (err) {
+      console.error('Start challenge error:', err)
+    }
   }
 
   // Group challenges by status
@@ -257,6 +348,10 @@ export function GoalsScreen() {
   // Get challenges for direction
   const getChallengesForDirection = (dirId: string) => 
     challenges.filter(c => c.directionId === dirId && c.status === 'active')
+
+  // Get category info
+  const getCategoryInfo = (category: string) => 
+    CATEGORY_OPTIONS.find(c => c.value === category) || CATEGORY_OPTIONS[7]
 
   // Skeleton components
   const DirectionSkeleton = () => (
@@ -351,6 +446,7 @@ export function GoalsScreen() {
           <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
             {directions.map(dir => {
               const dirChallenges = getChallengesForDirection(dir.id)
+              const horizonLabel = HORIZON_OPTIONS.find(h => h.value === dir.horizon)?.label || 'Год'
               return (
                 <Card 
                   key={dir.id}
@@ -362,6 +458,9 @@ export function GoalsScreen() {
                     <div className="font-medium text-sm truncate mb-1">{dir.title}</div>
                     <div className="text-xs text-muted-foreground">
                       {dirChallenges.length} активных челенджей
+                    </div>
+                    <div className="text-xs text-muted-foreground/70 mt-1">
+                      🎯 {horizonLabel}
                     </div>
                     {dir.description && (
                       <div className="text-xs text-muted-foreground/70 truncate mt-1">
@@ -413,71 +512,77 @@ export function GoalsScreen() {
               </Button>
             </div>
           ) : (
-            activeChallenges.map(ch => (
-              <div 
-                key={ch.id} 
-                className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
-                onClick={() => {
-                  setSelectedContentId(ch.id)
-                  setScreen('challenge-detail')
-                }}
-              >
+            activeChallenges.map(ch => {
+              const catInfo = getCategoryInfo(ch.category)
+              return (
                 <div 
-                  className="w-10 h-10 rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: ch.direction?.color ? `${ch.direction.color}20` : '#10b98120' }}
+                  key={ch.id} 
+                  className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => {
+                    setSelectedContentId(ch.id)
+                    setScreen('challenge-detail')
+                  }}
                 >
-                  {ch.type === 'ritual' ? (
-                    <Flame className="w-5 h-5" style={{ color: ch.direction?.color || '#10b981' }} />
-                  ) : ch.type === 'chain' ? (
-                    <Target className="w-5 h-5" style={{ color: ch.direction?.color || '#10b981' }} />
-                  ) : (
-                    <Sparkles className="w-5 h-5" style={{ color: ch.direction?.color || '#10b981' }} />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium truncate">{ch.name}</span>
+                  <div 
+                    className="w-10 h-10 rounded-full flex items-center justify-center"
+                    style={{ backgroundColor: ch.direction?.color ? `${ch.direction.color}20` : '#10b98120' }}
+                  >
+                    {ch.type === 'ritual' ? (
+                      <Flame className="w-5 h-5" style={{ color: ch.direction?.color || '#10b981' }} />
+                    ) : ch.type === 'chain' ? (
+                      <Target className="w-5 h-5" style={{ color: ch.direction?.color || '#10b981' }} />
+                    ) : (
+                      <Sparkles className="w-5 h-5" style={{ color: ch.direction?.color || '#10b981' }} />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium truncate">{ch.name}</span>
+                      <Badge variant="outline" className="text-[10px] px-1.5">
+                        {catInfo.emoji} {catInfo.label}
+                      </Badge>
+                    </div>
                     {ch.direction && (
                       <Badge 
                         variant="outline" 
-                        className="text-[10px] px-1.5"
+                        className="text-[10px] px-1.5 mt-1"
                         style={{ borderColor: ch.direction.color, color: ch.direction.color }}
                       >
                         {ch.direction.title}
                       </Badge>
                     )}
+                    <div className="flex items-center gap-3 mt-1">
+                      <Progress value={ch.progressPercentage} className="h-1.5 flex-1" />
+                      <span className="text-xs text-muted-foreground w-10 text-right">
+                        {ch.progressPercentage}%
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                      <Clock className="w-3 h-3" />
+                      <span>{ch.daysCompleted}/{ch.duration} дней</span>
+                      {ch.currentStreak > 0 && (
+                        <>
+                          <span>•</span>
+                          <Flame className="w-3 h-3 text-orange-400" />
+                          <span className="text-orange-400">{ch.currentStreak} серия</span>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3 mt-1">
-                    <Progress value={ch.progressPercentage} className="h-1.5 flex-1" />
-                    <span className="text-xs text-muted-foreground w-10 text-right">
-                      {ch.progressPercentage}%
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                    <Clock className="w-3 h-3" />
-                    <span>{ch.daysCompleted}/{ch.duration} дней</span>
-                    {ch.currentStreak > 0 && (
-                      <>
-                        <span>•</span>
-                        <Flame className="w-3 h-3 text-orange-400" />
-                        <span className="text-orange-400">{ch.currentStreak} серия</span>
-                      </>
-                    )}
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={(e) => { e.stopPropagation(); handleDeleteChallenge(ch.id) }}
+                    >
+                      <Trash2 className="w-4 h-4 text-muted-foreground" />
+                    </Button>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={(e) => { e.stopPropagation(); handleDeleteChallenge(ch.id) }}
-                  >
-                    <Trash2 className="w-4 h-4 text-muted-foreground" />
-                  </Button>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                </div>
-              </div>
-            ))
+              )
+            })
           )}
         </CardContent>
       </Card>
@@ -492,24 +597,39 @@ export function GoalsScreen() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {plannedChallenges.map(ch => (
-              <div 
-                key={ch.id} 
-                className="flex items-center gap-3 p-3 rounded-lg bg-muted/20 cursor-pointer hover:bg-muted/30"
-                onClick={() => {
-                  setSelectedContentId(ch.id)
-                  setScreen('challenge-detail')
-                }}
-              >
-                <div className="flex-1">
-                  <div className="font-medium">{ch.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    Старт: {new Date(ch.startDate).toLocaleDateString('ru-RU')}
+            {plannedChallenges.map(ch => {
+              const catInfo = getCategoryInfo(ch.category)
+              return (
+                <div 
+                  key={ch.id} 
+                  className="flex items-center gap-3 p-3 rounded-lg bg-muted/20"
+                >
+                  <div className="flex-1 cursor-pointer hover:bg-muted/30 rounded-lg"
+                    onClick={() => {
+                      setSelectedContentId(ch.id)
+                      setScreen('challenge-detail')
+                    }}
+                  >
+                    <div className="font-medium">{ch.name}</div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant="outline" className="text-[10px] px-1.5">
+                        {catInfo.emoji} {catInfo.label}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {ch.duration} дней
+                      </span>
+                    </div>
                   </div>
+                  <Button 
+                    size="sm" 
+                    onClick={() => handleStartChallenge(ch.id)}
+                    className="shrink-0"
+                  >
+                    <Play className="w-4 h-4 mr-1" /> Начать
+                  </Button>
                 </div>
-                <Badge variant="outline" className="text-muted-foreground">План</Badge>
-              </div>
-            ))}
+              )
+            })}
           </CardContent>
         </Card>
       )}
@@ -567,6 +687,22 @@ export function GoalsScreen() {
                 placeholder="Куда я хочу прийти..."
                 rows={3}
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Горизонт планирования</Label>
+              <Select 
+                value={directionForm.horizon}
+                onValueChange={v => setDirectionForm(prev => ({ ...prev, horizon: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {HORIZON_OPTIONS.map(h => (
+                    <SelectItem key={h.value} value={h.value}>{h.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label>Цвет</Label>
@@ -647,8 +783,8 @@ export function GoalsScreen() {
               <div className="space-y-2">
                 <Label>Категория</Label>
                 <Select 
-                  value={challengeForm.zone}
-                  onValueChange={v => setChallengeForm(prev => ({ ...prev, zone: v }))}
+                  value={challengeForm.category}
+                  onValueChange={v => setChallengeForm(prev => ({ ...prev, category: v }))}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -709,6 +845,90 @@ export function GoalsScreen() {
                 </SelectContent>
               </Select>
             </div>
+            
+            {/* Linked Entities */}
+            <div className="space-y-3">
+              <Label className="text-muted-foreground">Связанные сущности (опционально)</Label>
+              
+              {/* Rituals */}
+              {availableRituals.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Flame className="w-3 h-3" /> Ритуалы
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {availableRituals.slice(0, 6).map(r => (
+                      <Badge 
+                        key={r.id}
+                        variant={challengeForm.linkedRitualIds.includes(r.id) ? 'default' : 'outline'}
+                        className="cursor-pointer text-xs"
+                        onClick={() => setChallengeForm(prev => ({
+                          ...prev,
+                          linkedRitualIds: prev.linkedRitualIds.includes(r.id)
+                            ? prev.linkedRitualIds.filter(id => id !== r.id)
+                            : [...prev.linkedRitualIds, r.id]
+                        }))}
+                      >
+                        {r.title || r.name}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Skills */}
+              {availableSkills.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" /> Навыки
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {availableSkills.slice(0, 6).map(s => (
+                      <Badge 
+                        key={s.id}
+                        variant={challengeForm.linkedSkillIds.includes(s.id) ? 'default' : 'outline'}
+                        className="cursor-pointer text-xs"
+                        onClick={() => setChallengeForm(prev => ({
+                          ...prev,
+                          linkedSkillIds: prev.linkedSkillIds.includes(s.id)
+                            ? prev.linkedSkillIds.filter(id => id !== s.id)
+                            : [...prev.linkedSkillIds, s.id]
+                        }))}
+                      >
+                        {s.name} (Lvl {s.level || 1})
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Traits */}
+              {availableTraits.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Target className="w-3 h-3" /> Качества
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {availableTraits.slice(0, 6).map(t => (
+                      <Badge 
+                        key={t.id}
+                        variant={challengeForm.linkedTraitIds.includes(t.id) ? 'default' : 'outline'}
+                        className="cursor-pointer text-xs"
+                        onClick={() => setChallengeForm(prev => ({
+                          ...prev,
+                          linkedTraitIds: prev.linkedTraitIds.includes(t.id)
+                            ? prev.linkedTraitIds.filter(id => id !== t.id)
+                            : [...prev.linkedTraitIds, t.id]
+                        }))}
+                      >
+                        {t.name} ({t.score || 5}/10)
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1" onClick={closeChallengeDialog}>
                 Отмена

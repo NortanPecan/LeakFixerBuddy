@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, title, description, color, icon } = body
+    const { userId, title, description, horizon, color, icon } = body
 
     if (!userId || !title) {
       return NextResponse.json({ error: 'userId and title required' }, { status: 400 })
@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
         userId,
         title,
         description,
+        horizon: horizon || 'year',
         color: color || '#10b981',
         icon,
         sortOrder: (maxOrder._max.sortOrder || 0) + 1
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, title, description, color, icon, status } = body
+    const { id, title, description, horizon, color, icon, status } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -74,6 +75,7 @@ export async function PATCH(request: NextRequest) {
       data: {
         title,
         description,
+        horizon,
         color,
         icon,
         status

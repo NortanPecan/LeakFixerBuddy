@@ -280,7 +280,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { 
-      userId, name, description, type, zone, directionId, chainId, 
+      userId, name, title, description, type, category, zone, directionId, chainId, 
       config, startDate, duration, endDate, status 
     } = body
 
@@ -301,8 +301,10 @@ export async function POST(request: NextRequest) {
       data: {
         userId,
         name,
+        title,
         description,
         type: type || 'custom',
+        category: category || 'general',
         zone: zone || 'general',
         directionId: directionId || null,
         chainId: chainId || null,
@@ -328,7 +330,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, name, description, directionId, config, status, progress, endDate } = body
+    const { id, name, title, description, category, directionId, config, status, progress, endDate } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
@@ -336,7 +338,9 @@ export async function PATCH(request: NextRequest) {
 
     const updateData: Record<string, unknown> = {}
     if (name !== undefined) updateData.name = name
+    if (title !== undefined) updateData.title = title
     if (description !== undefined) updateData.description = description
+    if (category !== undefined) updateData.category = category
     if (directionId !== undefined) updateData.directionId = directionId || null
     if (config !== undefined) updateData.config = typeof config === 'object' ? JSON.stringify(config) : config
     if (status !== undefined) updateData.status = status
