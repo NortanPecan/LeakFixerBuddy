@@ -621,3 +621,65 @@ Recommendations and improvements:
      - Solution: Run migration to normalize all dates to start of day
    - **Concurrent edits:** Multiple tabs/devices editing same day
      - Solution: Optimistic locking with updatedAt timestamp
+
+---
+Task ID: 15
+Agent: Main Agent
+Task: Fix all blocks to usable state + Add demo data seed
+
+Work Log:
+- Created scripts/seed-demo.ts for demo data generation:
+  - Demo user: Demo User (@demo_user)
+  - 5 days of history (today + 4 previous)
+  - 8 rituals with realistic completions
+  - 3 supplements with intake tracking
+  - Food entries: 2-4 meals/day with calories and quality
+  - Water: 1500-3000ml/day
+  - Mood/energy: 5-8 points
+  - 1 challenge: "30 дней без сахара"
+  - 1 task chain: "Настроить окружение"
+- Added npm script: `bun run seed:demo`
+- Updated README.md with seed instructions
+- Verified demo auth works with seeded user
+- Checked Health block APIs:
+  - /api/supplements - working, returns filtered by day of week
+  - /api/food - working, grouped by meal type
+  - /api/water - working, creates FitnessDaily on demand
+- Verified Daily Summary API:
+  - Aggregates all daily data correctly
+  - Returns LeakFix flags
+- Tested with demo data:
+  - Today: 8 rituals, 4 completed (50%)
+  - Yesterday: water 84%, food 1950 kcal, rituals 75%
+
+Stage Summary:
+- Demo data seed script creates realistic 5-day history
+- Demo user automatically logs in with ?demo=true
+- All Health APIs working correctly
+- Daily Summary shows real data
+- Ready for block-by-block fixes
+
+Recommendations and improvements:
+
+1. **Явные улучшения кода:**
+   - Добавить выбор иконки/emoji для ритуалов при создании
+   - Показывать общие калории за день в блоке еды
+   - Добавить возможность клонировать вчерашнюю еду
+   - Кэшировать loaded данные в Zustand store
+   - Добавить toast-уведомления при сохранении
+   - Добавить loading state при toggle БАДов
+
+2. **Идеи по UX дневника и LeakFix-экрана:**
+   - Calendar view с heatmap выполнения ритуалов
+   - Weekly comparison (эта неделя vs прошлая)
+   - Quick-add кнопки для частых продуктов
+   - Шаблоны еды (например "Мой завтрак")
+   - Умные напоминания на основе паттернов
+   - Insights: "Ты забываешь витамин D по выходным"
+
+3. **Потенциальные риски/краевые случаи:**
+   - **Удаление БАДа:** Удаляются ли связанные intakes? Да, CASCADE
+   - **Пустой день:** Water API создаёт FitnessDaily, но что если другие данные пустые?
+   - **Часовые пояса:** Demo сидит в UTC, пользователь может видеть другой "сегодня"
+   - **Duplicate clicks:** Toggle может отправить два запроса при двойном клике
+   - **Invalid date:** DatePicker блокирует будущее, но API должен тоже валидировать
