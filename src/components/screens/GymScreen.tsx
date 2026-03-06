@@ -241,6 +241,7 @@ export function GymScreen() {
   const [workouts, setWorkouts] = useState<GymWorkout[]>([])
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [isLoading, setIsLoading] = useState(true)
+  const [showPeriodList, setShowPeriodList] = useState(false) // Separate state for period list view
   
   // Wizard state
   const [showWizard, setShowWizard] = useState(false)
@@ -285,7 +286,8 @@ export function GymScreen() {
       const response = await fetch(`/api/gym?userId=${user.id}`)
       const data = await response.json()
       setPeriods(data.periods || [])
-      if (data.periods?.length > 0) {
+      // Don't auto-set activePeriod - let user choose or use initial load only
+      if (!activePeriod && data.periods?.length > 0) {
         const active = data.periods.find((p: GymPeriod) => p.isActive)
         setActivePeriod(active || data.periods[0])
       }
@@ -294,7 +296,7 @@ export function GymScreen() {
     } finally {
       setIsLoading(false)
     }
-  }, [user?.id])
+  }, [user?.id, activePeriod])
 
   useEffect(() => {
     loadPeriods()
@@ -888,13 +890,12 @@ export function GymScreen() {
             {activePeriod ? activePeriod.name : 'Нет активного периода'}
           </p>
         </div>
-        {activePeriod ? (
+        {activePeriod && !showPeriodList ? (
           <Button
             size="sm"
             variant="outline"
             onClick={() => {
-              setActivePeriod(null)
-              loadPeriods()
+              setShowPeriodList(true)
             }}
           >
             <ChevronLeft className="w-4 h-4 mr-1" />
@@ -919,6 +920,62 @@ export function GymScreen() {
         <Card className="bg-card/50 backdrop-blur">
           <CardContent className="pt-6 text-center text-muted-foreground">
             Загрузка...
+          </CardContent>
+        </Card>
+      ) : showPeriodList ? (
+        // Show period list
+        <Card className="bg-card/50 backdrop-blur">
+          <CardHeader>
+            <CardTitle className="text-lg">Периоды</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {periods.map(period => (
+              <div
+                key={period.id}
+                className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
+                  period.isActive 
+                    ? 'bg-primary/10 border border-primary/30' 
+                    : 'bg-muted/30 hover:bg-muted/50'
+                }`}
+                onClick={() => {
+                  setActivePeriod(period)
+                  setShowPeriodList(false)
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    period.isActive ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
+                  }`}>
+                    <Dumbbell className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="font-medium">{period.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Цикл {period.currentCycle} из {period.totalCycles} • {period.type}
+                    </p>
+                  </div>
+                </div>
+                {period.isActive && (
+                  <Badge className="bg-primary text-primary-foreground text-xs">
+                    Активен
+                  </Badge>
+                )}
+              </div>
+            ))}
+            {periods.length === 0 && (
+              <p className="text-center text-muted-foreground py-4">Нет периодов</p>
+            )}
+            <Button
+              className="w-full mt-2"
+              variant="outline"
+              onClick={() => {
+                resetWizard()
+                setShowWizard(true)
+              }}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Новый период
+            </Button>
           </CardContent>
         </Card>
       ) : !activePeriod ? (
