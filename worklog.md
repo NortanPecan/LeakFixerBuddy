@@ -967,3 +967,40 @@ Stage Summary:
 - Commits pushed:
   - c37514a Backend API
   - 9009efb Frontend UI
+
+---
+Task ID: 26
+Agent: Main Agent
+Task: Восстановление потерянных модулей после git reset
+
+Work Log:
+После случайного git reset --hard были потеряны все изменения сессии. Восстановлено:
+
+1. **Prisma Schema:**
+   - Direction model (userId, title, description, color, status)
+   - Skill + SkillHistory models (XP, level system)
+   - Trait + TraitHistory models (score 1-10)
+   - Challenge.directionId field
+
+2. **API Routes:**
+   - /api/directions - CRUD для направлений
+   - /api/skills - CRUD + XP gain with level up
+   - /api/traits - CRUD + score changes
+
+3. **Screens:**
+   - GoalsScreen - направления + челенджи
+   - SkillsScreen - навыки с уровнями
+   - TraitsScreen - черты характера
+   - ExportScreen - экспорт в AI
+
+4. **Navigation:**
+   - ProfileScreen: добавлены Skills, Traits, Export
+   - store.ts: новые типы экранов
+   - page.tsx: маршрутизация
+
+Stage Summary:
+- Все модули восстановлены
+- Коммит: 310b337
+- Pushed to GitHub: master
+
+**Важно:** Всегда проверяй git status перед git reset!
