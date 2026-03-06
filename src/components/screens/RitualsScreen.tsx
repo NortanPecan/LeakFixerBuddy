@@ -73,7 +73,7 @@ export function RitualsScreen() {
         // Calculate stats based on selected date
         const selectedDay = selectedDateObj.getDay() || 7
         const selectedDayRituals = (data.rituals || []).filter((r: Ritual) => {
-          const days = JSON.parse(r.days as string)
+          const days = r.days ? JSON.parse(r.days as string) : []
           return days.includes(selectedDay) || days.length === 0
         })
         const completed = selectedDayRituals.filter((r: Ritual & { completedToday: boolean }) => r.completedToday).length
@@ -167,7 +167,7 @@ export function RitualsScreen() {
   const selectedDay = selectedDateObj.getDay() || 7
   const todayRituals = rituals.filter(r => {
     if (r.status !== 'active') return false
-    const days = JSON.parse(r.days as string)
+    const days = r.days ? JSON.parse(r.days as string) : []
     return days.includes(selectedDay) || days.length === 0
   })
 
@@ -334,15 +334,20 @@ export function RitualsScreen() {
                               {/* Attributes */}
                               {ritual.attributes && (
                                 <div className="flex gap-1 mt-1">
-                                  {(JSON.parse(ritual.attributes as string) as AttributeKey[]).map(attr => (
-                                    <Badge 
-                                      key={attr} 
-                                      variant="outline" 
-                                      className="text-[10px] px-1.5 py-0"
-                                    >
-                                      {attr === 'health' ? '❤️' : attr === 'mind' ? '🧠' : '💪'}
-                                    </Badge>
-                                  ))}
+                                  {(() => {
+                                    try {
+                                      const attrs = JSON.parse(ritual.attributes as string) as AttributeKey[]
+                                      return attrs.map(attr => (
+                                        <Badge 
+                                          key={attr} 
+                                          variant="outline" 
+                                          className="text-[10px] px-1.5 py-0"
+                                        >
+                                          {attr === 'health' ? '❤️' : attr === 'mind' ? '🧠' : '💪'}
+                                        </Badge>
+                                      ))
+                                    } catch { return null }
+                                  })()}
                                 </div>
                               )}
                             </div>

@@ -683,3 +683,57 @@ Recommendations and improvements:
    - **Часовые пояса:** Demo сидит в UTC, пользователь может видеть другой "сегодня"
    - **Duplicate clicks:** Toggle может отправить два запроса при двойном клике
    - **Invalid date:** DatePicker блокирует будущее, но API должен тоже валидировать
+
+---
+Task ID: 16
+Agent: Main Agent
+Task: Fix JSON.parse bugs in RitualsScreen and review all blocks for similar issues
+
+Work Log:
+- Fixed critical JSON.parse bug in RitualsScreen.tsx:
+  - Line 76: `JSON.parse(r.days as string)` could fail when `days` is undefined/null
+  - Line 170: Same issue in another filter
+  - Line 337: `JSON.parse(ritual.attributes as string)` same issue
+  - Added null checks: `r.days ? JSON.parse(r.days as string) : []`
+  - Added try-catch for attributes parsing
+- Reviewed all JSON.parse calls in codebase:
+  - /api/supplements/route.ts: Has try-catch (lines 29-34, 51) ✓
+  - /api/daily-summary/route.ts: Has try-catch (lines 166-172, 194-200) ✓
+  - /api/challenges/route.ts: Has try-catch (lines 26-32) ✓
+  - GymScreen.tsx: Has try-catch for muscleGroups parsing ✓
+- Reviewed all screens for bugs:
+  - HealthScreen: Uses pre-parsed data from API ✓
+  - HabitsScreen: No JSON.parse issues ✓
+  - DailySummaryScreen: Uses pre-parsed data from API ✓
+  - HomeScreen: No JSON.parse issues ✓
+  - TasksScreen: No JSON.parse issues ✓
+  - ChallengesScreen: No JSON.parse issues ✓
+- Verified dev log: All API calls successful (200 responses)
+- Lint passed (only pre-existing prisma-generate.cjs error)
+
+Stage Summary:
+- Critical JSON.parse bug fixed in RitualsScreen
+- All other code paths have proper error handling
+- Demo data works correctly across all screens
+- No other obvious bugs found in Health, Rituals, Home, Tasks, Challenges blocks
+- All blocks are in usable state
+
+Рекомендации и улучшения:
+
+1. **Явные улучшения кода:**
+   - Добавить helper функцию `safeJsonParse<T>(str: string | null, fallback: T): T` для консистентности
+   - Протестировать краевые случаи: ритуал без дней, БАД с пустым days=[]
+   - Добавить TypeScript типы для Ritual.days как `number[]` вместо `string`
+   - Рассмотреть использование Prisma Json type для days/attributes вместо string
+
+2. **Идеи по архитектуре:**
+   - Добавить валидацию на уровне Prisma middleware для JSON полей
+   - Создать Zod схемы для валидации API responses
+   - Добавить error boundary для каждого screen компонента
+   - Логировать JSON.parse ошибки в Sentry/аналитику
+
+3. **Потенциальные риски:**
+   - **Migration needed:** Существующие записи с null days могут сломать UI
+   - **Type safety:** Type assertion `as string` небезопасен, лучше использовать type guard
+   - **Performance:** JSON.parse на каждом render - можно memoize
+   - **Data integrity:** При создании ритуала days должен всегда иметь default value
