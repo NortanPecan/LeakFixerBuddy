@@ -387,3 +387,31 @@ Stage Summary:
 - Complete setup documentation in TELEGRAM_SETUP.md
 - Required env vars: DATABASE_URL, DIRECT_DATABASE_URL, TELEGRAM_BOT_TOKEN
 - Production URL: https://leakfixer-miniapp.vercel.app
+
+---
+Task ID: 11
+Agent: Codex (GPT-5)
+Task: Validate production API path (Mini App -> backend -> Supabase) on `main`
+
+Work Log:
+- Audited production API handlers on `main` for login and user lifecycle:
+  - `/api/auth` (POST Telegram initData, GET `?demo=true`)
+  - `/api/user`, `/api/fitness`, `/api/energy`, `/api/food`, `/api/tasks`, `/api/state`, `/api/water`, and other API routes under `src/app/api/*`.
+- Verified API handlers use Prisma via `@/lib/db` and model calls (`db.appUser`, `db.userProfile`, `db.dailyState`, etc.), with no direct SQLite driver usage in production API routes.
+- Kept Telegram auth flow unchanged (initData parsing/validation and signature checks were not modified).
+- Hardened Prisma client generation for production deployments:
+  - Updated `scripts/prisma-generate.cjs` to choose `prisma/schema.supabase.prisma` when either:
+    - environment is production (`VERCEL=1` or `NODE_ENV=production`), or
+    - `DATABASE_URL` is PostgreSQL (`postgres://` or `postgresql://`).
+  - This reduces risk of generating a SQLite client for a PostgreSQL runtime.
+
+Stage Summary:
+- Production API DB access path is Prisma -> Supabase (PostgreSQL schema) on `main`.
+- Auth and demo-auth endpoints remain compatible with existing Telegram integration.
+- Build-time Prisma schema selection is now safer for production-like environments.
+
+TODO for next agent (GLM-5 in sandbox):
+- Run branch-specific validation commands in target environment and capture outputs in worklog:
+  - `bun run db:validate:prod`
+  - smoke checks for `/api/auth` (POST + `?demo=true`) and `/api/user` on deployed environment.
+- Review and optionally clean historical legacy docs snippets in README that still mention manual schema file renaming; keep branch-script flow as the source of truth.
