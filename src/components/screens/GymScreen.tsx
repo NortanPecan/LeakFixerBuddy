@@ -534,10 +534,25 @@ export function GymScreen() {
       const data = await response.json()
       if (data.success) {
         setShowWorkoutDetail(false)
-        // Reload workouts
+        // Reload workouts with proper parsing
         const workoutsResponse = await fetch(`/api/gym/workouts?periodId=${activePeriod.id}`)
         const workoutsData = await workoutsResponse.json()
-        setWorkouts(workoutsData.workouts || [])
+        
+        // Parse muscleGroups for each workout
+        const parsedWorkouts = (workoutsData.workouts || []).map((w: GymWorkout) => ({
+          ...w,
+          muscleGroups: (() => {
+            if (!w.muscleGroups) return []
+            try {
+              return typeof w.muscleGroups === 'string' 
+                ? JSON.parse(w.muscleGroups as unknown as string)
+                : w.muscleGroups
+            } catch {
+              return []
+            }
+          })()
+        }))
+        setWorkouts(parsedWorkouts)
       }
     } catch (error) {
       console.error('Failed to skip workout:', error)
@@ -566,10 +581,25 @@ export function GymScreen() {
         setShowReschedule(false)
         setShowWorkoutDetail(false)
         setRescheduleDate('')
-        // Reload workouts
+        // Reload workouts with proper parsing
         const workoutsResponse = await fetch(`/api/gym/workouts?periodId=${activePeriod.id}`)
         const workoutsData = await workoutsResponse.json()
-        setWorkouts(workoutsData.workouts || [])
+        
+        // Parse muscleGroups for each workout
+        const parsedWorkouts = (workoutsData.workouts || []).map((w: GymWorkout) => ({
+          ...w,
+          muscleGroups: (() => {
+            if (!w.muscleGroups) return []
+            try {
+              return typeof w.muscleGroups === 'string' 
+                ? JSON.parse(w.muscleGroups as unknown as string)
+                : w.muscleGroups
+            } catch {
+              return []
+            }
+          })()
+        }))
+        setWorkouts(parsedWorkouts)
       }
     } catch (error) {
       console.error('Failed to reschedule workout:', error)
@@ -1108,7 +1138,7 @@ export function GymScreen() {
                               )}
                             </div>
                             
-                            {isWorkout && day.muscleGroups && day.muscleGroups.length > 0 && (
+                            {isWorkout && day.muscleGroups && Array.isArray(day.muscleGroups) && day.muscleGroups.length > 0 && (
                               <div className="flex flex-wrap gap-1 mt-1">
                                 {day.muscleGroups.map(muscle => {
                                   const group = MUSCLE_GROUPS.find(g => g.value === muscle)
@@ -1165,7 +1195,7 @@ export function GymScreen() {
                           month: 'short'
                         })}
                       </p>
-                      {nextWorkout.muscleGroups && nextWorkout.muscleGroups.length > 0 && (
+                      {nextWorkout.muscleGroups && Array.isArray(nextWorkout.muscleGroups) && nextWorkout.muscleGroups.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
                           {nextWorkout.muscleGroups.map(muscle => {
                             const group = MUSCLE_GROUPS.find(g => g.value === muscle)
@@ -1699,7 +1729,7 @@ export function GymScreen() {
             </div>
 
             {/* Muscle groups */}
-            {selectedWorkout?.muscleGroups && selectedWorkout.muscleGroups.length > 0 && (
+            {selectedWorkout?.muscleGroups && Array.isArray(selectedWorkout.muscleGroups) && selectedWorkout.muscleGroups.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {selectedWorkout.muscleGroups.map(muscle => {
                   const group = MUSCLE_GROUPS.find(g => g.value === muscle)
@@ -1848,7 +1878,7 @@ export function GymScreen() {
               </div>
               
               {/* Quick exercise buttons */}
-              {selectedWorkout?.muscleGroups && selectedWorkout.muscleGroups.length > 0 && (
+              {selectedWorkout?.muscleGroups && Array.isArray(selectedWorkout.muscleGroups) && selectedWorkout.muscleGroups.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {selectedWorkout.muscleGroups.flatMap(muscle => 
                     (EXERCISE_DATABASE[muscle] || []).slice(0, 3).map(exercise => (
