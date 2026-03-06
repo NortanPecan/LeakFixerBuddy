@@ -22,7 +22,8 @@
     "db:studio:sandbox": "prisma studio --schema=prisma/schema.prisma",
     "db:studio:prod": "prisma studio --schema=prisma/schema.supabase.prisma",
     "db:validate:sandbox": "prisma validate --schema=prisma/schema.prisma",
-    "db:validate:prod": "prisma validate --schema=prisma/schema.supabase.prisma"
+    "db:validate:prod": "prisma validate --schema=prisma/schema.supabase.prisma",
+    "seed:demo": "bun run scripts/seed-demo.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
