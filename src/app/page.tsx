@@ -133,26 +133,33 @@ export default function Home() {
 
       setIsLoading(true)
 
-      await ensureTelegramSdkLoaded()
+      try {
+        await ensureTelegramSdkLoaded()
 
-      // Initialize Telegram WebApp if available
-      if (typeof window !== 'undefined') {
-        const tg = (window as unknown as { Telegram?: { WebApp?: { ready?: () => void; expand?: () => void; initData?: string } } }).Telegram
-        if (tg?.WebApp) {
-          tg.WebApp.ready?.()
-          tg.WebApp.expand?.()
+        // Initialize Telegram WebApp if available
+        if (typeof window !== 'undefined') {
+          const tg = (window as unknown as { Telegram?: { WebApp?: { ready?: () => void; expand?: () => void; initData?: string } } }).Telegram
+          if (tg?.WebApp) {
+            tg.WebApp.ready?.()
+            tg.WebApp.expand?.()
+          }
         }
-      }
-      // Login decision is handled in store (Telegram first, demo fallback only in regular browser)
-      const ok = await login()
-      if (!ok && typeof window !== 'undefined') {
-        const message = (window as unknown as { __leakfixerAuthError?: string }).__leakfixerAuthError
-        setAuthError(message || 'Auth failed')
-      } else {
-        setAuthError(null)
-      }
 
-      setIsLoading(false)
+        // Login decision is handled in store (Telegram first, demo fallback only in regular browser)
+        const ok = await login()
+        if (!ok && typeof window !== 'undefined') {
+          const message = (window as unknown as { __leakfixerAuthError?: string }).__leakfixerAuthError
+          setAuthError(message || 'Auth failed')
+        } else {
+          setAuthError(null)
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Auth initialization failed'
+        console.error('Init app error:', error)
+        setAuthError(message)
+      } finally {
+        setIsLoading(false)
+      }
     }
 
     initApp()
