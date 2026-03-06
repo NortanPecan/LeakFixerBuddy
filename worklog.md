@@ -921,3 +921,22 @@ Stage Summary:
    - Создать API `/api/export/owner` для выгрузки данных
    - Создать API `/api/migrate/owner-to-telegram` для привязки к ТГ
    - Добавить проверку isOwnerMode в критичных местах
+
+---
+Task ID: 24
+Agent: Main Agent
+Task: GYM v1.1 — backend API для шаблонов, переносов, пропусков
+
+Work Log:
+- Добавлено поле `daySchedule` в GymPeriod (Prisma schema)
+- Обновлён API POST /api/gym — принимает daySchedule от клиента, сохраняет порядок
+- Создан API POST /api/gym/workouts/skip — сдвигает будущие тренировки +1 день
+- Создан API POST /api/gym/workouts/reschedule — перенос на конкретную дату (с swap при конфликте)
+
+Stage Summary:
+- Бэкенд готов для frontend-фич:
+  - Drag-and-drop порядка дней → отправка daySchedule
+  - Шаблоны → предустановленный daySchedule
+  - Пропуск тренировки → /skip
+  - Перенос на дату → /reschedule
+- Коммит запушен: c37514a
