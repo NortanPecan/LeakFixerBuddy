@@ -39,20 +39,24 @@ export async function GET(request: NextRequest) {
 
     // Filter rituals by day of week and add completion status
     const ritualsData = rituals.map(ritual => {
-      const days = JSON.parse(ritual.days as string) as number[]
+      // Safe JSON parse with fallback
+      let days: number[] = []
+      try {
+        days = ritual.days ? JSON.parse(ritual.days as string) : []
+      } catch {
+        days = []
+      }
       const isScheduledToday = days.length === 0 || days.includes(targetDayOfWeek)
       
       // Check completed for target date
       const completion = ritual.completions[0]
-      const completed = completion?.completed ?? false
+      const completedToday = completion?.completed ?? false
 
-      // Calculate streak (last 30 days)
       return {
         ...ritual,
-        days: undefined, // Remove raw JSON string
-        daysArray: days,
+        days: days, // Return as array for frontend
         isScheduledToday,
-        completed,
+        completedToday,
         completionNote: completion?.note,
         completionMood: completion?.mood,
         completions: undefined // Remove from response
@@ -61,7 +65,7 @@ export async function GET(request: NextRequest) {
 
     // Filter to only scheduled rituals for today view
     const todayRituals = ritualsData.filter(r => r.isScheduledToday)
-    const completedToday = todayRituals.filter(r => r.completed).length
+    const completedCount = todayRituals.filter(r => r.completedToday).length
 
     return NextResponse.json({
       success: true,
@@ -69,8 +73,8 @@ export async function GET(request: NextRequest) {
       dayOfWeek: targetDayOfWeek,
       stats: {
         total: todayRituals.length,
-        completed: completedToday,
-        percentage: todayRituals.length > 0 ? Math.round((completedToday / todayRituals.length) * 100) : 0
+        completed: completedCount,
+        percentage: todayRituals.length > 0 ? Math.round((completedCount / todayRituals.length) * 100) : 0
       },
       rituals: ritualsData,
       todayRituals

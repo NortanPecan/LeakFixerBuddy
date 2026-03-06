@@ -56,7 +56,7 @@ export interface Ritual {
   title: string
   type: RitualType
   category: RitualCategory
-  days: number[]
+  days: number[] // Parsed array of day numbers (1-7, where 1=Monday)
   timeWindow: TimeWindow
   reminder: boolean
   reminderTime?: string
@@ -74,6 +74,7 @@ export interface Ritual {
   streak?: number
   completedToday?: boolean
   completionsCount?: number
+  isScheduledToday?: boolean
 }
 
 // Ritual completion interface

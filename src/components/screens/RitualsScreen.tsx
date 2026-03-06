@@ -52,12 +52,11 @@ export function RitualsScreen() {
   const [selectedRitual, setSelectedRitual] = useState<Ritual | null>(null)
   const [showDetail, setShowDetail] = useState(false)
 
-  // Stats
+  // Stats from API
   const [stats, setStats] = useState({
-    todayCompleted: 0,
-    todayTotal: 0,
-    streak: 0,
-    weeklyRate: 0
+    total: 0,
+    completed: 0,
+    percentage: 0
   })
 
   // Load rituals
@@ -68,21 +67,10 @@ export function RitualsScreen() {
       try {
         const response = await fetch(`/api/rituals?userId=${user.id}&date=${selectedDate}`)
         const data = await response.json()
-        setRituals(data.rituals || [])
-
-        // Calculate stats based on selected date
-        const selectedDay = selectedDateObj.getDay() || 7
-        const selectedDayRituals = (data.rituals || []).filter((r: Ritual) => {
-          const days = r.days ? JSON.parse(r.days as string) : []
-          return days.includes(selectedDay) || days.length === 0
-        })
-        const completed = selectedDayRituals.filter((r: Ritual & { completedToday: boolean }) => r.completedToday).length
-
-        setStats(prev => ({
-          ...prev,
-          todayCompleted: completed,
-          todayTotal: selectedDayRituals.length
-        }))
+        
+        // Use data from API directly
+        setRituals(data.todayRituals || [])
+        setStats(data.stats || { total: 0, completed: 0, percentage: 0 })
 
         // Check if preset was offered before
         const presetOffered = localStorage.getItem('ritual_preset_offered')
@@ -97,7 +85,7 @@ export function RitualsScreen() {
       }
     }
     loadRituals()
-  }, [user?.id, selectedDate, selectedDateObj])
+  }, [user?.id, selectedDate])
 
   // Toggle ritual completion
   const handleToggleComplete = async (ritual: Ritual, completed: boolean) => {
@@ -121,9 +109,12 @@ export function RitualsScreen() {
       // Update stats
       setStats(prev => ({
         ...prev,
-        todayCompleted: completed 
-          ? prev.todayCompleted + 1 
-          : Math.max(0, prev.todayCompleted - 1)
+        completed: completed 
+          ? prev.completed + 1 
+          : Math.max(0, prev.completed - 1),
+        percentage: prev.total > 0 
+          ? Math.round(((completed ? prev.completed + 1 : prev.completed - 1) / prev.total) * 100)
+          : 0
       }))
     } catch (error) {
       console.error('Failed to toggle ritual:', error)
@@ -163,25 +154,16 @@ export function RitualsScreen() {
     localStorage.setItem('ritual_preset_offered', 'true')
   }
 
-  // Get selected day's rituals
-  const selectedDay = selectedDateObj.getDay() || 7
-  const todayRituals = rituals.filter(r => {
-    if (r.status !== 'active') return false
-    const days = r.days ? JSON.parse(r.days as string) : []
-    return days.includes(selectedDay) || days.length === 0
-  })
-
   // Group by time window
   const groupedRituals = {
-    morning: todayRituals.filter(r => r.timeWindow === 'morning'),
-    day: todayRituals.filter(r => r.timeWindow === 'day'),
-    evening: todayRituals.filter(r => r.timeWindow === 'evening'),
-    any: todayRituals.filter(r => r.timeWindow === 'any')
+    morning: rituals.filter(r => r.timeWindow === 'morning'),
+    day: rituals.filter(r => r.timeWindow === 'day'),
+    evening: rituals.filter(r => r.timeWindow === 'evening'),
+    any: rituals.filter(r => r.timeWindow === 'any')
   }
 
-  const progressPercent = stats.todayTotal > 0 
-    ? Math.round((stats.todayCompleted / stats.todayTotal) * 100)
-    : 0
+  // Calculate progress from stats
+  const progressPercent = stats.percentage
 
   return (
     <div className="flex flex-col gap-4 pb-20">
@@ -210,19 +192,19 @@ export function RitualsScreen() {
       <DatePicker variant="compact" />
 
       {/* Progress for selected day */}
-      {!isLoading && stats.todayTotal > 0 && (
+      {!isLoading && stats.total > 0 && (
         <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
           <CardContent className="pt-4">
             <div className="flex items-center justify-between mb-2">
               <div>
                 <p className="text-sm text-muted-foreground">Прогресс</p>
                 <p className="text-2xl font-bold">
-                  {stats.todayCompleted} / {stats.todayTotal}
+                  {stats.completed} / {stats.total}
                 </p>
               </div>
               <div className="text-right">
                 <p className="text-3xl font-black text-primary">{progressPercent}%</p>
-                {stats.todayCompleted === stats.todayTotal && stats.todayTotal > 0 && (
+                {stats.completed === stats.total && stats.total > 0 && (
                   <Badge className="bg-emerald-500/20 text-emerald-300">
                     <CheckCircle2 className="w-3 h-3 mr-1" />
                     Все выполнено!
@@ -259,7 +241,7 @@ export function RitualsScreen() {
       )}
 
       {/* Rituals by time window */}
-      {!isLoading && todayRituals.length > 0 && (
+      {!isLoading && rituals.length > 0 && (
         <>
           {(['morning', 'day', 'evening', 'any'] as const).map(timeWindow => {
             const ritualsInWindow = groupedRituals[timeWindow]
