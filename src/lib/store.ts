@@ -111,6 +111,8 @@ interface AppState {
   // Demo mode
   isDemoMode: boolean
   setDemoMode: (demo: boolean) => void
+  isOwnerMode: boolean
+  setOwnerMode: (owner: boolean) => void
 
   // Loading
   isLoading: boolean
@@ -119,7 +121,7 @@ interface AppState {
   setIsInitialized: (initialized: boolean) => void
 
   // Actions
-  login: (isDemo?: boolean) => Promise<boolean>
+  login: (isDemo?: boolean, isOwner?: boolean) => Promise<boolean>
   logout: () => void
   updateProgress: (day?: number, streak?: number, points?: number) => Promise<void>
   updateGlobalState: (mood: number, energy: number) => Promise<void>
@@ -211,6 +213,8 @@ export const useAppStore = create<AppState>()(
       // Demo mode
       isDemoMode: false,
       setDemoMode: (demo) => set({ isDemoMode: demo }),
+      isOwnerMode: false,
+      setOwnerMode: (owner) => set({ isOwnerMode: owner }),
 
       // Loading
       isLoading: false,
@@ -219,14 +223,19 @@ export const useAppStore = create<AppState>()(
       setIsInitialized: (initialized) => set({ isInitialized: initialized }),
 
       // Login
-      login: async (isDemo = false) => {
+      login: async (isDemo = false, isOwner = false) => {
         set({ isLoading: true })
 
         try {
-          const endpoint = isDemo ? '/api/auth?demo=true' : '/api/auth'
+          let endpoint = '/api/auth'
+          if (isOwner) {
+            endpoint = '/api/auth?owner=true'
+          } else if (isDemo) {
+            endpoint = '/api/auth?demo=true'
+          }
           let response: Response
 
-          if (isDemo) {
+          if (isDemo || isOwner) {
             response = await fetch(endpoint)
           } else {
             const tg = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp
@@ -283,6 +292,7 @@ export const useAppStore = create<AppState>()(
             profile: data.profile,
             globalState,
             isDemoMode: data.isDemo || false,
+            isOwnerMode: data.isOwner || false,
             isInitialized: true,
             isLoading: false
           })
@@ -309,6 +319,7 @@ export const useAppStore = create<AppState>()(
           buddies: [],
           activeGymPeriod: null,
           isDemoMode: false,
+          isOwnerMode: false,
           isInitialized: false
         })
       },
@@ -418,6 +429,7 @@ export const useAppStore = create<AppState>()(
         profile: state.profile,
         globalState: state.globalState,
         isDemoMode: state.isDemoMode,
+        isOwnerMode: state.isOwnerMode,
         dailyData: state.dailyData,
         buddies: state.buddies,
         activeGymPeriod: state.activeGymPeriod,

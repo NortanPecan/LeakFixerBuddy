@@ -855,3 +855,69 @@ Stage Summary:
    - **Toast notifications:** Нужно добавить toaster в layout
    - **Optimistic updates:** Может создать рассинхрон при ошибках
    - **Caching:** Данные могут устаревать при переключении экранов
+
+---
+Task ID: 19
+Agent: Main Agent
+Task: Create Owner user profile for sandbox testing
+
+Work Log:
+- Added owner user constants to auth API:
+  - OWNER_TELEGRAM_ID_TEXT = '9000000002'
+  - OWNER_EMAIL = 'owner@leakfixer.local'
+  - OWNER_USERNAME = 'liveleak_owner'
+- Updated /api/auth GET handler to support ?owner=true:
+  - Creates owner user on first login if not exists
+  - Returns isOwner: true in response
+  - Owner starts with empty data (no rituals, tasks, etc.)
+- Updated store.ts:
+  - Added isOwnerMode state
+  - Updated login function signature: login(isDemo?, isOwner?)
+  - Persisted isOwnerMode in localStorage
+- Updated AuthErrorScreen in page.tsx:
+  - Added "Войти как Owner" button
+  - Allows quick owner login on auth error
+
+Stage Summary:
+- Owner user can login via /api/auth?owner=true
+- Owner starts with clean slate (empty data)
+- All data created by owner can be exported later
+- Ready for owner testing and data collection
+
+**Как войти как Owner:**
+1. В браузере: добавить `?owner=true` к URL (автоматический логин)
+2. Или на экране ошибки авторизации: кнопка "Войти как Owner (чистый профиль)"
+
+**TODO для будущего:**
+1. Создать скрипт `seed:owner` для экспорта данных owner-профиля
+2. Создать механизм привязки owner-данных к реальному Telegram-аккаунту при переходе на main/Supabase
+3. Добавить UI-индикатор режима (Owner mode badge)
+
+**Отличия Demo vs Owner:**
+| Параметр | Demo | Owner |
+|----------|------|-------|
+| Telegram ID | 9000000001 | 9000000002 |
+| Email | demo@leakfixer.local | owner@leakfixer.local |
+| Username | demo_user | liveleak_owner |
+| Данные при старте | 5 дней истории | Пусто |
+| Ритуалы | 8 созданы | 0 |
+| Задачи | 1 цепочка | 0 |
+| Челенджи | 1 активный | 0 |
+
+Рекомендации и улучшения:
+
+1. **Критичные для Owner-режима:**
+   - ✅ Owner может логиниться
+   - ✅ Owner имеет пустые данные
+   - ⏳ Экспорт данных owner через скрипт
+   - ⏳ Миграция owner → Telegram аккаунт
+
+2. **UX улучшения:**
+   - Добавить badge "Owner Mode" на экранах
+   - Добавить кнопку "Сохранить мои данные" в Profile
+   - Показывать уведомление о демо/owner режиме
+
+3. **Технические задачи:**
+   - Создать API `/api/export/owner` для выгрузки данных
+   - Создать API `/api/migrate/owner-to-telegram` для привязки к ТГ
+   - Добавить проверку isOwnerMode в критичных местах

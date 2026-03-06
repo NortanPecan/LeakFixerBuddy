@@ -15,6 +15,11 @@ const DEMO_TELEGRAM_ID_TEXT = '9000000001'
 const DEMO_TELEGRAM_ID_BIGINT = 9000000001n
 const DEMO_EMAIL = 'demo@leakfixer.local'
 
+// Owner user constants (for sandbox testing with clean data)
+const OWNER_TELEGRAM_ID_TEXT = '9000000002'
+const OWNER_EMAIL = 'owner@leakfixer.local'
+const OWNER_USERNAME = 'liveleak_owner'
+
 function getMoodStatus(mood: number): string {
   if (mood >= 9) return 'Peak condition'
   if (mood >= 7) return 'Good tone, enough resource'
@@ -323,20 +328,126 @@ export async function POST(request: NextRequest) {
 
 /**
  * Demo auth for local and production fallback
- * GET /api/auth?demo=true
+ * GET /api/auth?demo=true - Login as demo user (with pre-filled data)
+ * GET /api/auth?owner=true - Login as owner user (clean slate for testing)
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const demo = searchParams.get('demo')
+  const owner = searchParams.get('owner')
 
-  if (demo !== 'true') {
+  if (demo !== 'true' && owner !== 'true') {
     return NextResponse.json(
       {
-        error: 'Use POST with initData or GET ?demo=true',
+        error: 'Use POST with initData, GET ?demo=true, or GET ?owner=true',
         hint: 'In production, send Telegram WebApp initData via POST',
       },
       { status: 400 },
     )
+  }
+
+  // Owner login - clean slate user for testing
+  if (owner === 'true') {
+    try {
+      let user = await db.appUser.findUnique({
+        where: { email: OWNER_EMAIL },
+        include: { profile: true },
+      })
+
+      if (!user) {
+        user = await db.appUser.create({
+          data: {
+            telegramId: OWNER_TELEGRAM_ID_TEXT,
+            telegramUsername: OWNER_USERNAME,
+            telegramFirstName: 'Owner',
+            telegramLastName: 'LeakFixer',
+            telegramLanguageCode: 'ru',
+            username: OWNER_USERNAME,
+            firstName: 'Owner',
+            lastName: 'LeakFixer',
+            language: 'ru',
+            day: 1,
+            streak: 0,
+            points: 0,
+            authProvider: 'owner',
+            email: OWNER_EMAIL,
+            lastLoginAt: new Date(),
+            profile: {
+              create: {
+                waterBaseline: 2000,
+              },
+            },
+          },
+          include: { profile: true },
+        })
+      } else {
+        user = await db.appUser.update({
+          where: { id: user.id },
+          data: { lastLoginAt: new Date() },
+          include: { profile: true },
+        })
+      }
+
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+
+      let todayState = await db.dailyState.findFirst({
+        where: { userId: user.id, date: today },
+      })
+
+      if (!todayState) {
+        todayState = await db.dailyState.create({
+          data: {
+            userId: user.id,
+            date: today,
+            mood: 5,
+            energy: 5,
+          },
+        })
+      }
+
+      const globalState = {
+        mood: todayState.mood || 5,
+        energy: todayState.energy || 5,
+        trend: 0,
+        status: getMoodStatus(todayState.mood || 5),
+      }
+
+      return NextResponse.json({
+        success: true,
+        isOwner: true,
+        isDemo: false,
+        user: {
+          id: user.id,
+          telegramId: serializeTelegramId(user.telegramId),
+          username: user.username,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          photoUrl: user.photoUrl,
+          language: user.language,
+          day: user.day,
+          streak: user.streak,
+          points: user.points,
+        },
+        profile: user.profile
+          ? {
+              weight: user.profile.weight,
+              height: user.profile.height,
+              age: user.profile.age,
+              sex: user.profile.sex,
+              targetWeight: user.profile.targetWeight,
+              targetCalories: user.profile.targetCalories,
+              workProfile: user.profile.workProfile,
+              waterBaseline: user.profile.waterBaseline,
+            }
+          : null,
+        globalState,
+      })
+    } catch (error) {
+      console.error('[Owner Auth] Error:', error)
+      const mapped = classifyAuthError('demo', error)
+      return NextResponse.json(mapped, { status: mapped.status })
+    }
   }
 
   try {
@@ -415,6 +526,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       isDemo: true,
+      isOwner: false,
       user: {
         id: user.id,
         telegramId: serializeTelegramId(user.telegramId),

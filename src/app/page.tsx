@@ -211,10 +211,17 @@ function AuthErrorScreen({ message }: { message: string }) {
           </Button>
           <Button variant="outline" onClick={async () => {
             setIsLoading(true)
-            await login(true)
+            await login(true) // demo
             setIsLoading(false)
           }}>
             Войти как демо
+          </Button>
+          <Button variant="outline" onClick={async () => {
+            setIsLoading(true)
+            await login(false, true) // owner
+            setIsLoading(false)
+          }}>
+            Войти как Owner (чистый профиль)
           </Button>
         </div>
       </div>
