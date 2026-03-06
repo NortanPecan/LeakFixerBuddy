@@ -70,22 +70,26 @@ export function DailySummaryScreen() {
   const { user, selectedDate, setScreen } = useAppStore()
   const [summary, setSummary] = useState<DailySummaryData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const loadSummary = async () => {
       if (!user?.id) return
       
       setIsLoading(true)
+      setError(null)
       try {
         const response = await fetch(
           `/api/daily-summary?userId=${user.id}&date=${selectedDate}`
         )
+        if (!response.ok) throw new Error('Failed to load summary')
         const data = await response.json()
         if (data.success) {
           setSummary(data.summary)
         }
-      } catch (error) {
-        console.error('Failed to load daily summary:', error)
+      } catch (err) {
+        console.error('Failed to load daily summary:', err)
+        setError('Не удалось загрузить сводку')
       } finally {
         setIsLoading(false)
       }
@@ -103,14 +107,37 @@ export function DailySummaryScreen() {
           </Button>
           <h1 className="text-xl font-bold">Дневная сводка</h1>
         </div>
-        <div className="text-center py-8 text-muted-foreground">
-          Загрузка...
+        <DatePicker />
+        {/* Loading skeleton */}
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Card className="bg-card/50 backdrop-blur animate-pulse">
+              <CardContent className="pt-4">
+                <div className="h-4 bg-muted rounded w-1/2 mb-2" />
+                <div className="h-6 bg-muted rounded w-2/3" />
+              </CardContent>
+            </Card>
+            <Card className="bg-card/50 backdrop-blur animate-pulse">
+              <CardContent className="pt-4">
+                <div className="h-4 bg-muted rounded w-1/2 mb-2" />
+                <div className="h-6 bg-muted rounded w-2/3" />
+              </CardContent>
+            </Card>
+          </div>
+          {[1, 2, 3].map(i => (
+            <Card key={i} className="bg-card/50 backdrop-blur animate-pulse">
+              <CardContent className="pt-4">
+                <div className="h-4 bg-muted rounded w-1/3 mb-3" />
+                <div className="h-8 bg-muted rounded w-full" />
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     )
   }
 
-  if (!summary) {
+  if (!summary || error) {
     return (
       <div className="flex flex-col gap-4 pb-20">
         <div className="flex items-center gap-3">
@@ -119,10 +146,22 @@ export function DailySummaryScreen() {
           </Button>
           <h1 className="text-xl font-bold">Дневная сводка</h1>
         </div>
+        <DatePicker />
         <Card className="bg-card/50 backdrop-blur">
           <CardContent className="pt-6 text-center">
-            <Calendar className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
-            <p className="text-muted-foreground">Нет данных за этот день</p>
+            {error ? (
+              <>
+                <p className="text-red-400 mb-4">{error}</p>
+                <Button onClick={() => window.location.reload()}>
+                  Повторить
+                </Button>
+              </>
+            ) : (
+              <>
+                <Calendar className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+                <p className="text-muted-foreground">Нет данных за этот день</p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

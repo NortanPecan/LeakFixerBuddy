@@ -57,15 +57,13 @@ const ZONE_COLORS: Record<string, string> = {
 }
 
 export function TasksScreen() {
-  const { user, setScreen } = useAppStore()
+  const { user, setScreen, selectedDate, selectedDateObj } = useAppStore()
   const [tasks, setTasks] = useState<Task[]>([])
   const [noDateTasks, setNoDateTasks] = useState<Task[]>([])
   const [chains, setChains] = useState<Chain[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const today = new Date()
-    return today.toISOString().split('T')[0]
-  })
+  const [error, setError] = useState<string | null>(null)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
   const [dateMode, setDateMode] = useState<'today' | 'tomorrow' | 'custom'>('today')
 
   // Format date for display
@@ -81,14 +79,25 @@ export function TasksScreen() {
     return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
   }
 
+  // Sync dateMode with selectedDate from store
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0]
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
+    if (selectedDate === today) setDateMode('today')
+    else if (selectedDate === tomorrow) setDateMode('tomorrow')
+    else setDateMode('custom')
+  }, [selectedDate])
+
   // Load data
   useEffect(() => {
     const loadData = async () => {
       if (!user?.id) return
       setIsLoading(true)
+      setError(null)
       try {
         // Load tasks for selected date
         const tasksResponse = await fetch(`/api/tasks?userId=${user.id}&date=${selectedDate}`)
+        if (!tasksResponse.ok) throw new Error('Failed to load tasks')
         const tasksData = await tasksResponse.json()
         setTasks(tasksData.tasks || [])
 
@@ -101,8 +110,9 @@ export function TasksScreen() {
         const chainsResponse = await fetch(`/api/chains?userId=${user.id}`)
         const chainsData = await chainsResponse.json()
         setChains(chainsData.chains || [])
-      } catch (error) {
-        console.error('Failed to load data:', error)
+      } catch (err) {
+        console.error('Failed to load data:', err)
+        setError('Не удалось загрузить задачи')
       } finally {
         setIsLoading(false)
       }
@@ -111,23 +121,23 @@ export function TasksScreen() {
   }, [user?.id, selectedDate])
 
   // Handle date change
+  const { goToToday, goToNextDay } = useAppStore()
   const handleDateChange = (mode: 'today' | 'tomorrow' | 'custom') => {
-    setDateMode(mode)
-    const today = new Date()
     if (mode === 'today') {
-      setSelectedDate(today.toISOString().split('T')[0])
+      goToToday()
     } else if (mode === 'tomorrow') {
-      const tomorrow = new Date(today)
-      tomorrow.setDate(tomorrow.getDate() + 1)
-      setSelectedDate(tomorrow.toISOString().split('T')[0])
+      goToToday()
+      goToNextDay()
     }
+    // custom mode just keeps current selectedDate
   }
 
   // Toggle task completion
   const handleToggleTask = async (task: Task, completed: boolean) => {
+    setTogglingId(task.id)
     try {
       const today = new Date().toISOString().split('T')[0]
-      await fetch('/api/tasks', {
+      const response = await fetch('/api/tasks', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -136,13 +146,16 @@ export function TasksScreen() {
           date: completed ? today : task.date
         })
       })
+      if (!response.ok) throw new Error('Failed to toggle')
 
       // Update local state
       setTasks(prev => prev.map(t =>
         t.id === task.id ? { ...t, status: completed ? 'done' : 'todo' } : t
       ))
-    } catch (error) {
-      console.error('Failed to toggle task:', error)
+    } catch (err) {
+      console.error('Failed to toggle task:', err)
+    } finally {
+      setTogglingId(null)
     }
   }
 
@@ -197,6 +210,39 @@ export function TasksScreen() {
         ))}
       </div>
 
+      {/* Error state */}
+      {error && (
+        <Card className="bg-red-500/10 border-red-500/30">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <p className="text-red-400">{error}</p>
+              <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
+                Повторить
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Loading skeleton */}
+      {isLoading && (
+        <div className="space-y-2">
+          {[1, 2, 3].map(i => (
+            <Card key={i} className="bg-card/50 backdrop-blur animate-pulse">
+              <CardContent className="pt-3 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-muted" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-muted rounded w-2/3" />
+                    <div className="h-3 bg-muted rounded w-1/3" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
       {/* Today's tasks */}
       {!isLoading && todayTodoTasks.length > 0 && (
         <div className="space-y-2">
@@ -211,6 +257,7 @@ export function TasksScreen() {
               key={task.id}
               task={task}
               onToggle={handleToggleTask}
+              togglingId={togglingId}
             />
           ))}
         </div>
@@ -230,6 +277,7 @@ export function TasksScreen() {
                 task={task}
                 onToggle={handleToggleTask}
                 isCompleted
+                togglingId={togglingId}
               />
             ))}
           </div>
@@ -248,6 +296,7 @@ export function TasksScreen() {
               key={task.id}
               task={task}
               onToggle={handleToggleTask}
+              togglingId={togglingId}
             />
           ))}
         </div>
@@ -333,13 +382,16 @@ export function TasksScreen() {
 function TaskCard({
   task,
   onToggle,
-  isCompleted = false
+  isCompleted = false,
+  togglingId
 }: {
   task: Task
   onToggle: (task: Task, completed: boolean) => void
   isCompleted?: boolean
+  togglingId: string | null
 }) {
   const zoneColor = task.zone ? ZONE_COLORS[task.zone] || ZONE_COLORS.default : null
+  const isToggling = togglingId === task.id
 
   return (
     <Card className={`bg-card/50 backdrop-blur cursor-pointer transition-all hover:bg-card/70 ${
@@ -353,13 +405,18 @@ function TaskCard({
               isCompleted
                 ? 'bg-emerald-500 text-white'
                 : 'bg-muted hover:bg-muted/70'
-            }`}
+            } ${isToggling ? 'opacity-50' : ''}`}
             onClick={(e) => {
               e.stopPropagation()
-              onToggle(task, !isCompleted)
+              if (!isToggling) {
+                onToggle(task, !isCompleted)
+              }
             }}
+            disabled={isToggling}
           >
-            {isCompleted ? (
+            {isToggling ? (
+              <div className="w-4 h-4 border-2 border-muted-foreground border-t-transparent rounded-full animate-spin" />
+            ) : isCompleted ? (
               <CheckCircle2 className="w-4 h-4" />
             ) : (
               <Circle className="w-4 h-4 text-muted-foreground" />

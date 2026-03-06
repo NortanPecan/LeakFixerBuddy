@@ -799,3 +799,59 @@ Stage Summary:
    - **Stale data:** При переключении между экранами данные могут устареть
    - **Concurrent updates:** Два таба редактируют один день
    - **Network errors:** Нет retry логики при ошибках API
+
+---
+Task ID: 18
+Agent: Main Agent
+Task: Polish UI - Add loading skeletons, error states, and toggle loading indicators for Rituals, DailySummary, Tasks, Challenges screens
+
+Work Log:
+- RitualsScreen improvements:
+  - Fixed preset reload bug: changed `data.rituals` to `data.todayRituals`
+  - Added error state with retry button
+  - Added loading skeleton (3 cards with animate-pulse)
+  - Added toggle loading indicator (spinner while API call in progress)
+  - Added togglingId state to prevent double-clicks during API call
+- DailySummaryScreen improvements:
+  - Added error state with retry button
+  - Added loading skeleton (grid + 3 cards)
+  - Improved empty state to also handle errors
+- TasksScreen improvements:
+  - Fixed to use store's selectedDate instead of local state
+  - Added error state with retry button
+  - Added loading skeleton (3 cards)
+  - Added toggle loading indicator with spinner
+  - Added togglingId state to prevent double-clicks
+  - Fixed dateMode sync with store selectedDate
+- ChallengesScreen improvements:
+  - Added error state with retry button
+  - Added loading skeleton (3 cards)
+- Verified all APIs working with dev log (200 responses)
+
+Stage Summary:
+- All screens now have proper loading states (skeletons)
+- All screens now have error states with retry functionality
+- All toggle buttons show loading spinner during API calls
+- TasksScreen now properly uses store's selectedDate for date navigation
+- All blocks are visually polished and ready for daily use
+
+Рекомендации и улучшения:
+
+1. **Критичные для юзабилити сейчас:**
+   - ✅ ИСПРАВЛЕНО: preset reload bug в RitualsScreen
+   - ✅ ИСПРАВЛЕНО: Loading skeleton на всех экранах
+   - ✅ ИСПРАВЛЕНО: Error state с retry на всех экранах
+   - ✅ ИСПРАВЛЕНО: Toggle loading indicator
+   - ⏳ ОСТАЁТСЯ: Toast-уведомления при сохранении (требует toaster setup)
+   - ⏳ ОСТАЁТСЯ: Optimistic updates для toggle (улучшит UX, но не критично)
+
+2. **Желательные улучшения UX:**
+   - Swipe gestures для переключения дней (nice-to-have)
+   - Haptic feedback при toggle (только на мобильных)
+   - Pull-to-refresh (nice-to-have)
+   - Streak display в списке ритуалов
+
+3. **Потенциальные риски:**
+   - **Toast notifications:** Нужно добавить toaster в layout
+   - **Optimistic updates:** Может создать рассинхрон при ошибках
+   - **Caching:** Данные могут устаревать при переключении экранов

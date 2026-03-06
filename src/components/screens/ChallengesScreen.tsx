@@ -67,6 +67,7 @@ export function ChallengesScreen() {
   const { user, setScreen, setSelectedContentId } = useAppStore()
   const [challenges, setChallenges] = useState<Challenge[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [filter, setFilter] = useState<'active' | 'completed' | 'all'>('active')
   
@@ -89,15 +90,18 @@ export function ChallengesScreen() {
       if (!user?.id) return
       
       setLoading(true)
+      setError(null)
       try {
         const status = filter === 'all' ? '' : `&status=${filter}`
         const res = await fetch(`/api/challenges?userId=${user.id}${status}`)
+        if (!res.ok) throw new Error('Failed to load challenges')
         const data = await res.json()
         if (data.success) {
           setChallenges(data.challenges)
         }
-      } catch (error) {
-        console.error('Failed to load challenges:', error)
+      } catch (err) {
+        console.error('Failed to load challenges:', err)
+        setError('Не удалось загрузить челенджи')
       } finally {
         setLoading(false)
       }
@@ -190,8 +194,21 @@ export function ChallengesScreen() {
     return (
       <div className="flex flex-col gap-4 pb-20">
         <h1 className="text-2xl font-bold text-foreground">Челенджи</h1>
-        <div className="text-center py-8 text-muted-foreground">
-          Загрузка...
+        {/* Loading skeleton */}
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => (
+            <Card key={i} className="bg-card/50 backdrop-blur animate-pulse">
+              <CardContent className="pt-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-muted" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-muted rounded w-2/3" />
+                    <div className="h-3 bg-muted rounded w-1/2" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     )
@@ -227,6 +244,20 @@ export function ChallengesScreen() {
           Завершённые ({completedChallenges.length})
         </Button>
       </div>
+
+      {/* Error state */}
+      {error && (
+        <Card className="bg-red-500/10 border-red-500/30">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <p className="text-red-400">{error}</p>
+              <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
+                Повторить
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Challenges list */}
       {challenges.length === 0 ? (

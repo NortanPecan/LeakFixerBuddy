@@ -51,6 +51,8 @@ export function RitualsScreen() {
   const [isApplying, setIsApplying] = useState(false)
   const [selectedRitual, setSelectedRitual] = useState<Ritual | null>(null)
   const [showDetail, setShowDetail] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
 
   // Stats from API
   const [stats, setStats] = useState({
@@ -64,8 +66,10 @@ export function RitualsScreen() {
     const loadRituals = async () => {
       if (!user?.id) return
       setIsLoading(true)
+      setError(null)
       try {
         const response = await fetch(`/api/rituals?userId=${user.id}&date=${selectedDate}`)
+        if (!response.ok) throw new Error('Failed to load rituals')
         const data = await response.json()
         
         // Use data from API directly
@@ -78,8 +82,9 @@ export function RitualsScreen() {
           setShowPresetModal(true)
         }
         setPresetChecked(true)
-      } catch (error) {
-        console.error('Failed to load rituals:', error)
+      } catch (err) {
+        console.error('Failed to load rituals:', err)
+        setError('Не удалось загрузить ритуалы')
       } finally {
         setIsLoading(false)
       }
@@ -89,8 +94,9 @@ export function RitualsScreen() {
 
   // Toggle ritual completion
   const handleToggleComplete = async (ritual: Ritual, completed: boolean) => {
+    setTogglingId(ritual.id)
     try {
-      await fetch('/api/rituals/complete', {
+      const response = await fetch('/api/rituals/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -100,6 +106,7 @@ export function RitualsScreen() {
           completed
         })
       })
+      if (!response.ok) throw new Error('Failed to toggle')
 
       // Update local state
       setRituals(prev => prev.map(r => 
@@ -116,8 +123,10 @@ export function RitualsScreen() {
           ? Math.round(((completed ? prev.completed + 1 : prev.completed - 1) / prev.total) * 100)
           : 0
       }))
-    } catch (error) {
-      console.error('Failed to toggle ritual:', error)
+    } catch (err) {
+      console.error('Failed to toggle ritual:', err)
+    } finally {
+      setTogglingId(null)
     }
   }
 
@@ -137,7 +146,8 @@ export function RitualsScreen() {
         // Reload rituals
         const ritualsResponse = await fetch(`/api/rituals?userId=${user.id}&date=${selectedDate}`)
         const ritualsData = await ritualsResponse.json()
-        setRituals(ritualsData.rituals || [])
+        setRituals(ritualsData.todayRituals || [])
+        setStats(ritualsData.stats || { total: 0, completed: 0, percentage: 0 })
       }
     } catch (error) {
       console.error('Failed to apply preset:', error)
@@ -190,6 +200,39 @@ export function RitualsScreen() {
 
       {/* Date Picker */}
       <DatePicker variant="compact" />
+
+      {/* Error state */}
+      {error && (
+        <Card className="bg-red-500/10 border-red-500/30">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <p className="text-red-400">{error}</p>
+              <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
+                Повторить
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Loading skeleton */}
+      {isLoading && (
+        <div className="space-y-2">
+          {[1, 2, 3].map(i => (
+            <Card key={i} className="bg-card/50 backdrop-blur animate-pulse">
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-muted" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-muted rounded w-2/3" />
+                    <div className="h-3 bg-muted rounded w-1/2" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* Progress for selected day */}
       {!isLoading && stats.total > 0 && (
@@ -281,13 +324,18 @@ export function RitualsScreen() {
                                 (ritual as Ritual & { completedToday?: boolean }).completedToday
                                   ? 'bg-emerald-500 text-white'
                                   : 'bg-muted hover:bg-muted/70'
-                              }`}
+                              } ${togglingId === ritual.id ? 'opacity-50' : ''}`}
                               onClick={(e) => {
                                 e.stopPropagation()
-                                handleToggleComplete(ritual, !(ritual as Ritual & { completedToday?: boolean }).completedToday)
+                                if (togglingId !== ritual.id) {
+                                  handleToggleComplete(ritual, !(ritual as Ritual & { completedToday?: boolean }).completedToday)
+                                }
                               }}
+                              disabled={togglingId === ritual.id}
                             >
-                              {(ritual as Ritual & { completedToday?: boolean }).completedToday ? (
+                              {togglingId === ritual.id ? (
+                                <div className="w-5 h-5 border-2 border-muted-foreground border-t-transparent rounded-full animate-spin" />
+                              ) : (ritual as Ritual & { completedToday?: boolean }).completedToday ? (
                                 <CheckCircle2 className="w-5 h-5" />
                               ) : (
                                 <Circle className="w-5 h-5 text-muted-foreground" />
