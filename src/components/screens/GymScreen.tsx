@@ -23,7 +23,12 @@ import {
   ArrowRight,
   Trash2,
   Edit3,
-  Weight
+  Weight,
+  Coffee,
+  GripVertical,
+  SkipForward,
+  CalendarClock,
+  Sparkles
 } from 'lucide-react'
 import {
   Dialog,
@@ -112,6 +117,85 @@ const EXERCISE_DATABASE: Record<string, string[]> = {
   core: ['Скручивания', 'Планка', 'Подъём ног', 'Русский твист', 'Боковая планка', 'Уголок'],
 }
 
+// Workout templates for quick setup
+const WORKOUT_TEMPLATES = [
+  {
+    id: 'upper_lower_6',
+    name: 'Верх/Низ (4 за 6)',
+    description: 'Верх, Низ, Отдых, Отдых, Верх, Низ',
+    cycleLength: 6,
+    workoutsPerCycle: 4,
+    splitType: 'upper_lower',
+    daySchedule: [
+      { type: 'workout' as const, workoutNum: 1, name: 'Верх 1', muscleGroups: ['chest', 'back', 'shoulders'] },
+      { type: 'workout' as const, workoutNum: 2, name: 'Низ 1', muscleGroups: ['legs'] },
+      { type: 'rest' as const },
+      { type: 'rest' as const },
+      { type: 'workout' as const, workoutNum: 3, name: 'Верх 2', muscleGroups: ['chest', 'back', 'shoulders'] },
+      { type: 'workout' as const, workoutNum: 4, name: 'Низ 2', muscleGroups: ['legs'] },
+    ],
+  },
+  {
+    id: 'ppl_6',
+    name: 'PPL (3 за 6)',
+    description: 'Push, Pull, Legs, Отдых × 3',
+    cycleLength: 6,
+    workoutsPerCycle: 3,
+    splitType: 'ppl',
+    daySchedule: [
+      { type: 'workout' as const, workoutNum: 1, name: 'Push', muscleGroups: ['chest', 'shoulders', 'triceps'] },
+      { type: 'workout' as const, workoutNum: 2, name: 'Pull', muscleGroups: ['back', 'biceps'] },
+      { type: 'workout' as const, workoutNum: 3, name: 'Legs', muscleGroups: ['legs'] },
+      { type: 'rest' as const },
+      { type: 'rest' as const },
+      { type: 'rest' as const },
+    ],
+  },
+  {
+    id: 'split_7',
+    name: 'Классический сплит (4 за 7)',
+    description: 'Грудь, Спина, Ноги, Отдых, Плечи, Отдых, Отдых',
+    cycleLength: 7,
+    workoutsPerCycle: 4,
+    splitType: 'split',
+    daySchedule: [
+      { type: 'workout' as const, workoutNum: 1, name: 'Грудь + Трицепс', muscleGroups: ['chest', 'triceps'] },
+      { type: 'workout' as const, workoutNum: 2, name: 'Спина + Бицепс', muscleGroups: ['back', 'biceps'] },
+      { type: 'workout' as const, workoutNum: 3, name: 'Ноги', muscleGroups: ['legs'] },
+      { type: 'rest' as const },
+      { type: 'workout' as const, workoutNum: 4, name: 'Плечи + Пресс', muscleGroups: ['shoulders', 'core'] },
+      { type: 'rest' as const },
+      { type: 'rest' as const },
+    ],
+  },
+  {
+    id: 'fullbody_7',
+    name: 'Фулбоди (3 за 7)',
+    description: 'Пн/Ср/Пт — всё тело, остальные отдых',
+    cycleLength: 7,
+    workoutsPerCycle: 3,
+    splitType: 'fullbody',
+    daySchedule: [
+      { type: 'workout' as const, workoutNum: 1, name: 'Фулбоди 1', muscleGroups: ['chest', 'back', 'legs'] },
+      { type: 'rest' as const },
+      { type: 'workout' as const, workoutNum: 2, name: 'Фулбоди 2', muscleGroups: ['shoulders', 'legs', 'core'] },
+      { type: 'rest' as const },
+      { type: 'workout' as const, workoutNum: 3, name: 'Фулбоди 3', muscleGroups: ['chest', 'back', 'legs'] },
+      { type: 'rest' as const },
+      { type: 'rest' as const },
+    ],
+  },
+]
+
+// Day schedule item type
+interface DayScheduleItem {
+  type: 'workout' | 'rest'
+  dayNum: number
+  workoutNum?: number
+  name?: string
+  muscleGroups?: string[]
+}
+
 // Workout day config for wizard
 interface WorkoutDayConfig {
   dayNum: number
@@ -139,6 +223,15 @@ export function GymScreen() {
     splitType: 'split',
   })
   const [workoutDays, setWorkoutDays] = useState<WorkoutDayConfig[]>([])
+  
+  // Day schedule for wizard step 3
+  const [daySchedule, setDaySchedule] = useState<DayScheduleItem[]>([])
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  
+  // Parsed day schedule for display
+  const [parsedDaySchedule, setParsedDaySchedule] = useState<DayScheduleItem[]>([])
   
   // Workout detail
   const [selectedWorkout, setSelectedWorkout] = useState<GymWorkout | null>(null)
@@ -203,6 +296,187 @@ export function GymScreen() {
     loadWorkouts()
   }, [activePeriod?.id])
 
+  // Parse day schedule when activePeriod changes
+  useEffect(() => {
+    if (activePeriod?.daySchedule) {
+      try {
+        const schedule = typeof activePeriod.daySchedule === 'string'
+          ? JSON.parse(activePeriod.daySchedule)
+          : activePeriod.daySchedule
+        setParsedDaySchedule(schedule)
+      } catch {
+        setParsedDaySchedule([])
+      }
+    } else {
+      setParsedDaySchedule([])
+    }
+  }, [activePeriod?.daySchedule])
+
+  // Initialize workout days when wizard config changes
+  useEffect(() => {
+    if (wizardStep === 2 && workoutDays.length === 0) {
+      const days: WorkoutDayConfig[] = []
+      for (let i = 1; i <= wizardConfig.workoutsPerCycle; i++) {
+        days.push({
+          dayNum: i,
+          muscles: [],
+          name: getWorkoutName(wizardConfig.splitType, i),
+        })
+      }
+      setWorkoutDays(days)
+    }
+    
+    // Initialize day schedule when entering step 3
+    if (wizardStep === 3 && daySchedule.length === 0) {
+      const schedule = generateInitialSchedule(wizardConfig.cycleLength, wizardConfig.workoutsPerCycle)
+      setDaySchedule(schedule)
+    }
+  }, [wizardStep, wizardConfig.cycleLength, wizardConfig.workoutsPerCycle, wizardConfig.splitType, workoutDays.length, daySchedule.length])
+
+  // Generate initial schedule with even distribution
+  const generateInitialSchedule = (cycleLen: number, workoutsCount: number): DayScheduleItem[] => {
+    const schedule: DayScheduleItem[] = []
+    const workoutPositions: number[] = []
+    
+    for (let i = 0; i < workoutsCount; i++) {
+      workoutPositions.push(Math.floor((i * cycleLen) / workoutsCount) + 1)
+    }
+    
+    for (let dayNum = 1; dayNum <= cycleLen; dayNum++) {
+      if (workoutPositions.includes(dayNum)) {
+        const workoutNum = workoutPositions.indexOf(dayNum) + 1
+        schedule.push({
+          type: 'workout',
+          dayNum,
+          workoutNum
+        })
+      } else {
+        schedule.push({
+          type: 'rest',
+          dayNum
+        })
+      }
+    }
+    return schedule
+  }
+
+  // Apply template
+  const applyTemplate = (templateId: string) => {
+    const template = WORKOUT_TEMPLATES.find(t => t.id === templateId)
+    if (!template) return
+    
+    setSelectedTemplate(templateId)
+    setWizardConfig(prev => ({
+      ...prev,
+      cycleLength: template.cycleLength,
+      workoutsPerCycle: template.workoutsPerCycle,
+      splitType: template.splitType,
+    }))
+    
+    // Set workout days
+    const days: WorkoutDayConfig[] = template.daySchedule
+      .filter(d => d.type === 'workout')
+      .map((d, idx) => ({
+        dayNum: idx + 1,
+        muscles: d.muscleGroups || [],
+        name: d.name || `Тренировка ${idx + 1}`,
+      }))
+    setWorkoutDays(days)
+    
+    // Set day schedule
+    const schedule: DayScheduleItem[] = template.daySchedule.map((item, idx) => ({
+      ...item,
+      dayNum: idx + 1,
+    }))
+    setDaySchedule(schedule)
+  }
+
+  // Drag and drop handlers
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index)
+  }
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    setDragOverIndex(index)
+  }
+
+  const handleDragEnd = () => {
+    if (draggedIndex !== null && dragOverIndex !== null && draggedIndex !== dragOverIndex) {
+      const newSchedule = [...daySchedule]
+      const [draggedItem] = newSchedule.splice(draggedIndex, 1)
+      newSchedule.splice(dragOverIndex, 0, draggedItem)
+      
+      // Update dayNum to match new positions
+      newSchedule.forEach((item, idx) => {
+        item.dayNum = idx + 1
+      })
+      
+      setDaySchedule(newSchedule)
+    }
+    setDraggedIndex(null)
+    setDragOverIndex(null)
+  }
+
+  // Skip workout - shift all future workouts by 1 day
+  const handleSkipWorkout = async () => {
+    if (!selectedWorkout || !activePeriod) return
+    
+    try {
+      const response = await fetch('/api/gym/workouts/skip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          workoutId: selectedWorkout.id,
+          periodId: activePeriod.id 
+        }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        // Refresh workouts
+        setShowWorkoutDetail(false)
+        // Reload workouts
+        const workoutsResponse = await fetch(`/api/gym/workouts?periodId=${activePeriod.id}`)
+        const workoutsData = await workoutsResponse.json()
+        setWorkouts(workoutsData.workouts || [])
+      }
+    } catch (error) {
+      console.error('Failed to skip workout:', error)
+    }
+  }
+
+  // Reschedule workout
+  const [rescheduleDate, setRescheduleDate] = useState('')
+  const [showReschedule, setShowReschedule] = useState(false)
+
+  const handleRescheduleWorkout = async () => {
+    if (!selectedWorkout || !activePeriod || !rescheduleDate) return
+    
+    try {
+      const response = await fetch('/api/gym/workouts/reschedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          workoutId: selectedWorkout.id,
+          periodId: activePeriod.id,
+          newDate: rescheduleDate 
+        }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        setShowReschedule(false)
+        setShowWorkoutDetail(false)
+        setRescheduleDate('')
+        // Reload workouts
+        const workoutsResponse = await fetch(`/api/gym/workouts?periodId=${activePeriod.id}`)
+        const workoutsData = await workoutsResponse.json()
+        setWorkouts(workoutsData.workouts || [])
+      }
+    } catch (error) {
+      console.error('Failed to reschedule workout:', error)
+    }
+  }
+
   // Initialize workout days when wizard config changes
   useEffect(() => {
     if (wizardStep === 2 && workoutDays.length === 0) {
@@ -225,6 +499,20 @@ export function GymScreen() {
     const name = wizardConfig.type === 'custom' ? wizardConfig.customName : 
                  TRAINING_TYPES.find(t => t.value === wizardConfig.type)?.label || 'Период'
 
+    // Build final day schedule with names and muscles from workoutDays
+    const finalSchedule = daySchedule.map((item, idx) => {
+      if (item.type === 'workout' && item.workoutNum) {
+        const dayConfig = workoutDays.find(d => d.dayNum === item.workoutNum)
+        return {
+          ...item,
+          dayNum: idx + 1,
+          name: dayConfig?.name || `Тренировка ${item.workoutNum}`,
+          muscleGroups: dayConfig?.muscles || []
+        }
+      }
+      return { ...item, dayNum: idx + 1 }
+    })
+
     try {
       const response = await fetch('/api/gym', {
         method: 'POST',
@@ -241,6 +529,7 @@ export function GymScreen() {
             name: d.name,
             muscleGroups: d.muscles,
           })),
+          daySchedule: finalSchedule, // Send the complete schedule
         }),
       })
       const data = await response.json()
@@ -266,6 +555,8 @@ export function GymScreen() {
       splitType: 'split',
     })
     setWorkoutDays([])
+    setDaySchedule([])
+    setSelectedTemplate(null)
   }
 
   // Complete workout
