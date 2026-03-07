@@ -147,3 +147,105 @@
 **Файлы созданы/изменены:**
 - `docs/ai-git-rules.md` — новый файл с правилами
 - `README.md` — добавлена ссылка на правила
+
+---
+
+## Task ID: DEV-SERVER-SETUP
+## Agent: GLM-5 (Senior Engineer)
+## Task: Запуск dev-сервера и Preview в песочнице
+
+---
+
+### Work Log:
+
+1. **Проверка git-состояния**
+   - Выполнен clone из `https://github.com/NortanPecan/LeakFixerBuddy.git` в `/home/z/my-project`
+   - Ветка: `master` ✅
+   - Origin: `https://github.com/NortanPecan/LeakFixerBuddy.git` ✅
+   - Working tree clean ✅
+
+2. **Проблема: отсутствовал .env файл**
+   - После clone не было файла `.env`
+   - Создан `.env` из `.env.example`:
+     ```env
+     DATABASE_URL="file:./db/custom.db"
+     DEMO_MODE="true"
+     ```
+
+3. **Установка зависимостей**
+   - `bun install` — успешно
+   - `bun run db:push` — БД инициализирована
+
+4. **Проблема: dev-сервер не запускался автоматически**
+   - После замены содержимого `/home/z/my-project` система автозапуска не перезагрузилась
+   - Решение: запущен `bun run dev` в фоновом режиме
+
+5. **Предупреждение Prisma (некритичное)**
+   - В `src/app/api/auth/route.ts` функция `telegramIdCandidates` генерирует `BigInt` как кандидат
+   - Prisma ожидает `String`, получает `BigInt` → ошибка в логах
+   - Код обрабатывает ошибку и продолжает работу → приложение работает
+   - **Статус:** Warning, не ломает функциональность
+
+6. **Проверка gateway (Caddy)**
+   - Caddy запущен на порту 81 ✅
+   - Next.js на порту 3000 ✅
+   - Проксирование работает ✅
+
+---
+
+### Stage Summary:
+
+**Проблемы и решения:**
+| Проблема | Решение |
+|----------|---------|
+| Нет .env файла | Создан из .env.example |
+| Dev-сервер не стартовал автоматически | Запущен `bun run dev` в фоне |
+| Prisma warning (BigInt vs String) | Некритично, код обрабатывает |
+
+**Финальный статус:**
+- ✅ Dev-сервер запущен на порту 3000
+- ✅ Caddy gateway на порту 81
+- ✅ `curl localhost:3000` → 200
+- ✅ Приложение загружается (auth, API работают)
+
+**Команда для проверки:**
+```bash
+ps aux | grep -E "(next|bun)" | grep -v grep
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000
+```
+
+**Файлы изменены:**
+- `.env` — создан из `.env.example`
+
+**Примечание:**
+Preview Panel справа должен показывать приложение. Если не видите — попробуйте обновить страницу или нажать "Open in New Tab".
+
+---
+
+## Task ID: SANITY-CHECK-PROTOCOL
+## Agent: GLM-5 (Senior Engineer)
+## Task: Добавление протокола sanity-check в конституцию
+
+---
+
+### Work Log:
+
+1. **Добавлен раздел 8 в `docs/ai-git-rules.md`**
+   - Заголовок: "Sanity-check перед работой над модулями (GYM, Skills, Traits, Export)"
+   - Содержание:
+     - Проверка dev-сервера (`curl` → 200)
+     - Проверка Preview
+     - Протокол при ошибках: зафиксировать → описать → исправить
+   - Цель: запрет на хаотичный рефакторинг без проверки инфраструктуры
+
+---
+
+### Stage Summary:
+
+**Файлы изменены:**
+- `docs/ai-git-rules.md` — добавлен раздел 8
+
+**Теперь перед любым этапом GYM v1.2 я обязан:**
+1. Проверить dev-сервер
+2. Проверить Preview
+3. Зафиксировать ошибки в worklog.md до внесения изменений
