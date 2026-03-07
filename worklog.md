@@ -684,6 +684,49 @@ src/components/screens/GymScreen.tsx  # Весь UI GYM-модуля (~2000 ст
 **Изменённые файлы:**
 - `prisma/schema.prisma`
 
+**Git commit:** `aa1001f`
+**Push:** `master → master` (4436f86..aa1001f)
+
+---
+
+## Task ID: GYM-v1.2-FRONTEND
+## Agent: GLM-5 (Senior Engineer)
+## Task: Frontend для GYM v1.2 (F4 — блок "GYM сегодня")
+
+---
+
+### Work Log:
+
+1. **F4: Добавлен блок "GYM сегодня"**
+   - Новый state `todayData` для хранения данных `/api/gym/today`
+   - Новый `useEffect` + `loadTodayData()` для загрузки
+   - UI: Card с заголовком "GYM сегодня", циклом, названием тренировки
+   - Упражнения в формате: `{name} {weight}х{scheme}({nextWeight})`
+   - Кнопка "Начать" для открытия деталей тренировки
+
+2. **Типы данных**
+   - Добавлен интерфейс для todayData с period, todayWorkout, exercises
+
+---
+
+### Stage Summary:
+
+**Реализованные Frontend-задачи:**
+
+| # | Задача | Статус |
+|---|--------|-------|
+| F4 | Блок "GYM сегодня" | ✅ Done |
+| F2 | Карточка дня (новый формат) | 🔲 Pending |
+| F5 | Пост-тренировочный диалог | 🔲 Pending |
+| F3 | Карточка упражнения | 🔲 Pending |
+| F6 | Доп. активности | 🔲 Pending |
+| F1 | Карточка периода | 🔲 Pending |
+| F7 | Разовые силовые | 🔲 Pending |
+| F8 | Аналитика | 🔲 Pending |
+
+**Файлы изменены:**
+- `src/components/screens/GymScreen.tsx` — добавлен блок "GYM сегодня"
+
 ---
 
 ## Task ID: GYM-v1.2
@@ -773,3 +816,75 @@ src/components/screens/GymScreen.tsx  # Весь UI GYM-модуля (~2000 ст
 - `src/components/screens/GymScreen.tsx` — новые диалоги и функции
 - `src/app/api/gym/workouts/route.ts` — добавлен POST
 - `src/app/api/gym/workouts/reschedule/route.ts` — добавлен shiftCycle
+
+---
+
+## Task ID: GYM-v1.2-FRONTEND-F2-F5
+## Agent: GLM-5 (Senior Engineer)
+## Task: Frontend F2 (карточка дня) и F5 (пост-тренировочный диалог)
+
+---
+
+### Work Log:
+
+1. **Обновлены интерфейсы TypeScript**
+   - `GymExercise`: добавлены поля `templateId`, `repsScheme`, `nextWeight`, `template`
+   - `GymWorkout`: добавлены поля `status`, `wellbeing`, `wellbeingNote`, `additionalActivities`
+   - Создан интерфейс `AdditionalActivity` для доп. активностей
+
+2. **F2: Карточка тренировочного дня**
+   - Добавлен бейдж статуса: Запланирована/Выполнена/Пропущена/Перенесена
+   - Добавлена информация о периоде и цикле в заголовок диалога
+   - Упражнения отображаются в новом формате: `{name} {weight}х{scheme}({nextWeight})`
+   - Добавлен индикатор прогресса подходов: `completedSets/totalSets`
+   - Добавлен блок доп. активностей (ходьба, пресс, планка, велосипед)
+
+3. **F5: Пост-тренировочный диалог**
+   - Добавлен новый диалог `showPostWorkoutDialog`
+   - Для каждого упражнения: три кнопки Легко/Норм/Тяжело
+   - Превью следующего веса при выборе сложности
+   - Логика: Легко → +step, Норм → без изменений, Тяжело → -step
+   - Блок добавления доп. активностей
+   - Сохранение через POST `/api/gym/today`
+
+4. **Новые состояния**
+   - `showPostWorkoutDialog` — показ диалога
+   - `exerciseRatings` — Record<exerciseId, 'easy'|'normal'|'hard'>
+   - `editingActivities` — массив AdditionalActivity
+   - `newActivityType`, `newActivityValue` — для ввода новых активностей
+
+5. **Новая функция finalizeWorkout**
+   - Подготовка данных упражнений с обновлёнными весами
+   - Отправка на API
+   - Обновление UI
+
+---
+
+### Stage Summary:
+
+**Реализованные Frontend-задачи:**
+
+| # | Задача | Статус |
+|---|--------|-------|
+| F2 | Карточка дня с новым форматом | ✅ Done |
+| F5 | Пост-тренировочный диалог | ✅ Done |
+
+**Формат упражнения:**
+```
+Жим гантелей 22.5х12х4(25)
+│              │  │  │  └── nextWeight
+│              │  │  └── подходы
+│              │  └── повторения
+│              └── текущий вес
+└── название
+```
+
+**Логика изменения веса:**
+- 😊 Легко → +2.5 кг (или шаг из шаблона)
+- 😐 Норм → без изменений
+- 😫 Тяжело → -2.5 кг (или шаг из шаблона)
+
+**Файлы изменены:**
+- `src/components/screens/GymScreen.tsx`
+
+---

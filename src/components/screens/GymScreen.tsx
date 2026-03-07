@@ -65,6 +65,18 @@ interface GymExercise {
   muscleGroup?: string
   order: number
   sets: GymExerciseSet[]
+  templateId?: string
+  repsScheme?: string
+  nextWeight?: number
+  template?: {
+    id: string
+    name: string
+    currentWeight?: number
+    nextWeight?: number
+    defaultScheme?: string
+    progressionStep?: number
+    techniqueNotes?: string
+  }
 }
 
 interface GymWorkout {
@@ -78,6 +90,17 @@ interface GymWorkout {
   completed: boolean
   exercises?: GymExercise[]
   skipped?: boolean
+  status?: 'planned' | 'completed' | 'skipped' | 'rescheduled'
+  wellbeing?: number
+  wellbeingNote?: string
+  additionalActivities?: AdditionalActivity[]
+}
+
+// Additional activity type
+interface AdditionalActivity {
+  type: 'walk' | 'abs' | 'plank' | 'bike' | 'other'
+  value: string
+  label?: string
 }
 
 interface GymPeriod {
@@ -243,6 +266,45 @@ export function GymScreen() {
   const [isLoading, setIsLoading] = useState(true)
   const [showPeriodList, setShowPeriodList] = useState(false) // Separate state for period list view
   
+  // Today's workout data (GYM v1.2)
+  const [todayData, setTodayData] = useState<{
+    hasActivePeriod: boolean
+    period?: {
+      id: string
+      name: string
+      currentCycle: number
+      totalCycles: number
+      progressPercent: number
+    }
+    todayWorkout?: {
+      id: string
+      name: string | null
+      muscleGroups: string[]
+      status: string
+      completed: boolean
+      exercises: Array<{
+        id: string
+        name: string
+        muscleGroup?: string
+        repsScheme?: string
+        nextWeight?: number
+        template?: {
+          currentWeight?: number
+          nextWeight?: number
+          defaultScheme?: string
+        }
+        sets: Array<{ weight?: number; reps?: number; completed: boolean }>
+      }>
+    }
+    nextWorkout?: {
+      id: string
+      date: string
+      name: string | null
+    }
+    isToday: boolean
+  } | null>(null)
+  const [isLoadingToday, setIsLoadingToday] = useState(false)
+  
   // Wizard state
   const [showWizard, setShowWizard] = useState(false)
   const [wizardStep, setWizardStep] = useState(1)
@@ -291,6 +353,15 @@ export function GymScreen() {
   const [newWorkoutName, setNewWorkoutName] = useState('')
   const [newWorkoutMuscles, setNewWorkoutMuscles] = useState<string[]>([])
 
+  // Post-workout dialog (F5)
+  const [showPostWorkoutDialog, setShowPostWorkoutDialog] = useState(false)
+  const [exerciseRatings, setExerciseRatings] = useState<Record<string, 'easy' | 'normal' | 'hard'>>({})
+  const [editingActivities, setEditingActivities] = useState<AdditionalActivity[]>([])
+
+  // Additional activities input
+  const [newActivityType, setNewActivityType] = useState<AdditionalActivity['type']>('walk')
+  const [newActivityValue, setNewActivityValue] = useState('')
+
   // Load gym periods
   const loadPeriods = useCallback(async () => {
     if (!user?.id) return
@@ -314,6 +385,25 @@ export function GymScreen() {
   useEffect(() => {
     loadPeriods()
   }, [loadPeriods])
+
+  // Load today's workout data (GYM v1.2)
+  const loadTodayData = useCallback(async () => {
+    if (!user?.id) return
+    setIsLoadingToday(true)
+    try {
+      const response = await fetch(`/api/gym/today?userId=${user.id}`)
+      const data = await response.json()
+      setTodayData(data)
+    } catch (error) {
+      console.error('Failed to load today data:', error)
+    } finally {
+      setIsLoadingToday(false)
+    }
+  }, [user?.id])
+
+  useEffect(() => {
+    loadTodayData()
+  }, [loadTodayData])
 
   // Load workouts for active period
   useEffect(() => {
@@ -756,19 +846,90 @@ export function GymScreen() {
     setSelectedTemplate(null)
   }
 
-  // Complete workout
+  // Complete workout - now opens post-workout dialog
   const handleCompleteWorkout = async (workoutId: string) => {
-    try {
-      await fetch('/api/gym/workouts', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workoutId, completed: true }),
+    if (!selectedWorkout) return
+
+    // If workout has exercises, show post-workout dialog first
+    if (selectedWorkout.exercises && selectedWorkout.exercises.length > 0) {
+      // Initialize ratings for each exercise
+      const initialRatings: Record<string, 'easy' | 'normal' | 'hard'> = {}
+      selectedWorkout.exercises.forEach(ex => {
+        initialRatings[ex.id] = 'normal'
       })
+      setExerciseRatings(initialRatings)
+      setEditingActivities(selectedWorkout.additionalActivities || [])
+      setShowPostWorkoutDialog(true)
+    } else {
+      // No exercises, just complete
+      await finalizeWorkout(workoutId, {}, [])
+    }
+  }
+
+  // Finalize workout after post-workout dialog
+  const finalizeWorkout = async (
+    workoutId: string,
+    ratings: Record<string, 'easy' | 'normal' | 'hard'>,
+    activities: AdditionalActivity[]
+  ) => {
+    if (!selectedWorkout) return
+
+    try {
+      // Prepare exercises data with updated nextWeight
+      const exercisesData = selectedWorkout.exercises?.map(ex => {
+        const rating = ratings[ex.id] || 'normal'
+        const currentWeight = ex.sets?.[0]?.weight || ex.template?.currentWeight
+        const step = ex.template?.progressionStep || 2.5
+
+        let newNextWeight = ex.nextWeight || ex.template?.nextWeight || currentWeight
+        if (currentWeight) {
+          if (rating === 'easy') {
+            newNextWeight = currentWeight + step
+          } else if (rating === 'hard') {
+            newNextWeight = Math.max(0, currentWeight - step)
+          } else {
+            newNextWeight = currentWeight // Normal - same weight
+          }
+        }
+
+        return {
+          id: ex.id,
+          templateId: ex.templateId,
+          weight: currentWeight,
+          nextWeight: newNextWeight,
+          repsScheme: ex.repsScheme,
+          sets: ex.sets?.map(s => ({
+            id: s.id,
+            weight: s.weight,
+            reps: s.reps,
+            completed: s.completed
+          }))
+        }
+      })
+
+      // Save to API
+      await fetch('/api/gym/today', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workoutId,
+          completed: true,
+          additionalActivities: activities,
+          exercises: exercisesData
+        }),
+      })
+
       setWorkouts(prev => prev.map(w =>
         w.id === workoutId ? { ...w, completed: true } : w
       ))
+
+      setShowPostWorkoutDialog(false)
+      setShowWorkoutDetail(false)
+
+      // Reload today data
+      loadTodayData()
     } catch (error) {
-      console.error('Failed to complete workout:', error)
+      console.error('Failed to finalize workout:', error)
     }
   }
 
@@ -1107,6 +1268,80 @@ export function GymScreen() {
         </Card>
       ) : (
         <>
+          {/* GYM Today Block (v1.2) */}
+          {todayData?.hasActivePeriod && todayData.todayWorkout && (
+            <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Dumbbell className="w-5 h-5 text-primary" />
+                    GYM сегодня
+                  </CardTitle>
+                  <Badge className="bg-primary/20 text-primary">
+                    Цикл {todayData.period?.currentCycle}/{todayData.period?.totalCycles}
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {todayData.todayWorkout.name || 'Тренировка'}
+                  {todayData.todayWorkout.muscleGroups?.length > 0 && (
+                    <span className="ml-2">
+                      ({todayData.todayWorkout.muscleGroups.map(m => {
+                        const group = MUSCLE_GROUPS.find(g => g.value === m)
+                        return group?.label || m
+                      }).join(', ')})
+                    </span>
+                  )}
+                </p>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-2">
+                  {todayData.todayWorkout.exercises?.map((ex, idx) => {
+                    // Get weight from first set or template
+                    const weight = ex.sets?.[0]?.weight || ex.template?.currentWeight
+                    const scheme = ex.repsScheme || ex.template?.defaultScheme || ''
+                    const nextWt = ex.nextWeight || ex.template?.nextWeight
+                    
+                    return (
+                      <div key={ex.id} className="flex items-center gap-2 text-sm">
+                        <span className="text-muted-foreground w-5">{idx + 1}.</span>
+                        <span className="font-medium flex-1">{ex.name}</span>
+                        <span className="text-primary font-mono">
+                          {weight && `${weight}`}
+                          {scheme && `х${scheme}`}
+                          {nextWt && ` (${nextWt})`}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <Button
+                    size="sm"
+                    className="flex-1 bg-primary hover:bg-primary/90"
+                    onClick={() => {
+                      if (todayData.todayWorkout) {
+                        loadWorkoutDetails({
+                          id: todayData.todayWorkout.id,
+                          date: new Date().toISOString(),
+                          dayOfWeek: new Date().getDay() || 7,
+                          workoutNum: 1,
+                          name: todayData.todayWorkout.name,
+                          muscleGroups: todayData.todayWorkout.muscleGroups,
+                          duration: null,
+                          completed: todayData.todayWorkout.completed,
+                          exercises: todayData.todayWorkout.exercises
+                        })
+                      }
+                    }}
+                  >
+                    <Play className="w-4 h-4 mr-1" />
+                    Начать
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
           {/* Period stats */}
           <div className="grid grid-cols-3 gap-3">
             <Card className="bg-card/50 backdrop-blur">
@@ -1806,21 +2041,42 @@ export function GymScreen() {
           </DialogHeader>
           
           <div className="space-y-4 pt-4">
-            {/* Workout info */}
+            {/* Workout info with status */}
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">
-                {selectedWorkout?.date && new Date(selectedWorkout.date).toLocaleDateString('ru-RU', {
-                  weekday: 'long',
-                  day: 'numeric',
-                  month: 'long'
-                })}
-              </span>
-              {selectedWorkout?.duration && (
-                <Badge variant="outline">
-                  <Clock className="w-3 h-3 mr-1" />
-                  {selectedWorkout.duration} мин
+              <div>
+                <span className="text-muted-foreground">
+                  {selectedWorkout?.date && new Date(selectedWorkout.date).toLocaleDateString('ru-RU', {
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long'
+                  })}
+                </span>
+                {activePeriod && (
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {activePeriod.name} • Цикл {activePeriod.currentCycle}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {/* Status badge */}
+                <Badge className={
+                  selectedWorkout?.completed ? 'bg-emerald-500/20 text-emerald-400' :
+                  selectedWorkout?.status === 'skipped' ? 'bg-orange-500/20 text-orange-400' :
+                  selectedWorkout?.status === 'rescheduled' ? 'bg-blue-500/20 text-blue-400' :
+                  'bg-muted text-muted-foreground'
+                }>
+                  {selectedWorkout?.completed ? 'Выполнена' :
+                   selectedWorkout?.status === 'skipped' ? 'Пропущена' :
+                   selectedWorkout?.status === 'rescheduled' ? 'Перенесена' :
+                   'Запланирована'}
                 </Badge>
-              )}
+                {selectedWorkout?.duration && (
+                  <Badge variant="outline">
+                    <Clock className="w-3 h-3 mr-1" />
+                    {selectedWorkout.duration} мин
+                  </Badge>
+                )}
+              </div>
             </div>
 
             {/* Muscle groups */}
@@ -2027,62 +2283,106 @@ export function GymScreen() {
 
             {/* Exercises */}
             <div className="space-y-3">
-              {selectedWorkout?.exercises?.map(exercise => (
-                <div key={exercise.id} className="p-3 rounded-xl bg-muted/30 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="font-medium">{exercise.name}</span>
-                      {exercise.muscleGroup && (
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          ({MUSCLE_GROUPS.find(g => g.value === exercise.muscleGroup)?.label})
-                        </span>
+              {selectedWorkout?.exercises?.map(exercise => {
+                // Get weight and scheme for display
+                const weight = exercise.sets?.[0]?.weight || exercise.template?.currentWeight
+                const scheme = exercise.repsScheme || exercise.template?.defaultScheme || ''
+                const nextWt = exercise.nextWeight || exercise.template?.nextWeight
+                const setsCount = exercise.sets?.length || 0
+                const completedSets = exercise.sets?.filter(s => s.completed).length || 0
+
+                return (
+                  <div key={exercise.id} className="p-3 rounded-xl bg-muted/30 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{exercise.name}</span>
+                          {/* New format display: weight х scheme (nextWeight) */}
+                          <span className="text-primary font-mono text-sm">
+                            {weight && `${weight}`}
+                            {scheme && `х${scheme}`}
+                            {nextWt && ` (${nextWt})`}
+                          </span>
+                        </div>
+                        {exercise.muscleGroup && (
+                          <span className="text-xs text-muted-foreground">
+                            {MUSCLE_GROUPS.find(g => g.value === exercise.muscleGroup)?.label}
+                          </span>
+                        )}
+                      </div>
+                      {/* Sets progress indicator */}
+                      {setsCount > 0 && (
+                        <Badge variant="outline" className="text-xs">
+                          {completedSets}/{setsCount}
+                        </Badge>
                       )}
                     </div>
-                  </div>
-                  
-                  {/* Sets */}
-                  <div className="space-y-1">
-                    {exercise.sets?.map((set, setIdx) => (
-                      <div key={set.id} className="flex items-center gap-2 text-sm">
-                        <span className="w-6 text-muted-foreground">{setIdx + 1}</span>
-                        <Input
-                          type="number"
-                          placeholder="Вес"
-                          className="w-20 h-8"
-                          value={set.weight || ''}
-                          onChange={e => handleUpdateSet(exercise.id, set.id, { weight: parseFloat(e.target.value) || undefined })}
-                        />
-                        <span className="text-muted-foreground">кг ×</span>
-                        <Input
-                          type="number"
-                          placeholder="Повт"
-                          className="w-16 h-8"
-                          value={set.reps || ''}
-                          onChange={e => handleUpdateSet(exercise.id, set.id, { reps: parseInt(e.target.value) || undefined })}
-                        />
-                        <button
-                          className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                            set.completed ? 'bg-emerald-500 text-white' : 'bg-muted'
-                          }`}
-                          onClick={() => handleUpdateSet(exercise.id, set.id, { completed: !set.completed })}
-                        >
-                          {set.completed && <CheckCircle2 className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full text-xs"
-                    onClick={() => handleAddSet(exercise)}
-                  >
-                    <Plus className="w-3 h-3 mr-1" />
-                    Добавить подход
-                  </Button>
+                    {/* Sets */}
+                    <div className="space-y-1">
+                      {exercise.sets?.map((set, setIdx) => (
+                        <div key={set.id} className="flex items-center gap-2 text-sm">
+                          <span className="w-6 text-muted-foreground">{setIdx + 1}</span>
+                          <Input
+                            type="number"
+                            placeholder="Вес"
+                            className="w-20 h-8"
+                            value={set.weight || ''}
+                            onChange={e => handleUpdateSet(exercise.id, set.id, { weight: parseFloat(e.target.value) || undefined })}
+                          />
+                          <span className="text-muted-foreground">кг ×</span>
+                          <Input
+                            type="number"
+                            placeholder="Повт"
+                            className="w-16 h-8"
+                            value={set.reps || ''}
+                            onChange={e => handleUpdateSet(exercise.id, set.id, { reps: parseInt(e.target.value) || undefined })}
+                          />
+                          <button
+                            className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                              set.completed ? 'bg-emerald-500 text-white' : 'bg-muted'
+                            }`}
+                            onClick={() => handleUpdateSet(exercise.id, set.id, { completed: !set.completed })}
+                          >
+                            {set.completed && <CheckCircle2 className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-xs"
+                      onClick={() => handleAddSet(exercise)}
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      Добавить подход
+                    </Button>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Additional Activities */}
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground flex items-center gap-2">
+                <Sparkles className="w-3 h-3" />
+                Доп. активности
+              </Label>
+              {selectedWorkout?.additionalActivities && selectedWorkout.additionalActivities.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {selectedWorkout.additionalActivities.map((activity, idx) => (
+                    <Badge key={idx} variant="outline" className="text-xs">
+                      {activity.type === 'walk' && `🚶 ${activity.value}`}
+                      {activity.type === 'abs' && `💪 Пресс ${activity.value}`}
+                      {activity.type === 'plank' && `⏱️ Планка ${activity.value}`}
+                      {activity.type === 'bike' && `🚴 ${activity.value}`}
+                      {activity.type === 'other' && activity.value}
+                    </Badge>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
 
             {/* Add exercise */}
@@ -2128,7 +2428,6 @@ export function GymScreen() {
                 onClick={() => {
                   if (selectedWorkout) {
                     handleCompleteWorkout(selectedWorkout.id)
-                    setShowWorkoutDetail(false)
                   }
                 }}
               >
@@ -2143,6 +2442,162 @@ export function GymScreen() {
                 Тренировка завершена!
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Post-Workout Dialog (F5) */}
+      <Dialog open={showPostWorkoutDialog} onOpenChange={(open) => {
+        setShowPostWorkoutDialog(open)
+        if (!open) {
+          setExerciseRatings({})
+          setEditingActivities([])
+        }
+      }}>
+        <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-yellow-400" />
+              Как прошла тренировка?
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-4">
+            {/* Exercise ratings */}
+            <div className="space-y-3">
+              <Label className="text-xs text-muted-foreground">
+                Оцени сложность каждого упражнения
+              </Label>
+              {selectedWorkout?.exercises?.map(exercise => {
+                const currentWeight = exercise.sets?.[0]?.weight || exercise.template?.currentWeight
+                const step = exercise.template?.progressionStep || 2.5
+                const rating = exerciseRatings[exercise.id] || 'normal'
+                let nextWeightPreview = currentWeight
+                if (currentWeight) {
+                  if (rating === 'easy') nextWeightPreview = currentWeight + step
+                  else if (rating === 'hard') nextWeightPreview = Math.max(0, currentWeight - step)
+                  else nextWeightPreview = currentWeight
+                }
+
+                return (
+                  <div key={exercise.id} className="p-3 rounded-xl bg-muted/30 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-sm">{exercise.name}</span>
+                      {currentWeight && (
+                        <span className="text-xs text-muted-foreground">
+                          {currentWeight} кг → <span className="text-primary font-medium">{nextWeightPreview} кг</span>
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant={rating === 'easy' ? 'default' : 'outline'}
+                        className={`flex-1 text-xs ${rating === 'easy' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`}
+                        onClick={() => setExerciseRatings(prev => ({ ...prev, [exercise.id]: 'easy' }))}
+                      >
+                        😊 Легко
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={rating === 'normal' ? 'default' : 'outline'}
+                        className={`flex-1 text-xs ${rating === 'normal' ? 'bg-yellow-600 hover:bg-yellow-700' : ''}`}
+                        onClick={() => setExerciseRatings(prev => ({ ...prev, [exercise.id]: 'normal' }))}
+                      >
+                        😐 Норм
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={rating === 'hard' ? 'default' : 'outline'}
+                        className={`flex-1 text-xs ${rating === 'hard' ? 'bg-red-600 hover:bg-red-700' : ''}`}
+                        onClick={() => setExerciseRatings(prev => ({ ...prev, [exercise.id]: 'hard' }))}
+                      >
+                        😫 Тяжело
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Additional activities */}
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground flex items-center gap-2">
+                <Sparkles className="w-3 h-3" />
+                Доп. активности
+              </Label>
+              <div className="flex flex-wrap gap-1">
+                {editingActivities.map((activity, idx) => (
+                  <Badge
+                    key={idx}
+                    variant="outline"
+                    className="text-xs cursor-pointer hover:bg-destructive/20"
+                    onClick={() => setEditingActivities(prev => prev.filter((_, i) => i !== idx))}
+                  >
+                    {activity.type === 'walk' && `🚶 ${activity.value}`}
+                    {activity.type === 'abs' && `💪 Пресс ${activity.value}`}
+                    {activity.type === 'plank' && `⏱️ Планка ${activity.value}`}
+                    {activity.type === 'bike' && `🚴 ${activity.value}`}
+                    {activity.type === 'other' && activity.value}
+                    <X className="w-3 h-3 ml-1" />
+                  </Badge>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Select value={newActivityType} onValueChange={(v) => setNewActivityType(v as AdditionalActivity['type'])}>
+                  <SelectTrigger className="w-24 h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="walk">🚶 Ходьба</SelectItem>
+                    <SelectItem value="abs">💪 Пресс</SelectItem>
+                    <SelectItem value="plank">⏱️ Планка</SelectItem>
+                    <SelectItem value="bike">🚴 Велосипед</SelectItem>
+                    <SelectItem value="other">📝 Другое</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  placeholder="10 км / 15×3 / 60 сек"
+                  value={newActivityValue}
+                  onChange={e => setNewActivityValue(e.target.value)}
+                  className="flex-1 h-8"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (newActivityValue) {
+                      setEditingActivities(prev => [...prev, { type: newActivityType, value: newActivityValue }])
+                      setNewActivityValue('')
+                    }
+                  }}
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Save button */}
+            <div className="flex gap-2 pt-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowPostWorkoutDialog(false)}
+              >
+                Отмена
+              </Button>
+              <Button
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                onClick={() => {
+                  if (selectedWorkout) {
+                    finalizeWorkout(selectedWorkout.id, exerciseRatings, editingActivities)
+                  }
+                }}
+              >
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+                Сохранить
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
