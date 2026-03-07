@@ -277,6 +277,19 @@ export function GymScreen() {
   
   // Schedule edit mode
   const [scheduleEdited, setScheduleEdited] = useState(false)
+  
+  // Skip workout dialog
+  const [showSkipDialog, setShowSkipDialog] = useState(false)
+  
+  // Reschedule workout dialog with options
+  const [showRescheduleDialog, setShowRescheduleDialog] = useState(false)
+  const [rescheduleMode, setRescheduleMode] = useState<'single' | 'shift'>('single')
+  
+  // Add workout to calendar dialog
+  const [showAddWorkoutDialog, setShowAddWorkoutDialog] = useState(false)
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [newWorkoutName, setNewWorkoutName] = useState('')
+  const [newWorkoutMuscles, setNewWorkoutMuscles] = useState<string[]>([])
 
   // Load gym periods
   const loadPeriods = useCallback(async () => {
@@ -517,8 +530,8 @@ export function GymScreen() {
     }
   }
 
-  // Skip workout - mark as skipped and shift
-  const handleSkipWorkout = async () => {
+  // Skip workout - show dialog first
+  const handleSkipWorkout = async (shiftSchedule: boolean) => {
     if (!selectedWorkout || !activePeriod) return
     
     try {
@@ -528,11 +541,12 @@ export function GymScreen() {
         body: JSON.stringify({ 
           workoutId: selectedWorkout.id,
           periodId: activePeriod.id,
-          shiftSchedule: true
+          shiftSchedule
         }),
       })
       const data = await response.json()
       if (data.success) {
+        setShowSkipDialog(false)
         setShowWorkoutDetail(false)
         // Reload workouts with proper parsing
         const workoutsResponse = await fetch(`/api/gym/workouts?periodId=${activePeriod.id}`)
@@ -563,29 +577,98 @@ export function GymScreen() {
   const [rescheduleDate, setRescheduleDate] = useState('')
   const [showReschedule, setShowReschedule] = useState(false)
 
-  const handleRescheduleWorkout = async () => {
+  const handleRescheduleWorkout = async (mode: 'single' | 'shift') => {
     if (!selectedWorkout || !activePeriod || !rescheduleDate) return
     
     try {
-      const response = await fetch('/api/gym/workouts/reschedule', {
+      if (mode === 'single') {
+        // Just move this workout to the new date
+        const response = await fetch('/api/gym/workouts/reschedule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            workoutId: selectedWorkout.id,
+            periodId: activePeriod.id,
+            newDate: rescheduleDate 
+          }),
+        })
+        const data = await response.json()
+        if (data.success) {
+          setShowRescheduleDialog(false)
+          setShowWorkoutDetail(false)
+          setRescheduleDate('')
+        }
+      } else {
+        // Move this workout AND shift all future workouts
+        const response = await fetch('/api/gym/workouts/reschedule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            workoutId: selectedWorkout.id,
+            periodId: activePeriod.id,
+            newDate: rescheduleDate,
+            shiftCycle: true
+          }),
+        })
+        const data = await response.json()
+        if (data.success) {
+          setShowRescheduleDialog(false)
+          setShowWorkoutDetail(false)
+          setRescheduleDate('')
+        }
+      }
+      
+      // Reload workouts
+      const workoutsResponse = await fetch(`/api/gym/workouts?periodId=${activePeriod.id}`)
+      const workoutsData = await workoutsResponse.json()
+      
+      const parsedWorkouts = (workoutsData.workouts || []).map((w: GymWorkout) => ({
+        ...w,
+        muscleGroups: (() => {
+          if (!w.muscleGroups) return []
+          try {
+            return typeof w.muscleGroups === 'string' 
+              ? JSON.parse(w.muscleGroups as unknown as string)
+              : w.muscleGroups
+          } catch {
+            return []
+          }
+        })()
+      }))
+      setWorkouts(parsedWorkouts)
+    } catch (error) {
+      console.error('Failed to reschedule workout:', error)
+    }
+  }
+  
+  // Add workout to a specific date (from calendar click)
+  const handleAddWorkoutToDate = async () => {
+    if (!selectedDate || !activePeriod || !user?.id) return
+    
+    const name = newWorkoutName || `Тренировка ${workouts.length + 1}`
+    
+    try {
+      const response = await fetch('/api/gym/workouts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          workoutId: selectedWorkout.id,
+        body: JSON.stringify({
           periodId: activePeriod.id,
-          newDate: rescheduleDate 
+          date: selectedDate.toISOString(),
+          name,
+          muscleGroups: newWorkoutMuscles,
+          workoutNum: workouts.filter(w => !w.completed).length + 1,
+          isManual: true
         }),
       })
       const data = await response.json()
-      if (data.success) {
-        setShowReschedule(false)
-        setShowWorkoutDetail(false)
-        setRescheduleDate('')
-        // Reload workouts with proper parsing
+      if (data.workout) {
+        setShowAddWorkoutDialog(false)
+        setSelectedDate(null)
+        setNewWorkoutName('')
+        setNewWorkoutMuscles([])
+        // Reload workouts
         const workoutsResponse = await fetch(`/api/gym/workouts?periodId=${activePeriod.id}`)
         const workoutsData = await workoutsResponse.json()
-        
-        // Parse muscleGroups for each workout
         const parsedWorkouts = (workoutsData.workouts || []).map((w: GymWorkout) => ({
           ...w,
           muscleGroups: (() => {
@@ -602,7 +685,7 @@ export function GymScreen() {
         setWorkouts(parsedWorkouts)
       }
     } catch (error) {
-      console.error('Failed to reschedule workout:', error)
+      console.error('Failed to add workout:', error)
     }
   }
 
@@ -808,14 +891,14 @@ export function GymScreen() {
   }
 
   // Calendar generation
-  const getCalendarDays = useCallback(() => {
+  const getCalendarDays = useCallback((): (null | { date: Date; workout: GymWorkout | undefined; dayNum: number })[] => {
     const year = currentMonth.getFullYear()
     const month = currentMonth.getMonth()
     const firstDay = new Date(year, month, 1)
     const lastDay = new Date(year, month + 1, 0)
     const startPadding = (firstDay.getDay() + 6) % 7
 
-    const days = []
+    const days: (null | { date: Date; workout: GymWorkout | undefined; dayNum: number })[] = []
     for (let i = 0; i < startPadding; i++) {
       days.push(null)
     }
@@ -1272,7 +1355,17 @@ export function GymScreen() {
                       new Date().toDateString() === day.date.toDateString() ? 'bg-muted border border-primary/30' :
                       'hover:bg-muted/50'
                     }`}
-                    onClick={() => day?.workout && loadWorkoutDetails(day.workout)}
+                    onClick={() => {
+                      if (day?.workout) {
+                        loadWorkoutDetails(day.workout)
+                      } else if (day) {
+                        // Open add workout dialog for empty day
+                        setSelectedDate(day.date)
+                        setNewWorkoutName(`Тренировка ${workouts.length + 1}`)
+                        setNewWorkoutMuscles([])
+                        setShowAddWorkoutDialog(true)
+                      }
+                    }}
                   >
                     {day && (
                       <>
@@ -1628,7 +1721,7 @@ export function GymScreen() {
                             </>
                           )}
                         </div>
-                        {isWorkout && (dayConfig?.muscles || item.muscleGroups)?.length > 0 && (
+                        {isWorkout && ((dayConfig?.muscles || item.muscleGroups || []) as string[]).length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {(dayConfig?.muscles || item.muscleGroups || []).map(muscle => {
                               const group = MUSCLE_GROUPS.find(g => g.value === muscle)
@@ -1699,8 +1792,10 @@ export function GymScreen() {
       <Dialog open={showWorkoutDetail} onOpenChange={(open) => {
         setShowWorkoutDetail(open)
         if (!open) {
-          setShowReschedule(false)
+          setShowRescheduleDialog(false)
+          setShowSkipDialog(false)
           setRescheduleDate('')
+          setRescheduleMode('single')
         }
       }}>
         <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
@@ -1742,23 +1837,177 @@ export function GymScreen() {
               </div>
             )}
 
-            {/* Reschedule section */}
-            {showReschedule ? (
-              <div className="p-3 rounded-xl bg-muted/30 space-y-3">
-                <Label className="text-sm">Выберите новую дату</Label>
-                <Input
-                  type="date"
-                  value={rescheduleDate}
-                  onChange={e => setRescheduleDate(e.target.value)}
-                  min={new Date().toISOString().split('T')[0]}
-                />
-                <div className="flex gap-2">
+            {/* Skip/Reschedule buttons */}
+            {!showRescheduleDialog && !showSkipDialog && !selectedWorkout?.completed && (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => {
+                    setShowRescheduleDialog(true)
+                    const tomorrow = new Date()
+                    tomorrow.setDate(tomorrow.getDate() + 1)
+                    setRescheduleDate(tomorrow.toISOString().split('T')[0])
+                  }}
+                >
+                  <CalendarClock className="w-4 h-4 mr-1" />
+                  Перенести
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-orange-400 hover:text-orange-300"
+                  onClick={() => setShowSkipDialog(true)}
+                >
+                  <SkipForward className="w-4 h-4 mr-1" />
+                  Пропустить
+                </Button>
+              </div>
+            )}
+
+            {/* Skip workout dialog */}
+            {showSkipDialog && (
+              <div className="p-4 rounded-xl bg-orange-500/10 border border-orange-500/20 space-y-3">
+                <p className="text-sm font-medium">Как пропустить тренировку?</p>
+                <div className="space-y-2">
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start h-auto py-3"
+                    onClick={() => handleSkipWorkout(false)}
+                  >
+                    <div className="text-left">
+                      <div className="font-medium">Сегодня не тренируюсь</div>
+                      <div className="text-xs text-muted-foreground">Тренировка останется на этом дне, цикл не сдвигается</div>
+                    </div>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start h-auto py-3"
+                    onClick={() => handleSkipWorkout(true)}
+                  >
+                    <div className="text-left">
+                      <div className="font-medium">Пропустить и сдвинуть</div>
+                      <div className="text-xs text-muted-foreground">Тренировка переносится в конец периода, остальные сдвигаются</div>
+                    </div>
+                  </Button>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="w-full"
+                  onClick={() => setShowSkipDialog(false)}
+                >
+                  Отмена
+                </Button>
+              </div>
+            )}
+
+            {/* Reschedule workout dialog */}
+            {showRescheduleDialog && (
+              <div className="p-4 rounded-xl bg-primary/5 border border-primary/20 space-y-3">
+                <p className="text-sm font-medium">Куда перенести тренировку?</p>
+                
+                {/* Quick date buttons */}
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const tomorrow = new Date()
+                      tomorrow.setDate(tomorrow.getDate() + 1)
+                      setRescheduleDate(tomorrow.toISOString().split('T')[0])
+                    }}
+                  >
+                    Завтра
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const date = new Date()
+                      date.setDate(date.getDate() + 2)
+                      setRescheduleDate(date.toISOString().split('T')[0])
+                    }}
+                  >
+                    Через 2 дня
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const date = new Date()
+                      const daysUntilSat = (6 - date.getDay() + 7) % 7 || 7
+                      date.setDate(date.getDate() + daysUntilSat)
+                      setRescheduleDate(date.toISOString().split('T')[0])
+                    }}
+                  >
+                    Суббота
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const date = new Date()
+                      const daysUntilSun = (7 - date.getDay()) % 7 || 7
+                      date.setDate(date.getDate() + daysUntilSun)
+                      setRescheduleDate(date.toISOString().split('T')[0])
+                    }}
+                  >
+                    Воскресенье
+                  </Button>
+                </div>
+                
+                {/* Date picker */}\n                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Или выберите дату</Label>
+                  <Input
+                    type="date"
+                    value={rescheduleDate}
+                    onChange={e => setRescheduleDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
+                
+                {/* Mode selection */}
+                <div className="space-y-2 pt-2">
+                  <Label className="text-xs text-muted-foreground">Как перенести?</Label>
+                  <div className="space-y-1">
+                    <label className="flex items-start gap-2 p-2 rounded-lg cursor-pointer hover:bg-muted/30">
+                      <input
+                        type="radio"
+                        name="rescheduleMode"
+                        checked={rescheduleMode === 'single'}
+                        onChange={() => setRescheduleMode('single')}
+                        className="mt-1 accent-primary"
+                      />
+                      <div>
+                        <div className="text-sm font-medium">Только эту тренировку</div>
+                        <div className="text-xs text-muted-foreground">Остальной цикл остаётся на месте</div>
+                      </div>
+                    </label>
+                    <label className="flex items-start gap-2 p-2 rounded-lg cursor-pointer hover:bg-muted/30">
+                      <input
+                        type="radio"
+                        name="rescheduleMode"
+                        checked={rescheduleMode === 'shift'}
+                        onChange={() => setRescheduleMode('shift')}
+                        className="mt-1 accent-primary"
+                      />
+                      <div>
+                        <div className="text-sm font-medium">Сдвинуть весь цикл</div>
+                        <div className="text-xs text-muted-foreground">Все последующие тренировки сдвинутся</div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+                
+                <div className="flex gap-2 pt-2">
                   <Button 
-                    variant="outline" 
+                    variant="ghost" 
                     size="sm" 
                     className="flex-1"
                     onClick={() => {
-                      setShowReschedule(false)
+                      setShowRescheduleDialog(false)
                       setRescheduleDate('')
                     }}
                   >
@@ -1767,36 +2016,13 @@ export function GymScreen() {
                   <Button 
                     size="sm" 
                     className="flex-1 bg-primary"
-                    onClick={handleRescheduleWorkout}
+                    onClick={() => handleRescheduleWorkout(rescheduleMode)}
                     disabled={!rescheduleDate}
                   >
                     Перенести
                   </Button>
                 </div>
               </div>
-            ) : (
-              !selectedWorkout?.completed && (
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => setShowReschedule(true)}
-                  >
-                    <CalendarClock className="w-4 h-4 mr-1" />
-                    Перенести
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 text-orange-400 hover:text-orange-300"
-                    onClick={handleSkipWorkout}
-                  >
-                    <SkipForward className="w-4 h-4 mr-1" />
-                    Пропустить
-                  </Button>
-                </div>
-              )
             )}
 
             {/* Exercises */}
@@ -1917,6 +2143,123 @@ export function GymScreen() {
                 Тренировка завершена!
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Workout Dialog (from calendar click) */}
+      <Dialog open={showAddWorkoutDialog} onOpenChange={(open) => {
+        setShowAddWorkoutDialog(open)
+        if (!open) {
+          setSelectedDate(null)
+          setNewWorkoutName('')
+          setNewWorkoutMuscles([])
+        }
+      }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              Добавить тренировку
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 pt-4">
+            <div className="text-sm text-muted-foreground">
+              {selectedDate?.toLocaleDateString('ru-RU', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long'
+              })}
+            </div>
+            
+            {/* Select from existing workout types */}
+            {parsedDaySchedule.filter(d => d.type === 'workout').length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Выбрать из текущего периода</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {parsedDaySchedule
+                    .filter(d => d.type === 'workout')
+                    .map((day, idx) => (
+                      <Button
+                        key={idx}
+                        variant="outline"
+                        size="sm"
+                        className="justify-start"
+                        onClick={() => {
+                          setNewWorkoutName(day.name || `Тренировка ${day.workoutNum}`)
+                          setNewWorkoutMuscles(day.muscleGroups || [])
+                        }}
+                      >
+                        <Dumbbell className="w-3 h-3 mr-2" />
+                        {day.name || `Тренировка ${day.workoutNum}`}
+                      </Button>
+                    ))}
+                </div>
+              </div>
+            )}
+            
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">или создать свою</span>
+              </div>
+            </div>
+            
+            {/* Custom workout */}
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Название</Label>
+                <Input
+                  value={newWorkoutName}
+                  onChange={e => setNewWorkoutName(e.target.value)}
+                  placeholder="Например: Грудь + Трицепс"
+                />
+              </div>
+              
+              <div className="space-y-1">
+                <Label className="text-xs">Группы мышц</Label>
+                <div className="flex flex-wrap gap-1">
+                  {MUSCLE_GROUPS.map(muscle => (
+                    <button
+                      key={muscle.value}
+                      className={`px-2 py-1 rounded-full text-xs transition-colors ${
+                        newWorkoutMuscles.includes(muscle.value)
+                          ? muscle.color
+                          : 'bg-muted text-muted-foreground hover:bg-muted/70'
+                      }`}
+                      onClick={() => {
+                        setNewWorkoutMuscles(prev => 
+                          prev.includes(muscle.value)
+                            ? prev.filter(m => m !== muscle.value)
+                            : [...prev, muscle.value]
+                        )
+                      }}
+                    >
+                      {muscle.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => setShowAddWorkoutDialog(false)}
+              >
+                Отмена
+              </Button>
+              <Button 
+                className="flex-1 bg-primary"
+                onClick={handleAddWorkoutToDate}
+                disabled={!newWorkoutName}
+              >
+                Добавить
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

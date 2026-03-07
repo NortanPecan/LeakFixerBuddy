@@ -166,7 +166,15 @@ export async function POST(request: NextRequest) {
     })
 
     // Generate workout schedule for all cycles based on daySchedule
-    const workouts = []
+    const workouts: {
+      periodId: string
+      date: Date
+      dayOfWeek: number
+      workoutNum: number
+      name: string
+      muscleGroups: string
+      completed: boolean
+    }[] = []
     const startDate = new Date()
     const totalCyc = totalCycles || 8
     
