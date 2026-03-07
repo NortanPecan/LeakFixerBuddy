@@ -358,9 +358,19 @@ export function GymScreen() {
   const [exerciseRatings, setExerciseRatings] = useState<Record<string, 'easy' | 'normal' | 'hard'>>({})
   const [editingActivities, setEditingActivities] = useState<AdditionalActivity[]>([])
 
+  // Exercise card dialog (F3)
+  const [showExerciseCardDialog, setShowExerciseCardDialog] = useState(false)
+  const [selectedExerciseCard, setSelectedExerciseCard] = useState<GymExercise | null>(null)
+  const [exerciseHistory, setExerciseHistory] = useState<Array<{ date: string; weight?: number; scheme?: string; completed: boolean }>>([])
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+
   // Additional activities input
   const [newActivityType, setNewActivityType] = useState<AdditionalActivity['type']>('walk')
   const [newActivityValue, setNewActivityValue] = useState('')
+
+  // Template selection for  const [showTemplateSelectDialog, setShowTemplateSelectDialog] = useState(false)
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string; muscleGroup?: string; currentWeight?: number; defaultScheme?: string }>>([])
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false)
 
   // Load gym periods
   const loadPeriods = useCallback(async () => {
@@ -973,6 +983,80 @@ export function GymScreen() {
     }
   }
 
+  // F3: Load exercise history
+  const loadExerciseHistory = async (exercise: GymExercise) => {
+    if (!exercise.templateId) {
+      setExerciseHistory([])
+      return
+    }
+    
+    setIsLoadingHistory(true)
+    try {
+      const response = await fetch(`/api/gym/templates/${exercise.templateId}/history`)
+      const data = await response.json()
+      setExerciseHistory(data.history || [])
+    } catch (error) {
+      console.error('Failed to load exercise history:', error)
+      setExerciseHistory([])
+    } finally {
+      setIsLoadingHistory(false)
+    }
+  }
+
+  // F7: Load templates for quick add
+  const loadTemplates = async () => {
+    if (!user?.id) return
+    
+    setIsLoadingTemplates(true)
+    try {
+      const response = await fetch(`/api/gym/templates?userId=${user.id}`)
+      const data = await response.json()
+      setTemplates(data.templates || [])
+    } catch (error) {
+      console.error('Failed to load templates:', error)
+      setTemplates([])
+    } finally {
+      setIsLoadingTemplates(false)
+    }
+  }
+
+  // F3: Open exercise card dialog
+  const openExerciseCard = async (exercise: GymExercise) => {
+    setSelectedExerciseCard(exercise)
+    setShowExerciseCardDialog(true)
+    await loadExerciseHistory(exercise)
+  }
+
+  // F7: Add exercise from template
+  const handleAddFromTemplate = async (template: { id: string; name: string; currentWeight?: number; defaultScheme?: string }) => {
+    if (!selectedWorkout) return
+    
+    try {
+      const response = await fetch('/api/gym/exercises', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workoutId: selectedWorkout.id,
+          name: template.name,
+          templateId: template.id,
+          order: (selectedWorkout.exercises?.length || 0) + 1,
+          repsScheme: template.defaultScheme,
+          nextWeight: template.currentWeight
+        }),
+      })
+      const data = await response.json()
+      if (data.exercise) {
+        setSelectedWorkout(prev => prev ? {
+          ...prev,
+          exercises: [...(prev.exercises || []), data.exercise],
+        } : null)
+        setShowTemplateSelectDialog(false)
+      }
+    } catch (error) {
+      console.error('Failed to add exercise from template:', error)
+    }
+  }
+
   // Add exercise to workout
   const handleAddExercise = async () => {
     if (!selectedWorkout || !newExerciseName) return
@@ -1343,39 +1427,67 @@ export function GymScreen() {
           )}
           
           {/* Period stats */}
-          <div className="grid grid-cols-3 gap-3">
-            <Card className="bg-card/50 backdrop-blur">
-              <CardContent className="pt-4 text-center">
-                <Target className="w-5 h-5 mx-auto text-emerald-400 mb-1" />
-                <p className="text-xl font-bold text-primary">{activePeriod.currentCycle}</p>
-                <p className="text-xs text-muted-foreground">Цикл</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-card/50 backdrop-blur">
-              <CardContent className="pt-4 text-center">
-                <CheckCircle2 className="w-5 h-5 mx-auto text-green-400 mb-1" />
-                <p className="text-xl font-bold text-primary">{completedWorkouts}</p>
-                <p className="text-xs text-muted-foreground">Тренировок</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-card/50 backdrop-blur">
-              <CardContent className="pt-4 text-center">
-                <Trophy className="w-5 h-5 mx-auto text-yellow-400 mb-1" />
-                <p className="text-xl font-bold text-primary">{Math.round(periodProgress)}%</p>
-                <p className="text-xs text-muted-foreground">Прогресс</p>
-              </CardContent>
-            </Card>
-          </div>
+          <Card className="bg-card/50 backdrop-blur">
+            <CardContent className="pt-4">
+              {/* Period dates */}
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-xs text-muted-foreground">
+                  <span>Начало: {new Date(activePeriod.startDate).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</span>
+                  <span className="mx-2">•</span>
+                  <span>Циклов: {Math.min(activePeriod.currentCycle - 1, activePeriod.totalCycles)} из {activePeriod.totalCycles}</span>
+                </div>
+                <Badge variant="outline" className="text-primary border-primary/30 text-xs">
+                  {activePeriod.type}
+                </Badge>
+              </div>
+
+              {/* Stats grid */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="text-center">
+                  <Target className="w-5 h-5 mx-auto text-emerald-400 mb-1" />
+                  <p className="text-xl font-bold text-primary">{activePeriod.currentCycle}</p>
+                  <p className="text-xs text-muted-foreground">Тек. цикл</p>
+                </div>
+                <div className="text-center">
+                  <CheckCircle2 className="w-5 h-5 mx-auto text-green-400 mb-1" />
+                  <p className="text-xl font-bold text-primary">{completedWorkouts}</p>
+                  <p className="text-xs text-muted-foreground">Тренировок</p>
+                </div>
+                <div className="text-center">
+                  <Trophy className="w-5 h-5 mx-auto text-yellow-400 mb-1" />
+                  <p className="text-xl font-bold text-primary">{Math.round(periodProgress)}%</p>
+                  <p className="text-xs text-muted-foreground">Прогресс</p>
+                </div>
+              </div>
+
+              {/* Key workout days */}
+              {parsedDaySchedule.filter(d => d.type === 'workout').length > 0 && (
+                <div className="mt-3 pt-3 border-t border-border/50">
+                  <p className="text-xs text-muted-foreground mb-2">Ключевые дни:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {parsedDaySchedule
+                      .filter(d => d.type === 'workout')
+                      .slice(0, 4)
+                      .map((day, idx) => (
+                        <Badge key={idx} variant="outline" className="text-xs">
+                          {day.name || `День ${day.workoutNum}`}
+                          {day.muscleGroups && day.muscleGroups.length > 0 && (
+                            <span className="ml-1 text-muted-foreground">
+                              ({day.muscleGroups.map(m => MUSCLE_GROUPS.find(g => g.value === m)?.label).join('+')})
+                            </span>
+                          )}
+                        </Badge>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Period progress */}
           <Card className="bg-card/50 backdrop-blur">
             <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Прогресс периода</CardTitle>
-                <Badge variant="outline" className="text-primary border-primary/30">
-                  Цикл {activePeriod.currentCycle} из {activePeriod.totalCycles}
-                </Badge>
-              </div>
+              <CardTitle className="text-base">Прогресс периода</CardTitle>
             </CardHeader>
             <CardContent>
               <Progress value={periodProgress} className="h-2" />
@@ -2370,17 +2482,78 @@ export function GymScreen() {
                 <Sparkles className="w-3 h-3" />
                 Доп. активности
               </Label>
+              
+              {/* Display existing activities */}
               {selectedWorkout?.additionalActivities && selectedWorkout.additionalActivities.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {selectedWorkout.additionalActivities.map((activity, idx) => (
-                    <Badge key={idx} variant="outline" className="text-xs">
+                    <Badge 
+                      key={idx} 
+                      variant="outline" 
+                      className={`text-xs ${!selectedWorkout.completed ? 'cursor-pointer hover:bg-destructive/20' : ''}`}
+                      onClick={() => {
+                        if (!selectedWorkout.completed && selectedWorkout.additionalActivities) {
+                          // Remove activity
+                          const newActivities = selectedWorkout.additionalActivities.filter((_, i) => i !== idx)
+                          setSelectedWorkout(prev => prev ? {
+                            ...prev,
+                            additionalActivities: newActivities
+                          } : null)
+                        }
+                      }}
+                    >
                       {activity.type === 'walk' && `🚶 ${activity.value}`}
                       {activity.type === 'abs' && `💪 Пресс ${activity.value}`}
                       {activity.type === 'plank' && `⏱️ Планка ${activity.value}`}
                       {activity.type === 'bike' && `🚴 ${activity.value}`}
                       {activity.type === 'other' && activity.value}
+                      {!selectedWorkout.completed && <X className="w-3 h-3 ml-1" />}
                     </Badge>
                   ))}
+                </div>
+              )}
+              
+              {/* Add activity controls (only if not completed) */}
+              {!selectedWorkout?.completed && (
+                <div className="flex gap-2">
+                  <Select value={newActivityType} onValueChange={(v) => setNewActivityType(v as AdditionalActivity['type'])}>
+                    <SelectTrigger className="w-24 h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="walk">🚶 Ходьба</SelectItem>
+                      <SelectItem value="abs">💪 Пресс</SelectItem>
+                      <SelectItem value="plank">⏱️ Планка</SelectItem>
+                      <SelectItem value="bike">🚴 Велосипед</SelectItem>
+                      <SelectItem value="other">📝 Другое</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    placeholder="10 км / 15×3 / 60 сек"
+                    value={newActivityValue}
+                    onChange={e => setNewActivityValue(e.target.value)}
+                    className="flex-1 h-8 text-xs"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8"
+                    onClick={() => {
+                      if (newActivityValue && selectedWorkout) {
+                        const newActivity: AdditionalActivity = { 
+                          type: newActivityType, 
+                          value: newActivityValue 
+                        }
+                        setSelectedWorkout(prev => prev ? {
+                          ...prev,
+                          additionalActivities: [...(prev.additionalActivities || []), newActivity]
+                        } : null)
+                        setNewActivityValue('')
+                      }
+                    }}
+                  >
+                    <Plus className="w-3 h-3" />
+                  </Button>
                 </div>
               )}
             </div>

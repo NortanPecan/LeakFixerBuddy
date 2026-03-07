@@ -83,7 +83,7 @@
 
 ## F4. Блок "Сегодня"
 
-**Статус:** 🔲 In Progress
+**Статус:** ✅ Done
 
 **Задача:** Создать блок/экран "GYM сегодня" — чеклист на сегодня.
 
@@ -138,7 +138,111 @@
 
 ## F6. Доп. активности
 
-**Статус:** 🔲 Pending
+**Статус:** ✅ Done (частично в F5)
+
+**Задача:** Добавить блок для ходьбы, пресса, планка, велосипед и добавлять активности заранее.
+
+- В карточке дня можно добавлять активности
+- В пост-тренировочном диалог можно добавить активности после завершения
+
+- Дублирование ввода устранение: необходимость каждый раз вводить вруч
+
+**UI:** Небольшой блок в карточке дня с быстрым добавлением.
+
+**Где:** Диалог деталей тренировки
+
+**Реализация:**
+- Added блок доп. активностей с отображением в карточке дня
+- Добавлен UI для добавления активности (Select + Input + Button)
+- Активности отображаются как Badge с кликом для удаления
+- Добавлены кнопки "+ Добав из библиотеки" для выбора из шаблонов (F7)
+- Добавлен диалог F7 для выбора шаблона при добавлении упражнения
+- В Add exercise секte можно добавлять кнопку для выбора из библиотеки или- Добавлен диалог F3 (паспорт упражнения) с историей выполненияений
+
+**Реализация:** Реализовано, см. null,
+ render: null
+ } else {
+  setShowExerciseCardDialog(false)
+ }
+ setShowTemplateSelectDialog(false)
+}
+
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      className="w-full text-xs text-muted-foreground"
+      onClick={() => setShowTemplateSelectDialog(true)}
+    >
+      Добавить из библиотеки
+    </Button>
+  </div>
+) : null}
+            </div>
+          </div>
+        </CardContent>
+      </Dialog>
+
+      {/* Template Selection Dialog */}
+      <Dialog open={showTemplateSelectDialog} onOpenChange={(open) => {
+        if (!open) return
+        setShowTemplateSelectDialog(false)
+        setTemplates([])
+      }}>
+        <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-primary" />
+              Добавить из библиотеки
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-3 pt-4">
+            {isLoadingTemplates ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="h-4 w-4 bg-muted animate-pulse rounded" />
+                ))
+              )}
+            )}
+            
+            {templates.length === 0 ? (
+              <p className="text-center text-muted-foreground py-4">
+                Нет шаблонов
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {templates.map(template => (
+                  <div
+                    key={template.id}
+                    className={`flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors ${selectedWorkout?.exercises?.some(e => e.id === template.id) ? 'ring-2 ring-primary/50' : ''}`}
+                    onClick={() => handleAddFromTemplate(template)}
+                  >
+                    <div className="flex-1">
+                      <p className="font-medium text-sm">{template.name}</p>
+                      {template.muscleGroup && (
+                        <span className="text-xs text-muted-foreground ml-1">
+                          ({MUSCLE_GROUPS.find(g => g.value === template.muscleGroup)?.label})
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {template.currentWeight && (
+                        <Badge variant="outline" className="text-xs">
+                          {template.currentWeight} кг
+                        </Badge>
+                      )}
+                      {template.defaultScheme && (
+                        <span className="text-xs text-muted-foreground">{template.defaultScheme}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
 **Задача:** Добавить блок для ходьбы, пресса, планки и т.п.
 
