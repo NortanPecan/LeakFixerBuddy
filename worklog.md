@@ -415,3 +415,31 @@ TODO for next agent (GLM-5 in sandbox):
   - `bun run db:validate:prod`
   - smoke checks for `/api/auth` (POST + `?demo=true`) and `/api/user` on deployed environment.
 - Review and optionally clean historical legacy docs snippets in README that still mention manual schema file renaming; keep branch-script flow as the source of truth.
+
+---
+Task ID: 12
+Agent: Main Agent (GLM-5)
+Task: Create Git Constitution (ai-git-rules.md) and update worklog
+
+Work Log:
+- Cloned repository using GitHub token: https://github.com/NortanPecan/LeakFixerBuddy/
+- Verified git status: branch `main`, up to date with origin
+- Verified remote: origin points to GitHub (with token)
+- Created `/docs/` directory
+- Created `docs/ai-git-rules.md` with comprehensive Git Constitution:
+  - Section 1: Forbidden operations (reset, rebase, push --force, etc.)
+  - Section 2: Mandatory checks before work (git status, git remote -v)
+  - Section 3: Meaningful commits with format requirements
+  - Section 4: Commit after each stage
+  - Section 5: Backups before major changes (branch or tag)
+  - Section 6: Mandatory reading of rules before each stage
+  - Section 7: Remote and prohibition on repository "reset"
+  - Section 8: Mandatory pushes and backups
+  - Section 9: Work in new environments (sandbox/container) - **NEVER git init, only git clone from owner**
+- Updated worklog.md with this entry
+- Ready to commit and push
+
+Stage Summary:
+- Git Constitution created with 9 sections
+- Key rule for sandbox environments: **GLM-5 never does git init, always waits for repository URL from owner**
+- Will commit and push after this entry
