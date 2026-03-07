@@ -81,6 +81,7 @@ model AppUser {
   directions   Direction[]
   skills       Skill[]
   traits       Trait[]
+  gymExerciseTemplates GymExerciseTemplate[]
 
   @@index([telegramId])
   @@index([email])
@@ -291,7 +292,15 @@ model GymWorkout {
   duration     Int?     // minutes
   completed    Boolean  @default(false)
   notes        String?
+  
+  // v1.2 fields
+  status       String   @default("planned") // planned, completed, skipped, rescheduled
+  wellbeing    Int?     // 1-5 rating
+  wellbeingNote String? // short note
+  additionalActivities String? // JSON: [{ type, value, unit }]
+  
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Relations
   period    GymPeriod    @relation(fields: [periodId], references: [id], onDelete: Cascade)
@@ -309,11 +318,19 @@ model GymExercise {
   muscleGroup String? // chest, back, legs, shoulders, biceps, triceps, core
   order      Int      @default(0)
   notes      String?
+  
+  // v1.2 fields
+  templateId String?  // link to GymExerciseTemplate
+  repsScheme String?  // "12х4", "10х12х3х15х1"
+  nextWeight Float?   // recommended weight for next time
+  
   createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   // Relations
-  workout GymWorkout    @relation(fields: [workoutId], references: [id], onDelete: Cascade)
-  sets    GymExerciseSet[]
+  workout  GymWorkout         @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  template GymExerciseTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  sets     GymExerciseSet[]
 
   @@map("gym_exercises")
 }
@@ -334,6 +351,40 @@ model GymExerciseSet {
   exercise GymExercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
 
   @@map("gym_exercise_sets")
+}
+
+/// Exercise template (library of exercises)
+model GymExerciseTemplate {
+  id          String   @id @default(cuid())
+  userId      String
+  
+  // Basic info
+  name        String              // "Жим гантелей"
+  muscleGroup String?             // chest, back, legs, shoulders, biceps, triceps, core
+  goal        String?             // strength, volume, accessory
+  
+  // Scheme and progression
+  defaultScheme   String?         // "12х4" - preferred rep scheme
+  progressionType String?         // "fixed", "percentage", "manual"
+  progressionStep Float?          // progression step (kg or %)
+  
+  // Current weight tracking
+  currentWeight   Float?          // last used weight
+  nextWeight      Float?          // recommended next weight
+  
+  // Technique notes
+  techniqueNotes  String?         // JSON: ["контроль спины", "полная амплитуда"]
+  
+  // Metadata
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user      AppUser        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercises GymExercise[]  // all instances of this exercise
+
+  @@map("gym_exercise_templates")
 }
 
 /// Buddy (accountability partner)
