@@ -834,3 +834,42 @@ Stage Summary:
   3. C-2 (Content) — contentIdProp не передаётся 🟠
   4. R-4 (Rituals) — streak для не-ежедневных 🟡
   5. F-1 (Finance) — нет обработки network errors 🟡
+
+---
+Task ID: 24
+Agent: Main Agent
+Task: Исправление бага H-1 — Weekly stats в Habits используют Math.random()
+
+Work Log:
+- **Анализ проблемы:**
+  - Найден `Math.random()` в `src/components/screens/HabitsScreen.tsx:139`
+  - Генерировались фейковые данные для 7 дней недели
+  - API `/api/habits` уже имеет доступ к `habit_logs`, но не возвращал weekly stats
+
+- **План исправления:**
+  1. Расширить GET `/api/habits` — добавить запрос logs за 7 дней
+  2. Сгруппировать logs по дате, подсчитать completed habits
+  3. Вернуть `weeklyStats` в ответе API
+  4. На фронтенде использовать реальные данные вместо Math.random()
+
+- **Выполненные изменения:**
+  - `src/app/api/habits/route.ts`:
+    - Добавлен запрос `weeklyLogs` за последние 7 дней
+    - Добавлена логика группировки по дате
+    - Добавлен `weeklyStats` в ответ API
+  - `src/components/screens/HabitsScreen.tsx`:
+    - Добавлен интерфейс `WeeklyStat`
+    - Добавлен state `weeklyStats`
+    - Убран `Math.random()`, заменён на реальные данные из API
+    - Добавлен fallback на пустые данные при загрузке
+
+- **Проверка:** `bun run lint` ✅
+
+Stage Summary:
+- **Баг H-1 ИСПРАВЛЕН** ✅
+- Weekly stats теперь показывают реальные данные из БД
+- **Файлы для коммита:**
+  - `src/app/api/habits/route.ts`
+  - `src/components/screens/HabitsScreen.tsx`
+  - `worklog.md`
+- **Следующий приоритет:** P-2 (Profile stats.totalWorkouts — моковые данные)

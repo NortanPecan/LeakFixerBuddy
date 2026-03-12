@@ -35,6 +35,12 @@ interface Habit {
   isCompleted: boolean
 }
 
+interface WeeklyStat {
+  date: string
+  completed: number
+  total: number
+}
+
 // Icons for habit selection
 const HABIT_ICONS = ['🧘', '📚', '🚶', '💊', '💪', '🏃', '💧', '🥗', '😴', '✍️', '🎯', '⚡']
 const HABIT_COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#6366F1', '#14B8A6']
@@ -42,6 +48,7 @@ const HABIT_COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#E
 export function HabitsScreen() {
   const { user } = useAppStore()
   const [habits, setHabits] = useState<Habit[]>([])
+  const [weeklyStats, setWeeklyStats] = useState<WeeklyStat[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [newHabit, setNewHabit] = useState({
@@ -60,6 +67,7 @@ export function HabitsScreen() {
       const response = await fetch(`/api/habits?userId=${user.id}`)
       const data = await response.json()
       setHabits(data.habits || [])
+      setWeeklyStats(data.weeklyStats || [])
     } catch (error) {
       console.error('Failed to load habits:', error)
     } finally {
@@ -133,12 +141,16 @@ export function HabitsScreen() {
   const completedCount = habits.filter(h => h.isCompleted).length
   const totalProgress = habits.length > 0 ? (completedCount / habits.length) * 100 : 0
 
-  // Weekly stats mock (would need separate API endpoint for real data)
-  const weeklyData = [0, 1, 2, 3, 4, 5, 6].map((_, i) => {
-    const dayIndex = (new Date().getDay() + 6 + i) % 7 // Monday = 0
-    const completed = i < 5 ? Math.min(habits.length, Math.floor(Math.random() * habits.length) + 2) : 0
-    return { completed, total: habits.length }
-  })
+  // Use real weekly stats from API, fallback to empty if not loaded
+  const weeklyData = weeklyStats.length === 7 ? weeklyStats : [
+    { date: '', completed: 0, total: habits.length },
+    { date: '', completed: 0, total: habits.length },
+    { date: '', completed: 0, total: habits.length },
+    { date: '', completed: 0, total: habits.length },
+    { date: '', completed: 0, total: habits.length },
+    { date: '', completed: 0, total: habits.length },
+    { date: '', completed: 0, total: habits.length }
+  ]
 
   return (
     <div className="flex flex-col gap-4 pb-20">

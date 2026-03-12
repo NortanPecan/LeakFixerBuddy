@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
 /**
- * Get user's habits with today's logs
+ * Get user's habits with today's logs and weekly stats
  * GET /api/habits?userId=<id>
  */
 export async function GET(request: NextRequest) {
@@ -33,6 +33,41 @@ export async function GET(request: NextRequest) {
         date: { gte: today }
       }
     })
+
+    // Get logs for the last 7 days for weekly stats
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6) // 6 days ago + today = 7 days
+    sevenDaysAgo.setHours(0, 0, 0, 0)
+
+    const weeklyLogs = await db.habitLog.findMany({
+      where: {
+        userId,
+        date: { gte: sevenDaysAgo },
+        completed: true
+      },
+      orderBy: { date: 'asc' }
+    })
+
+    // Build weekly stats array (7 days, Monday = 0)
+    const weeklyStats: { date: string; completed: number; total: number }[] = []
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(sevenDaysAgo)
+      date.setDate(date.getDate() + i)
+      date.setHours(0, 0, 0, 0)
+
+      // Count completed habits for this date
+      const completedForDate = weeklyLogs.filter(log => {
+        const logDate = new Date(log.date)
+        logDate.setHours(0, 0, 0, 0)
+        return logDate.getTime() === date.getTime()
+      }).length
+
+      weeklyStats.push({
+        date: date.toISOString().split('T')[0],
+        completed: completedForDate,
+        total: habits.length
+      })
+    }
 
     // Calculate streak for each habit
     const habitsWithStats = await Promise.all(habits.map(async (habit) => {
@@ -88,7 +123,8 @@ export async function GET(request: NextRequest) {
     }))
 
     return NextResponse.json({
-      habits: habitsWithStats
+      habits: habitsWithStats,
+      weeklyStats
     })
   } catch (error) {
     console.error('Get habits error:', error)
