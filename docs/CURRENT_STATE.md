@@ -1,0 +1,197 @@
+# LeakFixerBuddy — Текущее состояние проекта
+
+## Обзор
+
+**LeakFixerBuddy** — Telegram Mini App для саморазвития (привычки, фитнес, GYM, wellbeing).
+
+- **Фреймворк**: Next.js 16 + React 19
+- **База данных**: SQLite (локально), Supabase PostgreSQL (прод)
+- **Рабочая ветка**: `main`
+
+## Структура feature-модулей
+
+### src/features/gym/
+Модуль GYM (тренировки):
+```
+src/features/gym/
+├── index.ts                    # Экспорты
+├── constants.ts                # Константы (TRAINING_TYPES, MUSCLE_GROUPS, etc.)
+└── components/
+    ├── AddWorkoutDialog.tsx    # Диалог добавления тренировки
+    └── CompletionPreviewDialog.tsx # Превью завершения
+```
+
+### src/features/profile/
+Модуль профиля:
+```
+src/features/profile/
+├── index.ts                    # Экспорты
+├── constants.ts                # MEASUREMENT_TYPES, FEEDBACK_TYPES, ZONES_CONFIG, etc.
+└── components/
+    ├── QuickAccess.tsx         # Блок быстрой навигации
+    └── DonateCard.tsx          # Карточка доната
+```
+
+## Общие утилиты
+
+### src/lib/mood-utils.ts
+Единая функция для статуса настроения:
+```typescript
+import { getMoodStatus, getMoodStatusText } from '@/lib/mood-utils'
+
+// Для UI (с цветом)
+const { status, color } = getMoodStatus(7)
+
+// Для API (только текст)
+const text = getMoodStatusText(7)
+```
+
+## Статистика рефакторинга
+
+| Файл | До | После | Изменение |
+|------|-----|-------|-----------|
+| GymScreen.tsx | 4216 строк | ~4000 строк | -5% |
+| ProfileScreen.tsx | 1096 строк | 895 строк | **-18%** |
+| Дубликаты схем Prisma | 3 файла | 1 файл | -2 файла |
+| getMoodStatus дубли | 3 копии | 1 копия | -2 копии |
+
+## Окружения: песочница и онлайн
+
+Проект поддерживает две среды разработки:
+
+| Среда | Описание | База данных | Env-файл |
+|-------|----------|-------------|----------|
+| **DEV_SANDBOX** | Локальная разработка | SQLite или локальный Supabase | `.env.local` |
+| **PROD_ONLINE** | Боевая версия | Supabase PostgreSQL | `.env.production` |
+
+### Переменные окружения
+
+**Песочница (`.env.local`):**
+```env
+# Supabase (опционально, для работы с Supabase локально)
+NEXT_PUBLIC_SUPABASE_URL_SANDBOX=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY_SANDBOX=eyJ...
+SUPABASE_SERVICE_ROLE_KEY_SANDBOX=eyJ...
+
+# База данных (для Prisma)
+DATABASE_URL_SANDBOX=postgresql://...
+DIRECT_DATABASE_URL_SANDBOX=postgresql://...
+```
+
+**Продакшн (Vercel/`.env.production`):**
+```env
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+
+# База данных (для Prisma)
+DATABASE_URL=postgresql://...
+DIRECT_DATABASE_URL=postgresql://...
+
+# Telegram
+TELEGRAM_BOT_TOKEN=...
+```
+
+### Логика выбора среды
+
+Файл `src/lib/supabaseClient.ts` определяет среду автоматически:
+- Если заданы `*_SANDBOX` переменные → используется песочница
+- Иначе → используются боевые переменные
+
+**Важно:** Supabase используется ТОЛЬКО через REST/JS-API, не через прямой SQL.
+
+---
+
+## Supabase Client
+
+Единый модуль для работы с Supabase: `src/lib/supabaseClient.ts`
+
+### Файлы:
+
+| Файл | Назначение |
+|------|------------|
+| `supabaseClient.ts` | Центральные функции для получения env (URL, ключи) |
+| `supabase.ts` | Основной клиент (anon + admin), ленивая инициализация |
+| `supabase-server.ts` | SSR клиент для Server Components |
+| `supabase-browser.ts` | Клиент для Client Components |
+| `auth-telegram.ts` | Auth клиент для Telegram аутентификации |
+
+### Использование:
+
+```typescript
+// Получить env-переменные (с fallback SANDBOX -> PROD)
+import { getSupabaseUrl, getSupabaseAnonKey, isSandboxMode } from '@/lib/supabaseClient'
+
+// Основной клиент (anon key)
+import { getSupabase, supabase } from '@/lib/supabase'
+
+// Admin клиент (service role key) - только для server-side
+import { getSupabaseAdmin, supabaseAdmin } from '@/lib/supabase'
+
+// SSR для Server Components
+import { createSupabaseServerClient } from '@/lib/supabase-server'
+
+// Клиент для браузера
+import { createSupabaseBrowserClient } from '@/lib/supabase-browser'
+```
+
+### Проверка конфигурации:
+
+```typescript
+import { isSupabaseConfigured, getEnvironmentInfo } from '@/lib/supabaseClient'
+
+if (isSupabaseConfigured()) {
+  console.log(getEnvironmentInfo())
+  // { mode: 'sandbox', hasSupabaseUrl: true, hasAnonKey: true, ... }
+}
+```
+
+## Ветка master vs main
+
+- **main** — рабочая основная ветка (использовать для пуша)
+- **master** — историческая, не используется
+
+## Команды
+
+```bash
+bun run lint        # Проверка линтера
+bun run db:push     # Применить схему Prisma
+bun run db:generate # Генерация Prisma клиента
+```
+
+---
+
+## Module Audit Summary
+
+**Дата:** 2025-03-11
+**Статус:** ✅ Завершён (9/9 модулей)
+
+### Итоговая таблица
+
+| Модуль | Сохранение | Таблиц | Багов | UX проблем |
+|--------|------------|--------|-------|------------|
+| GYM | ✅ Корректно | 8 | 3 | 4 |
+| Wellbeing | ✅ Корректно | 3 | 2 | 3 |
+| Rituals | ✅ Корректно | 4 | 4 | 4 |
+| Habits | ✅ Корректно | 2 | 4 | 4 |
+| Tasks/Chains | ✅ Корректно | 2 | 4 | 5 |
+| Notes/Content | ✅ Корректно | 4 | 5 | 4 |
+| Finance | ✅ Корректно | 3 | 4 | 5 |
+| Challenges | ✅ Корректно | 2 | 4 | 4 |
+| Profile/Settings | ✅ Корректно | 6 | 4 | 4 |
+| **ИТОГО** | — | **35** | **34** | **37** |
+
+**Общий вердикт:** Все 9 модулей корректно сохраняют данные в Supabase через Prisma.
+
+### Приоритетные исправления (ТОП-5)
+
+| # | ID | Модуль | Проблема | Критичность |
+|---|-----|--------|----------|-------------|
+| 1 | H-1 | Habits | Weekly stats используют `Math.random()` | 🔴 КРИТИЧНО |
+| 2 | P-2 | Profile | `stats.totalWorkouts` — моковые данные | 🔴 КРИТИЧНО |
+| 3 | C-2 | Content | `contentIdProp` не передаётся в ContentDetailScreen | 🟠 ВЫСОКАЯ |
+| 4 | R-4 | Rituals | Streak calculation для не-ежедневных ритуалов | 🟡 СРЕДНЯЯ |
+| 5 | F-1 | Finance | Нет обработки network errors | 🟡 СРЕДНЯЯ |
+
+**Полный аудит:** `docs/MODULE_AUDIT.md`

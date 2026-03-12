@@ -1,0 +1,1121 @@
+// LeakFixer Mini App - Prisma Schema for Supabase (Production)
+// PostgreSQL - Telegram Mini App with full feature set from master
+// 
+// DEPLOYMENT NOTES:
+// 1. Set DATABASE_URL to Supabase connection pooling URL (port 6543)
+// 2. Set DIRECT_DATABASE_URL to Supabase direct URL (port 5432)
+// 3. Run migrations with: prisma migrate deploy
+//
+// BRANCH: main (production) - synced with master functionality
+// GENERATED: Converted from master's SQLite schema to Supabase PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+// ============================================
+// CORE DOMAIN - User & Authentication
+// ============================================
+
+/// App user - Telegram Mini App primary identity
+/// Supports future email/phone authentication
+model AppUser {
+  id        String  @id @default(uuid()) @db.Uuid
+  
+  // Telegram identity (primary auth method)
+  telegramId           BigInt?  @unique @map("telegram_id") @db.BigInt
+  telegramUsername     String?  @map("telegram_username")
+  telegramFirstName    String?  @map("telegram_first_name")
+  telegramLastName     String?  @map("telegram_last_name")
+  telegramLanguageCode String?  @default("ru") @map("telegram_language_code")
+  telegramPhotoUrl     String?  @map("telegram_photo_url")
+  
+  // Legacy fields (for backwards compatibility with old miniapp)
+  username  String?
+  firstName String?  @map("first_name")
+  lastName  String?  @map("last_name")
+  photoUrl  String?  @map("photo_url")
+  language  String   @default("ru")
+  
+  // Future auth methods (phone/email) - currently unused
+  email          String?   @unique
+  phone          String?   @unique
+  emailVerified  DateTime? @map("email_verified")
+  phoneVerified  DateTime? @map("phone_verified")
+  
+  // User progress & gamification
+  day    Int @default(1)
+  streak Int @default(0)
+  points Int @default(0)
+  
+  // Timestamps
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Auth metadata
+  authProvider String?   @default("telegram") @map("auth_provider") // telegram, email, phone
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz
+
+  // Relations
+  profile               UserProfile?
+  fitnessDaily          FitnessDaily[]
+  dailyStates           DailyState[]
+  measurements          Measurement[]
+  habits                Habit[]
+  habitLogs             HabitLog[]
+  gymPeriods            GymPeriod[]
+  buddies               Buddy[]
+  rituals               Ritual[]
+  ritualCompletions     RitualCompletion[]
+  userAttributes        UserAttribute[]
+  achievements          Achievement[]
+  chains                Chain[]
+  tasks                 Task[]
+  notes                 Note[]
+  contentItems          ContentItem[]
+  settings              UserSettings?
+  feedbacks             Feedback[]
+  accounts              Account[]
+  categories            Category[]
+  transactions          Transaction[]
+  challenges            Challenge[]
+  supplements           Supplement[]
+  supplementIntakes     SupplementIntake[]
+  foodEntries           FoodEntry[]
+  // New relations from master
+  directions            Direction[]
+  skills                Skill[]
+  traits                Trait[]
+  gymExerciseTemplates  GymExerciseTemplate[]
+  // Wellbeing relations
+  wellbeingSettings     UserWellbeingSettings?
+  dailyWellbeing        DailyWellbeing[]
+  weeklyWellbeing       WeeklyWellbeing[]
+
+  @@index([telegramId])
+  @@index([email])
+  @@index([phone])
+  @@map("app_users")
+}
+
+/// User fitness profile - extended user data
+model UserProfile {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @unique @map("user_id") @db.Uuid
+  weight         Float?
+  height         Float?
+  age            Int?
+  sex            String?  // "male" or "female" - for BMR calculation
+  targetWeight   Float?   @map("target_weight")
+  targetCalories Int?     @map("target_calories")
+  workProfile    String?  @map("work_profile") // sedentary, mixed, physical, variable
+  waterBaseline  Int      @default(2000) @map("water_baseline")
+  
+  // Body measurements
+  waist  Float?
+  hips   Float?
+  chest  Float?
+  bicep  Float?
+  thigh  Float?
+  
+  // Personal info
+  bio String?
+  
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+/// Lessons for 30-day loop
+model Lesson {
+  id          String   @id @default(uuid()) @db.Uuid
+  day         Int      @unique
+  title       String
+  description String?
+  videoUrl    String?  @map("video_url")
+  content     String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("lessons")
+}
+
+// ============================================
+// HABITS DOMAIN
+// ============================================
+
+/// Habit definitions (user-created)
+model Habit {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String
+  icon      String?
+  color     String?
+  frequency String?
+  target    Int?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user AppUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs HabitLog[]
+
+  @@map("habits")
+}
+
+/// Habit completion logs
+model HabitLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  habitId   String   @map("habit_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  date      DateTime @default(now()) @db.Timestamptz
+  completed Boolean  @default(false)
+  count     Int      @default(1)
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  habit Habit  @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  user  AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([habitId, date])
+  @@map("habit_logs")
+}
+
+// ============================================
+// FITNESS DOMAIN
+// ============================================
+
+/// Daily fitness data snapshot
+model FitnessDaily {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  date        DateTime @default(now()) @db.Timestamptz
+  activities  String?  // JSON
+  foods       String?  // JSON
+  water       Int      @default(0)
+  waterTarget Int      @default(2000) @map("water_target")
+  supplements String?  // JSON
+  mood        Int?
+  energy      Int?
+  gymState    String?  @map("gym_state")
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("fitness_daily")
+}
+
+/// Daily state (mood, energy)
+model DailyState {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  date      DateTime @default(now()) @db.Timestamptz
+  mood      Int?
+  energy    Int?
+  notes     String?
+  // LeakFix analytics preparation fields (NEW from master)
+  stress         Int?    @map("stress")          // 1-10 scale for stress level
+  sleepHours     Float?  @map("sleep_hours")     // Hours of sleep
+  sleepQuality   Int?    @map("sleep_quality")   // 1-10 scale for sleep quality
+  isFailureDay   Boolean @default(false) @map("is_failure_day")   // Flag for days with major setbacks
+  failureReasons String? @map("failure_reasons") // JSON array: ["overeating", "missed_rituals", "low_energy"]
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([date])
+  @@map("daily_state")
+}
+
+/// Measurements log
+model Measurement {
+  id       String   @id @default(uuid()) @db.Uuid
+  userId   String   @map("user_id") @db.Uuid
+  type     String   // waist, hips, chest, bicep, thigh, weight
+  value    Float
+  unit     String?
+  date     DateTime @default(now()) @db.Timestamptz
+  note     String?
+  photoUrl String?  @map("photo_url")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("measurements")
+}
+
+// ============================================
+// GYM DOMAIN (v1.3/v1.5/v1.7)
+// ============================================
+
+/// Training period (macrocycle)
+model GymPeriod {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  name             String
+  type             String    // split, fullbody, ppl, upper_lower, custom
+  cycleLength      Int       @default(7) @map("cycle_length")
+  workoutsPerCycle Int       @default(4) @map("workouts_per_cycle")
+  totalCycles      Int       @default(8) @map("total_cycles")
+  currentCycle     Int       @default(1) @map("current_cycle")
+  currentDay       Int       @default(1) @map("current_day")
+  startDate        DateTime  @default(now()) @map("start_date") @db.Timestamptz
+  endDate          DateTime? @map("end_date") @db.Timestamptz
+  isActive         Boolean   @default(true) @map("is_active")
+  // NEW from master (v1.3)
+  daySchedule      String?   @map("day_schedule") // JSON: [{ type: "workout"|"rest", dayNum, workoutNum?, name?, muscleGroups? }]
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user            AppUser                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cycles          GymCycle[]
+  workouts        GymWorkout[]
+  workoutTemplates GymWorkoutTemplate[]  // NEW from master (v1.3)
+
+  @@map("gym_periods")
+}
+
+/// Training cycle (mesocycle within period)
+model GymCycle {
+  id        String    @id @default(uuid()) @db.Uuid
+  periodId  String    @map("period_id") @db.Uuid
+  cycleNum  Int       @map("cycle_num")
+  startDate DateTime  @default(now()) @map("start_date") @db.Timestamptz
+  endDate   DateTime? @map("end_date") @db.Timestamptz
+  notes     String?
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  period   GymPeriod    @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  workouts GymWorkout[]
+
+  @@map("gym_cycles")
+}
+
+/// Individual workout
+model GymWorkout {
+  id            String    @id @default(uuid()) @db.Uuid
+  periodId      String    @map("period_id") @db.Uuid
+  cycleId       String?   @map("cycle_id") @db.Uuid
+  date          DateTime  @default(now()) @db.Timestamptz
+  dayOfWeek     Int       @map("day_of_week") // 1-7
+  workoutNum    Int       @map("workout_num")
+  name          String?
+  muscleGroups  String?   @map("muscle_groups") // JSON array
+  duration      Int?
+  completed     Boolean   @default(false)
+  notes         String?
+  // NEW from master (v1.2/v1.3)
+  status               String?  @default("planned") @map("status") // planned, completed, skipped, rescheduled
+  wellbeing            Int?     @map("wellbeing")                          // 1-5 rating
+  wellbeingNote        String?  @map("wellbeing_note")
+  additionalActivities String?  @map("additional_activities")              // JSON: [{ type, value, unit }]
+  workoutTemplateId    String?  @map("workout_template_id") @db.Uuid      // ссылка на шаблон дня
+  cycleNumber          Int?     @map("cycle_number")                       // номер цикла (1-8)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  period         GymPeriod          @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  cycle          GymCycle?          @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  workoutTemplate GymWorkoutTemplate? @relation(fields: [workoutTemplateId], references: [id], onDelete: SetNull)
+  exercises      GymExercise[]
+
+  @@map("gym_workouts")
+}
+
+/// Workout template (программа для типа дня) - NEW from master (v1.3)
+model GymWorkoutTemplate {
+  id           String   @id @default(uuid()) @db.Uuid
+  periodId     String   @map("period_id") @db.Uuid
+  workoutNum   Int      @map("workout_num") // номер дня в цикле (1, 2, 3, 4)
+  name         String   // "Грудь + Трицепс"
+  muscleGroups String?  @map("muscle_groups") // JSON array: ["chest", "triceps"]
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  period    GymPeriod                   @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  exercises GymWorkoutTemplateExercise[]
+  workouts  GymWorkout[]
+
+  @@map("gym_workout_templates")
+}
+
+/// Exercise in workout template - NEW from master (v1.3)
+model GymWorkoutTemplateExercise {
+  id                 String   @id @default(uuid()) @db.Uuid
+  workoutTemplateId  String   @map("workout_template_id") @db.Uuid
+  exerciseTemplateId String?  @map("exercise_template_id") @db.Uuid // ссылка на GymExerciseTemplate
+  name               String   // "Жим гантелей лёжа"
+  muscleGroup        String?  @map("muscle_group")
+  order              Int      @default(0)
+  defaultScheme      String?  @map("default_scheme") // legacy: "12х4"
+  defaultReps        Int?     @map("default_reps")   // v1.5: target reps
+  defaultSets        Int      @default(4) @map("default_sets") // v1.5: target sets
+  defaultWeight      Float?   @map("default_weight")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  workoutTemplate  GymWorkoutTemplate   @relation(fields: [workoutTemplateId], references: [id], onDelete: Cascade)
+  exerciseTemplate GymExerciseTemplate? @relation(fields: [exerciseTemplateId], references: [id], onDelete: SetNull)
+  exercises        GymExercise[]
+
+  @@map("gym_workout_template_exercises")
+}
+
+/// Exercise in a workout
+model GymExercise {
+  id           String   @id @default(uuid()) @db.Uuid
+  workoutId    String   @map("workout_id") @db.Uuid
+  name         String
+  muscleGroup  String?  @map("muscle_group")
+  order        Int      @default(0)
+  notes        String?
+  // v1.2 fields (NEW)
+  templateId   String?  @map("template_id") @db.Uuid // link to GymExerciseTemplate
+  repsScheme   String?  @map("reps_scheme")         // legacy: "12х4", "10х12х3х15х1"
+  nextWeight   Float?   @map("next_weight")         // recommended weight for next time
+  // v1.5 fields (NEW)
+  targetReps   Int?     @map("target_reps")         // target reps per set (e.g., 10-12)
+  targetSets   Int      @default(4) @map("target_sets") // target number of sets
+  // v1.3 fields (NEW)
+  workoutTemplateExerciseId String?  @map("workout_template_exercise_id") @db.Uuid // ссылка на GymWorkoutTemplateExercise
+  weight                    Float?   @map("weight")                           // текущий вес в тренировке
+  cycleNote                 String?  @map("cycle_note")                       // заметка для следующего цикла
+  comment                   String?  @map("comment")                          // заметка по факту выполнения
+  // v1.7 fields (NEW)
+  includeInFutureCycles Boolean @default(true) @map("include_in_future_cycles") // включать в будущие циклы
+  nextTargetReps        Int?    @map("next_target_reps")                    // повторы на след. цикл
+  nextTargetSets        Int?    @map("next_target_sets")                    // подходы на след. цикл
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  workout                GymWorkout               @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  template               GymExerciseTemplate?     @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  workoutTemplateExercise GymWorkoutTemplateExercise? @relation(fields: [workoutTemplateExerciseId], references: [id], onDelete: SetNull)
+  sets                   GymExerciseSet[]
+
+  @@map("gym_exercises")
+}
+
+/// Set in an exercise
+model GymExerciseSet {
+  id         String   @id @default(uuid()) @db.Uuid
+  exerciseId String   @map("exercise_id") @db.Uuid
+  setNum     Int      @map("set_num") // 1, 2, 3, 4...
+  weight     Float?
+  reps       Int?
+  duration   Int?
+  completed  Boolean  @default(false)
+  notes      String?
+  // NEW from master (v1.5)
+  isWarmup   Boolean  @default(false) @map("is_warmup") // warmup set vs working set
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  exercise GymExercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@map("gym_exercise_sets")
+}
+
+/// Exercise template (library of exercises) - NEW from master
+model GymExerciseTemplate {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  
+  // Basic info
+  name             String   // "Жим гантелей"
+  muscleGroup      String?  @map("muscle_group")
+  goal             String?  // strength, volume, accessory
+  
+  // Scheme and progression - v1.5: separated reps and sets
+  defaultReps      Int?     @map("default_reps")            // 10-12 reps
+  defaultSets      Int      @default(4) @map("default_sets") // 4 sets
+  defaultScheme    String?  @map("default_scheme")          // legacy: "12х4" - for backwards compatibility
+  progressionType  String?  @map("progression_type")        // "fixed", "percentage", "manual"
+  progressionStep  Float?   @map("progression_step")        // progression step (kg or %)
+  
+  // Current weight tracking
+  currentWeight    Float?   @map("current_weight")    // last used weight
+  nextWeight       Float?   @map("next_weight")       // recommended next weight
+  
+  // Technique notes
+  techniqueNotes   String?  @map("technique_notes") // JSON: ["контроль спины", "полная амплитуда"]
+  
+  // Metadata
+  isArchived       Boolean  @default(false) @map("is_archived")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user              AppUser                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercises         GymExercise[]               // all instances of this exercise
+  templateExercises GymWorkoutTemplateExercise[] // v1.3: used in workout templates
+
+  @@map("gym_exercise_templates")
+}
+
+// ============================================
+// BUDDIES (accountability partners)
+// ============================================
+
+model Buddy {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  partnerId    String   @map("partner_id")
+  partnerName  String   @map("partner_name")
+  partnerPhoto String?  @map("partner_photo")
+  status       String   @default("pending") // pending, accepted, rejected
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, partnerId])
+  @@map("buddies")
+}
+
+// ============================================
+// RITUALS MODULE
+// ============================================
+
+/// Ritual definition
+model Ritual {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  title        String
+  type         String    @default("regular") // regular, bad, one_time
+  category     String    // health, money, learning, relationships, mind, productivity
+  days         String    @default("[]") // JSON array: [1,2,3,4,5,6,7] or template name
+  timeWindow   String    @default("any") @map("time_window") // morning, day, evening, any
+  reminder     Boolean   @default(false)
+  reminderTime String?   @map("reminder_time")
+  goalShort    String?   @map("goal_short")
+  description  String?
+  isFromPreset Boolean   @default(false) @map("is_from_preset")
+  presetId     String?   @map("preset_id")
+  status       String    @default("active") // active, archived
+  attributes   String    @default("[]") // JSON array: ["health", "will"]
+  sortOrder    Int       @default(0) @map("sort_order")
+  contentId    String?   @map("content_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user        AppUser            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  completions RitualCompletion[]
+  content     ContentItem?       @relation(fields: [contentId], references: [id], onDelete: SetNull)
+
+  @@map("rituals")
+}
+
+/// Ritual completion log
+model RitualCompletion {
+  id        String   @id @default(uuid()) @db.Uuid
+  ritualId  String   @map("ritual_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  date      DateTime @default(now()) @db.Timestamptz
+  completed Boolean  @default(true)
+  note      String?
+  mood      String?  // good, neutral, bad
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  ritual Ritual  @relation(fields: [ritualId], references: [id], onDelete: Cascade)
+  user   AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([ritualId, date])
+  @@map("ritual_completions")
+}
+
+/// User attributes (health, mind, will)
+model UserAttribute {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  key       String   // health, mind, will
+  points    Int      @default(0)
+  level     Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@map("user_attributes")
+}
+
+/// User achievements
+model Achievement {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  code       String   // RITUAL_STREAK_3, etc.
+  metadata   String?  // JSON
+  obtainedAt DateTime @default(now()) @map("obtained_at") @db.Timestamptz
+
+  // Relations
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, code])
+  @@map("achievements")
+}
+
+// ============================================
+// NOTES MODULE
+// ============================================
+
+/// Note (thought, diary, content)
+model Note {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  text      String   // Note content
+  type      String   @default("thought") // thought, diary, content
+  zone      String   @default("general") // general, steam, leakfixer, ai, poker, health
+  date      DateTime @default(now()) @db.Timestamptz // Date the note is associated with
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user  AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  links NoteLink[]
+
+  @@map("notes")
+}
+
+/// Link between note and other entities (task, ritual, chain, content)
+model NoteLink {
+  id        String   @id @default(uuid()) @db.Uuid
+  noteId    String   @map("note_id") @db.Uuid
+  entity    String   // task, ritual, chain, content
+  entityId  String   @map("entity_id") // ID of the linked entity
+  fragment  String?  // Selected text fragment that was used to create entity
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@unique([noteId, entity, entityId])
+  @@map("note_links")
+}
+
+// ============================================
+// TASKS/CHAINS MODULE
+// ============================================
+
+/// Task chain (sequence of steps toward a goal)
+model Chain {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  title     String   // Goal/project name
+  status    String   @default("active") // active, completed
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user  AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks Task[]
+
+  @@map("chains")
+}
+
+/// Task (step in a chain or standalone)
+model Task {
+  id         String    @id @default(uuid()) @db.Uuid
+  chainId    String?   @map("chain_id") @db.Uuid // Optional - can be standalone
+  userId     String    @map("user_id") @db.Uuid
+  text       String
+  status     String    @default("todo") // todo, done
+  order      Int       @default(0) // Position in chain
+  date       DateTime? @db.Timestamptz // When planned (optional)
+  time       String?   // Time (HH:mm) or range (HH:mm-HH:mm)
+  zone       String?   // Steam, LeakFixer, AI, poker, health
+  ritualId   String?   @map("ritual_id") @db.Uuid // Optional link to ritual
+  noteId     String?   @map("note_id") @db.Uuid // Optional link to source note
+  contentId  String?   @map("content_id") @db.Uuid // Optional link to source content
+  notes      String?
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user    AppUser      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chain   Chain?       @relation(fields: [chainId], references: [id], onDelete: SetNull)
+  content ContentItem? @relation(fields: [contentId], references: [id], onDelete: SetNull)
+
+  @@map("tasks")
+}
+
+// ============================================
+// CONTENT MODULE (Development/Learning)
+// ============================================
+
+/// Content item (book, movie, course, podcast, video)
+model ContentItem {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  type          String    // book, movie, course, podcast, video
+  title         String
+  status        String    @default("planned") // planned, in_progress, completed
+  source        String?   // Platform: YouTube, Netflix, Udemy, etc.
+  url           String?   // Link to content
+  zone          String    @default("general") // general, steam, leakfixer, ai, poker, health
+  // Progress fields (universal)
+  totalUnits    Int?      @map("total_units") // Total pages, lessons, minutes
+  currentUnits  Int?      @map("current_units") // Current progress
+  unitType      String?   @map("unit_type") // pages, lessons, minutes, percent
+  // Metadata
+  author       String?  // Author/creator
+  imageUrl     String?  @map("image_url") // Cover image
+  description  String?  // Brief description
+  notes        String?  // User's notes
+  startedAt    DateTime? @map("started_at") @db.Timestamptz
+  completedAt  DateTime? @map("completed_at") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user        AppUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  links       ContentLink[]
+  tasks       Task[]
+  rituals     Ritual[]
+
+  @@map("content_items")
+}
+
+/// Link between content and other entities (note, ritual)
+model ContentLink {
+  id        String   @id @default(uuid()) @db.Uuid
+  contentId String   @map("content_id") @db.Uuid
+  entity    String   // note, ritual
+  entityId  String   @map("entity_id") // ID of the linked entity
+  fragment  String?  // Related fragment/quote
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  content ContentItem @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@unique([contentId, entity, entityId])
+  @@map("content_links")
+}
+
+// ============================================
+// SETTINGS MODULE
+// ============================================
+
+/// User settings (notifications, zones, theme)
+model UserSettings {
+  id                    String   @id @default(uuid()) @db.Uuid
+  userId                String   @unique @map("user_id") @db.Uuid
+  ritualReminders       Boolean  @default(true) @map("ritual_reminders")
+  taskReminders         Boolean  @default(true) @map("task_reminders")
+  zoneSteamEnabled      Boolean  @default(true) @map("zone_steam_enabled")
+  zoneLeakfixerEnabled  Boolean  @default(true) @map("zone_leakfixer_enabled")
+  zoneAiEnabled         Boolean  @default(true) @map("zone_ai_enabled")
+  zonePokerEnabled      Boolean  @default(true) @map("zone_poker_enabled")
+  zoneHealthEnabled     Boolean  @default(true) @map("zone_health_enabled")
+  theme                 String   @default("system") // "light" | "dark" | "system"
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+// ============================================
+// FEEDBACK MODULE
+// ============================================
+
+/// User feedback (bugs, ideas, questions, reviews)
+model Feedback {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  type      String   // bug, idea, question, review
+  message   String
+  status    String   @default("new") // new, read, resolved
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("feedbacks")
+}
+
+// ============================================
+// FINANCE MODULE
+// ============================================
+
+/// Financial account (cash, card, poker bankroll, etc.)
+model Account {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  name           String   // "Карта Тинькофф", "Наличные", "Банкролл покер"
+  type           String   @default("cash") // cash, card, poker, steam, other
+  initialBalance Float    @default(0) @map("initial_balance") // Starting balance
+  icon           String?  // Emoji or icon name
+  color          String?  // Hex color
+  isActive       Boolean  @default(true) @map("is_active")
+  sortOrder      Int      @default(0) @map("sort_order")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user         AppUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@map("accounts")
+}
+
+/// Finance category (envelope/budget category)
+model Category {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  name          String   // "Steam/связки", "LeakFixer", "ИИ/подписки"
+  zone          String   @default("general") // steam, leakfixer, ai, poker, health, life, savings, general
+  monthlyTarget Float?   @map("monthly_target") // Desired monthly budget (optional)
+  icon          String?  // Emoji or icon name
+  color         String?  // Hex color
+  sortOrder     Int      @default(0) @map("sort_order")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user         AppUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@map("categories")
+}
+
+/// Financial transaction
+model Transaction {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  accountId   String   @map("account_id") @db.Uuid
+  categoryId  String?  @map("category_id") @db.Uuid // Optional - can be uncategorized
+  date        DateTime @default(now()) @db.Timestamptz
+  amount      Float    // Positive = income, Negative = expense
+  description String?  // Comment/note
+  zone        String?  // Can be derived from category or set manually
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user     AppUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account  Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@map("transactions")
+}
+
+// ============================================
+// CHALLENGES MODULE
+// ============================================
+
+/// Personal challenge (ritual streak, chain completion, custom goal)
+model Challenge {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  name        String
+  // NEW from master
+  title       String?   @map("title")        // Short display name (optional, uses name if not set)
+  description String?   @map("description")  // Context: why I'm doing this
+  type        String    // ritual, chain, custom
+  category    String    @default("general") @map("category") // health, money, projects, relationships, learning, lifestyle, career, general
+  zone        String    @default("general")
+  directionId String?   @map("direction_id") @db.Uuid // Link to Direction (vision)
+  chainId     String?   @map("chain_id") @db.Uuid // For chain challenges
+  config      String    @default("{}") @map("config") // JSON: ritualIds, targetSteps, targetCount, periodDays, linkedRitualIds, linkedSkillIds, linkedTraitIds, etc.
+  duration    Int       @default(30)
+  progress    Int       @default(0)
+  startDate   DateTime  @default(now()) @map("start_date") @db.Timestamptz
+  endDate     DateTime? @map("end_date") @db.Timestamptz
+  status      String    @default("active") @map("status") // planned, active, completed, failed
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user            AppUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  direction       Direction? @relation(fields: [directionId], references: [id], onDelete: SetNull)
+  progressDetails ChallengeProgress[]
+
+  @@map("challenges")
+}
+
+/// Challenge progress tracking
+model ChallengeProgress {
+  id            String   @id @default(uuid()) @db.Uuid
+  challengeId   String   @map("challenge_id") @db.Uuid
+  daysCompleted Int      @default(0) @map("days_completed")
+  currentStreak Int      @default(0) @map("current_streak")
+  lastCheckedAt DateTime @default(now()) @map("last_checked_at") @db.Timestamptz
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@map("challenge_progress")
+}
+
+// ============================================
+// HEALTH MODULE (Supplements, Food, Water)
+// ============================================
+
+/// Supplement definition (vitamin, mineral, etc.)
+model Supplement {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  name         String   // "Витамин D", "Креатин", "Омега-3"
+  dosage       String?  // "2000 ME", "5 г", "1 капсула"
+  unit         String   @default("мг") // мг, г, табл, капс, мл
+  standardDose Float    @default(1) @map("standard_dose") // Standard dose amount
+  timeWindow   String   @default("any") @map("time_window") // morning, day, evening, any
+  days         String   @default("[1,2,3,4,5,6,7]") // JSON array of days (1-7)
+  isActive     Boolean  @default(true) @map("is_active")
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user    AppUser           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  intakes SupplementIntake[]
+
+  @@map("supplements")
+}
+
+/// Supplement intake log
+model SupplementIntake {
+  id           String   @id @default(uuid()) @db.Uuid
+  supplementId String   @map("supplement_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  date         DateTime @default(now()) @db.Timestamptz
+  time         String?  // HH:mm
+  dose         Float    @default(1) // Actual dose taken
+  checked      Boolean  @default(false)
+  note         String?
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  supplement Supplement @relation(fields: [supplementId], references: [id], onDelete: Cascade)
+  user       AppUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([supplementId, date])
+  @@map("supplement_intakes")
+}
+
+/// Food entry (meal tracking)
+model FoodEntry {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  date      DateTime @default(now()) @db.Timestamptz
+  mealType  String   @default("snack") @map("meal_type") // breakfast, lunch, dinner, snack
+  name      String   // "Овсянка с ягодами"
+  calories  Int?
+  protein   Float?
+  fat       Float?
+  carbs     Float?
+  amount    String?  // "200г", "1 порция"
+  quality   String?  // good, neutral, bad (subjective rating)
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("food_entries")
+}
+
+// ============================================
+// GOALS MODULE (Directions) - NEW from master
+// ============================================
+
+/// Direction (vision/goal direction for challenges)
+model Direction {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  title       String
+  description String?  @map("description") // Vision: where I want to be, why it's important
+  horizon     String   @default("year") // year, season, quarter, month
+  color       String   @default("#10b981")
+  icon        String?
+  status      String   @default("active") // active, paused, completed
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user       AppUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challenges Challenge[]
+
+  @@map("directions")
+}
+
+// ============================================
+// SKILLS MODULE - NEW from master
+// ============================================
+
+/// Skill definition (навык)
+model Skill {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  name        String
+  description String?
+  category    String   @default("general") @map("category") // health, money, learning, relationships, mind, productivity
+  level       Int      @default(1)
+  maxLevel    Int      @default(10) @map("max_level")
+  xp          Int      @default(0)
+  xpToNext    Int      @default(100) @map("xp_to_next")
+  importance  Int      @default(2) // 1-3, where 3 is most important
+  icon        String?
+  color       String?
+  isArchived  Boolean  @default(false) @map("is_archived")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user    AppUser      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  history SkillHistory[]
+
+  @@map("skills")
+}
+
+/// Skill level change history
+model SkillHistory {
+  id       String   @id @default(uuid()) @db.Uuid
+  skillId  String   @map("skill_id") @db.Uuid
+  oldLevel Int      @map("old_level")
+  newLevel Int      @map("new_level")
+  xpGained Int      @default(0) @map("xp_gained")
+  reason   String?  // "completed_challenge", "ritual_streak", "manual"
+  sourceId String?  @map("source_id") // ID of related entity
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@map("skill_history")
+}
+
+// ============================================
+// TRAITS MODULE - NEW from master
+// ============================================
+
+/// Trait definition (черта характера)
+model Trait {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  name        String
+  description String?
+  type        String   @default("positive") // positive, negative, neutral
+  category    String   @default("general") @map("category") // health, mind, will, social, productivity
+  score       Int      @default(5) // 1-10 scale, current level
+  targetScore Int?     @map("target_score") // 1-10 scale, desired level
+  icon        String?
+  color       String?
+  isArchived  Boolean  @default(false) @map("is_archived")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user    AppUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  history TraitHistory[]
+
+  @@map("traits")
+}
+
+/// Trait score change history
+model TraitHistory {
+  id        String   @id @default(uuid()) @db.Uuid
+  traitId   String   @map("trait_id") @db.Uuid
+  oldScore  Int      @map("old_score")
+  newScore  Int      @map("new_score")
+  delta     Int      // +1 or -1 typically
+  reason    String?  // "ritual_streak", "challenge_complete", "manual"
+  sourceId  String?  @map("source_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  trait Trait @relation(fields: [traitId], references: [id], onDelete: Cascade)
+
+  @@map("trait_history")
+}
+
+// ============================================
+// WELLBEING TRACKER MODULE v1.1 - NEW from master
+// ============================================
+
+/// User's wellbeing preset selection
+model UserWellbeingSettings {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  preset    String   @default("core") // "core", "expanded", "full"
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_wellbeing_settings")
+}
+
+/// Daily wellbeing answers (ежедневные вопросы)
+model DailyWellbeing {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  date        DateTime  @default(now()) @db.Timestamptz
+  preset      String    // "core", "expanded", "full" — какой пресет был в этот день
+  answers     String    // JSON: { "overall_state": 4, "be_ideal_self": 3, ... }
+  scores      String?   // JSON: { "overall": 0.75, "as10Scale": 8, "byCategory": {...} }
+  completedAt DateTime? @map("completed_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([date])
+  @@map("daily_wellbeing")
+}
+
+/// Weekly wellbeing answers (еженедельные вопросы)
+model WeeklyWellbeing {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  year        Int       // 2025
+  week        Int       // ISO week number (1-53)
+  preset      String    // "expanded", "full"
+  answers     String    // JSON: { "hobbies_balance": 4, "family_weekly": 3, ... }
+  scores      String?   // JSON: { "overall": 0.75, "as10Scale": 8, "byCategory": {...} }
+  completedAt DateTime? @map("completed_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, year, week])
+  @@map("weekly_wellbeing")
+}
