@@ -2,10 +2,13 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '@/lib/store'
+import { showErrorToast, showSuccessToast } from '@/lib/network-utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
+import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Play,
   BookOpen,
@@ -16,7 +19,17 @@ import {
   CheckCircle2,
   TrendingUp,
   TrendingDown,
-  Minus
+  Minus,
+  Droplets,
+  Apple,
+  Pill,
+  Heart,
+  Zap,
+  ChevronLeft,
+  Scale,
+  Target,
+  BarChart3,
+  List
 } from 'lucide-react'
 import {
   Dialog,
@@ -25,6 +38,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Slider } from '@/components/ui/slider'
+import { DatePicker, DateBadge } from '@/components/DatePicker'
+import { WellbeingWidget } from '@/components/wellbeing'
+import { WeightHistoryModal } from '@/components/weight/WeightHistoryModal'
+import { WeightRecordsModal } from '@/components/weight/WeightRecordsModal'
+import { WeightGoalModal } from '@/components/weight/WeightGoalModal'
 
 interface Lesson {
   id: string
@@ -33,8 +51,24 @@ interface Lesson {
   description: string | null
 }
 
+interface DailySummary {
+  water: { current: number; target: number; percentage: number }
+  food: { calories: number; entriesCount: number; qualityBreakdown: { good: number; neutral: number; bad: number } }
+  rituals: { completed: number; total: number; percentage: number }
+  state: { mood: number | null; energy: number | null }
+  supplements: { checked: number; total: number; percentage: number }
+  flags: {
+    isOvereating: boolean
+    isLowEnergy: boolean
+    isBadMood: boolean
+    isRitualsFailed: boolean
+    isDehydrated: boolean
+    hasNoData: boolean
+  }
+}
+
 export function HomeScreen() {
-  const { user, globalState, updateGlobalState, updateProgress, isDemoMode } = useAppStore()
+  const { user, globalState, updateGlobalState, updateProgress, isDemoMode, selectedDate, setScreen } = useAppStore()
   const [lesson, setLesson] = useState<Lesson | null>(null)
   const [upcomingLessons, setUpcomingLessons] = useState<Lesson[]>([])
   const [lessonCompleted, setLessonCompleted] = useState(false)
@@ -42,6 +76,23 @@ export function HomeScreen() {
   const [showMoodDialog, setShowMoodDialog] = useState(false)
   const [moodValue, setMoodValue] = useState(globalState?.mood || 5)
   const [energyValue, setEnergyValue] = useState(globalState?.energy || 5)
+  const [dailySummary, setDailySummary] = useState<DailySummary | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(true)
+  
+  // Weight tracking state
+  const [weightValue, setWeightValue] = useState('')
+  const [weightLoading, setWeightLoading] = useState(false)
+  const [weightSaving, setWeightSaving] = useState(false)
+  const [weightData, setWeightData] = useState<{
+    todayAvg: number | null
+    changeWeek: number | null
+    currentWeight: number | null
+    targetWeight: number | null
+    toGoal: number | null
+  } | null>(null)
+  const [showWeightHistory, setShowWeightHistory] = useState(false)
+  const [showWeightRecords, setShowWeightRecords] = useState(false)
+  const [showWeightGoal, setShowWeightGoal] = useState(false)
 
   const currentDay = user?.day || 1
   const progress = ((currentDay - 1) / 30) * 100
@@ -64,6 +115,84 @@ export function HomeScreen() {
     }
     loadLesson()
   }, [user?.id, currentDay])
+
+  // Load daily summary
+  useEffect(() => {
+    const loadSummary = async () => {
+      if (!user?.id) return
+      setSummaryLoading(true)
+      try {
+        const response = await fetch(`/api/daily-summary?userId=${user.id}&date=${selectedDate}`)
+        const data = await response.json()
+        if (data.success) {
+          setDailySummary(data.summary)
+        }
+      } catch (error) {
+        console.error('Failed to load daily summary:', error)
+      } finally {
+        setSummaryLoading(false)
+      }
+    }
+    loadSummary()
+  }, [user?.id, selectedDate])
+
+  // Load weight data
+  useEffect(() => {
+    const loadWeight = async () => {
+      if (!user?.id) return
+      setWeightLoading(true)
+      try {
+        const response = await fetch(`/api/weight?userId=${user.id}`)
+        const data = await response.json()
+        setWeightData({
+          todayAvg: data.todayAvg,
+          changeWeek: data.changeWeek,
+          currentWeight: data.currentWeight,
+          targetWeight: data.targetWeight,
+          toGoal: data.toGoal
+        })
+        if (data.todayAvg) {
+          setWeightValue(data.todayAvg.toFixed(1))
+        }
+      } catch (error) {
+        console.error('Failed to load weight:', error)
+      } finally {
+        setWeightLoading(false)
+      }
+    }
+    loadWeight()
+  }, [user?.id])
+
+  // Save weight
+  const handleSaveWeight = async () => {
+    if (!user?.id || !weightValue) return
+    setWeightSaving(true)
+    try {
+      await fetch('/api/weight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          value: parseFloat(weightValue)
+        })
+      })
+      showSuccessToast('Вес записан')
+      // Reload weight data
+      const response = await fetch(`/api/weight?userId=${user.id}`)
+      const data = await response.json()
+      setWeightData({
+        todayAvg: data.todayAvg,
+        changeWeek: data.changeWeek,
+        currentWeight: data.currentWeight,
+        targetWeight: data.targetWeight,
+        toGoal: data.toGoal
+      })
+    } catch (error) {
+      showErrorToast(error, 'save weight')
+    } finally {
+      setWeightSaving(false)
+    }
+  }
 
   const handleCompleteLesson = async () => {
     if (!user?.id) return
@@ -119,7 +248,17 @@ export function HomeScreen() {
       <div className="space-y-2">
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">Прогресс курса</span>
-          <span className="font-medium text-primary">{Math.round(progress)}%</span>
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-primary">{Math.round(progress)}%</span>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-6 px-2 text-xs bg-primary/10 hover:bg-primary/20"
+              onClick={() => setScreen('journey')}
+            >
+              🗺️ Journey
+            </Button>
+          </div>
         </div>
         <Progress value={progress} className="h-2" />
       </div>
@@ -198,6 +337,180 @@ export function HomeScreen() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Wellbeing Widget */}
+      <WellbeingWidget 
+        mood={globalState?.mood}
+        energy={globalState?.energy}
+      />
+
+      {/* Weight Tracking Card */}
+      <Card className="bg-card/50 backdrop-blur">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Scale className="w-5 h-5" />
+              Вес сегодня
+            </CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {weightLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-4 w-24" />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Input */}
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1">
+                  <Input
+                    type="number"
+                    step="0.1"
+                    placeholder="72.5"
+                    value={weightValue}
+                    onChange={(e) => setWeightValue(e.target.value)}
+                    className="text-center text-2xl font-bold h-12"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                    кг
+                  </span>
+                </div>
+                <Button
+                  className="h-12 px-4 bg-primary"
+                  onClick={handleSaveWeight}
+                  disabled={!weightValue || weightSaving}
+                >
+                  {weightSaving ? '...' : 'Записать'}
+                </Button>
+              </div>
+
+              {/* Stats */}
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  {weightData?.changeWeek !== null && weightData?.changeWeek !== undefined ? (
+                    <>
+                      {weightData.changeWeek < 0 ? (
+                        <TrendingDown className="w-3 h-3 text-emerald-400" />
+                      ) : weightData.changeWeek > 0 ? (
+                        <TrendingUp className="w-3 h-3 text-red-400" />
+                      ) : (
+                        <Minus className="w-3 h-3" />
+                      )}
+                      <span className={weightData.changeWeek < 0 ? 'text-emerald-400' : weightData.changeWeek > 0 ? 'text-red-400' : ''}>
+                        За неделю: {weightData.changeWeek > 0 ? '+' : ''}{weightData.changeWeek.toFixed(1)} кг
+                      </span>
+                    </>
+                  ) : (
+                    <span>За неделю: —</span>
+                  )}
+                </div>
+
+                {weightData?.targetWeight && weightData?.toGoal !== null && (
+                  <div className="flex items-center gap-1">
+                    <Target className="w-3 h-3" />
+                    <span>
+                      До цели ({weightData.targetWeight.toFixed(0)} кг): {weightData.toGoal > 0 ? '-' : '+'}{Math.abs(weightData.toGoal).toFixed(1)} кг
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-xs"
+                  onClick={() => setShowWeightHistory(true)}
+                >
+                  <BarChart3 className="w-3 h-3 mr-1" />
+                  График
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-xs"
+                  onClick={() => setShowWeightRecords(true)}
+                >
+                  <List className="w-3 h-3 mr-1" />
+                  История
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Daily Summary Block */}
+      {!summaryLoading && dailySummary && !dailySummary.flags.hasNoData && (
+        <Card className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors" onClick={() => setScreen('daily-summary')}>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Сводка за день</CardTitle>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-4 gap-2">
+              {/* Water */}
+              <div className="text-center p-2 rounded-lg bg-muted/30">
+                <Droplets className="w-4 h-4 mx-auto mb-1 text-cyan-400" />
+                <div className="text-xs text-muted-foreground">Вода</div>
+                <div className="text-sm font-bold">{dailySummary.water.percentage}%</div>
+              </div>
+              
+              {/* Food */}
+              <div className="text-center p-2 rounded-lg bg-muted/30">
+                <Apple className="w-4 h-4 mx-auto mb-1 text-green-400" />
+                <div className="text-xs text-muted-foreground">Еда</div>
+                <div className="text-sm font-bold">{dailySummary.food.calories}</div>
+              </div>
+              
+              {/* Rituals */}
+              <div className="text-center p-2 rounded-lg bg-muted/30">
+                <CheckCircle2 className="w-4 h-4 mx-auto mb-1 text-purple-400" />
+                <div className="text-xs text-muted-foreground">Ритуалы</div>
+                <div className="text-sm font-bold">{dailySummary.rituals.completed}/{dailySummary.rituals.total}</div>
+              </div>
+              
+              {/* Supplements */}
+              <div className="text-center p-2 rounded-lg bg-muted/30">
+                <Pill className="w-4 h-4 mx-auto mb-1 text-blue-400" />
+                <div className="text-xs text-muted-foreground">БАДы</div>
+                <div className="text-sm font-bold">{dailySummary.supplements.checked}/{dailySummary.supplements.total}</div>
+              </div>
+            </div>
+
+            {/* Warning flags */}
+            {(dailySummary.flags.isOvereating || dailySummary.flags.isLowEnergy || dailySummary.flags.isBadMood || dailySummary.flags.isRitualsFailed || dailySummary.flags.isDehydrated) && (
+              <div className="mt-3 flex flex-wrap gap-1">
+                {dailySummary.flags.isDehydrated && (
+                  <Badge variant="outline" className="text-[10px] bg-cyan-500/10 text-cyan-400 border-cyan-500/30">
+                    💧 Обезвоживание
+                  </Badge>
+                )}
+                {dailySummary.flags.isOvereating && (
+                  <Badge variant="outline" className="text-[10px] bg-red-500/10 text-red-400 border-red-500/30">
+                    🍔 Переедание
+                  </Badge>
+                )}
+                {dailySummary.flags.isLowEnergy && (
+                  <Badge variant="outline" className="text-[10px] bg-orange-500/10 text-orange-400 border-orange-500/30">
+                    🪫 Низкая энергия
+                  </Badge>
+                )}
+                {dailySummary.flags.isRitualsFailed && (
+                  <Badge variant="outline" className="text-[10px] bg-yellow-500/10 text-yellow-400 border-yellow-500/30">
+                    ⚠️ Ритуалы
+                  </Badge>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Quick stats */}
       <div className="grid grid-cols-2 gap-3">
@@ -357,6 +670,49 @@ export function HomeScreen() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Weight History Modal */}
+      <WeightHistoryModal
+        open={showWeightHistory}
+        onOpenChange={setShowWeightHistory}
+        onOpenRecords={() => {
+          setShowWeightHistory(false)
+          setShowWeightRecords(true)
+        }}
+        onOpenGoal={() => {
+          setShowWeightHistory(false)
+          setShowWeightGoal(true)
+        }}
+      />
+
+      {/* Weight Records Modal */}
+      <WeightRecordsModal
+        open={showWeightRecords}
+        onOpenChange={setShowWeightRecords}
+      />
+
+      {/* Weight Goal Modal */}
+      <WeightGoalModal
+        open={showWeightGoal}
+        onOpenChange={setShowWeightGoal}
+        currentWeight={weightData?.currentWeight}
+        onUpdate={() => {
+          // Reload weight data
+          if (user?.id) {
+            fetch(`/api/weight?userId=${user.id}`)
+              .then(res => res.json())
+              .then(data => {
+                setWeightData({
+                  todayAvg: data.todayAvg,
+                  changeWeek: data.changeWeek,
+                  currentWeight: data.currentWeight,
+                  targetWeight: data.targetWeight,
+                  toGoal: data.toGoal
+                })
+              })
+          }
+        }}
+      />
     </div>
   )
 }

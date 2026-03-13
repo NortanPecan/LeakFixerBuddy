@@ -1,16 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-// GET /api/content - Get all content items with filters
+// GET /api/content - Get all content items with filters or single item by id
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
+    const id = searchParams.get('id') // Single item by id
     const type = searchParams.get('type')
     const status = searchParams.get('status')
     const zone = searchParams.get('zone')
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
+
+    // Get single item by id
+    if (id) {
+      const item = await db.contentItem.findUnique({
+        where: { id },
+        include: {
+          links: {
+            select: {
+              id: true,
+              entity: true,
+              entityId: true,
+              fragment: true,
+            }
+          },
+          tasks: {
+            select: {
+              id: true,
+              text: true,
+              status: true,
+            }
+          },
+          rituals: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              category: true,
+            }
+          }
+        }
+      })
+
+      if (!item) {
+        return NextResponse.json({ error: 'Content not found' }, { status: 404 })
+      }
+
+      return NextResponse.json({ items: [item], total: 1 })
+    }
 
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })

@@ -21,11 +21,22 @@ import { FinanceScreen } from '@/components/screens/FinanceScreen'
 import { ChallengesScreen } from '@/components/screens/ChallengesScreen'
 import { ChallengeDetailScreen } from '@/components/screens/ChallengeDetailScreen'
 import { HealthScreen } from '@/components/screens/HealthScreen'
+import { DailySummaryScreen } from '@/components/screens/DailySummaryScreen'
+import { GoalsScreen } from '@/components/screens/GoalsScreen'
+import { SkillsScreen } from '@/components/screens/SkillsScreen'
+import { TraitsScreen } from '@/components/screens/TraitsScreen'
+import { ExportScreen } from '@/components/screens/ExportScreen'
+import { StatsScreen } from '@/components/screens/StatsScreen'
+import { BuddyScreen } from '@/components/screens/BuddyScreen'
+import { JourneyScreen } from '@/components/screens/JourneyScreen'
+import { OnboardingScreen } from '@/components/screens/OnboardingScreen'
+import { DatePicker, DateBadge } from '@/components/DatePicker'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
+import { TopNav } from '@/components/TopNav'
 
 // Screens that show bottom nav
-const MAIN_SCREENS: Screen[] = ['home', 'fitness', 'rituals', 'gym', 'profile', 'tasks', 'notes', 'development', 'finance', 'challenges', 'health']
+const MAIN_SCREENS: Screen[] = ['home', 'fitness', 'rituals', 'gym', 'profile', 'tasks', 'notes', 'development', 'finance', 'challenges', 'health', 'daily-summary', 'goals', 'skills', 'traits', 'export', 'journey']
 
 // Screen router component
 function ScreenRouter({ screen, contentId }: { screen: Screen; contentId?: string | null }) {
@@ -66,6 +77,27 @@ function ScreenRouter({ screen, contentId }: { screen: Screen; contentId?: strin
       return <ChallengeDetailScreen />
     case 'health':
       return <HealthScreen />
+    case 'daily-summary':
+      return <DailySummaryScreen />
+    case 'goals':
+      return <GoalsScreen />
+    case 'skills':
+      return <SkillsScreen />
+    case 'traits':
+      return <TraitsScreen />
+    case 'export':
+      return <ExportScreen />
+    case 'stats':
+      return <StatsScreen />
+    case 'buddies':
+      return <BuddyScreen />
+    case 'journey':
+      return <JourneyScreen />
+    case 'onboarding':
+      return <OnboardingScreen onComplete={(goal) => {
+        // После онбординга перенаправляем на journey
+        // Goal сохранится в JourneyProgress при старте
+      }} />
     case 'all-rituals':
       return <AllRitualsScreen />
     default:
@@ -145,8 +177,35 @@ export default function Home() {
           }
         }
 
-        // Login decision is handled in store (Telegram first, demo fallback only in regular browser)
-        const ok = await login()
+        // Check for owner mode from URL or localStorage
+        const urlParams = new URLSearchParams(window.location.search)
+        const ownerParam = urlParams.get('owner')
+        const storedMode = localStorage.getItem('leakfixer-auth-mode')
+        
+        // Determine login mode
+        let isDemo = false
+        let isOwner = false
+        
+        if (ownerParam === 'true') {
+          isOwner = true
+          localStorage.setItem('leakfixer-auth-mode', 'owner')
+        } else if (storedMode === 'owner') {
+          isOwner = true
+        } else if (storedMode === 'demo') {
+          isDemo = true
+        }
+        
+        // Clear URL param after reading
+        if (ownerParam) {
+          urlParams.delete('owner')
+          const newUrl = urlParams.toString() 
+            ? `${window.location.pathname}?${urlParams.toString()}`
+            : window.location.pathname
+          window.history.replaceState({}, '', newUrl)
+        }
+
+        // Login with determined mode
+        const ok = await login(isDemo, isOwner)
         if (!ok && typeof window !== 'undefined') {
           const message = (window as unknown as { __leakfixerAuthError?: string }).__leakfixerAuthError
           setAuthError(message || 'Auth failed')
@@ -180,10 +239,27 @@ export default function Home() {
   const showBottomNav = MAIN_SCREENS.includes(currentScreen)
 
   return (
-    <main className="min-h-screen bg-background">
-      <div className="max-w-md mx-auto px-4 py-4">
+    <main 
+      className="min-h-screen flex flex-col"
+      style={{
+        background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)',
+      }}
+    >
+      {/* Fixed Top Navigation */}
+      <TopNav />
+      
+      {/* Main Content Area with proper spacing */}
+      <div 
+        className="flex-1 max-w-md mx-auto px-4 w-full overflow-y-auto"
+        style={{
+          paddingTop: '8px',
+          paddingBottom: showBottomNav ? '88px' : '24px', // Account for bottom nav
+        }}
+      >
         <ScreenRouter screen={currentScreen} contentId={selectedContentId} />
       </div>
+      
+      {/* Fixed Bottom Navigation */}
       {showBottomNav && <BottomNav />}
     </main>
   )
@@ -193,25 +269,57 @@ function AuthErrorScreen({ message }: { message: string }) {
   const { login, setIsLoading } = useAppStore()
 
   return (
-    <main className="min-h-screen bg-background">
-      <div className="max-w-md mx-auto px-4 py-8 space-y-4">
-        <h1 className="text-xl font-semibold">Ошибка авторизации</h1>
-        <p className="text-sm text-muted-foreground break-words">{message}</p>
-        <div className="grid grid-cols-1 gap-2">
-          <Button onClick={async () => {
-            setIsLoading(true)
-            await login()
-            setIsLoading(false)
-          }}>
-            Повторить
-          </Button>
-          <Button variant="outline" onClick={async () => {
-            setIsLoading(true)
-            await login(true)
-            setIsLoading(false)
-          }}>
-            Войти как демо
-          </Button>
+    <main 
+      className="min-h-screen flex flex-col"
+      style={{
+        background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)',
+      }}
+    >
+      <div className="max-w-md mx-auto px-4 py-8 space-y-4 flex-1 flex flex-col justify-center">
+        <div 
+          className="p-6 rounded-2xl text-center"
+          style={{
+            background: 'rgba(0,0,0,0.4)',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid rgba(255,255,255,0.1)',
+          }}
+        >
+          <h1 className="text-xl font-semibold text-white mb-2">Ошибка авторизации</h1>
+          <p className="text-sm text-white/60 break-words mb-4">{message}</p>
+          <div className="grid grid-cols-1 gap-2">
+            <Button 
+              onClick={async () => {
+                setIsLoading(true)
+                await login()
+                setIsLoading(false)
+              }}
+              className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600"
+            >
+              Повторить
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={async () => {
+                setIsLoading(true)
+                await login(true) // demo
+                setIsLoading(false)
+              }}
+              className="rounded-full bg-white/10 border-white/20 text-white hover:bg-white/20"
+            >
+              Войти как демо
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={async () => {
+                setIsLoading(true)
+                await login(false, true) // owner
+                setIsLoading(false)
+              }}
+              className="rounded-full bg-white/10 border-white/20 text-white hover:bg-white/20"
+            >
+              Войти как Owner
+            </Button>
+          </div>
         </div>
       </div>
     </main>
@@ -220,35 +328,67 @@ function AuthErrorScreen({ message }: { message: string }) {
 
 function LoadingScreen() {
   return (
-    <main className="min-h-screen bg-background">
-      <div className="max-w-md mx-auto px-4 py-4 space-y-4">
+    <main 
+      className="min-h-screen flex flex-col"
+      style={{
+        background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)',
+      }}
+    >
+      <div className="max-w-md mx-auto px-4 py-8 space-y-4 flex-1">
         {/* Header skeleton */}
         <div className="flex items-center justify-between">
           <div className="space-y-2">
-            <Skeleton className="h-8 w-24 bg-muted" />
-            <Skeleton className="h-4 w-32 bg-muted" />
+            <div 
+              className="h-8 w-24 rounded-lg"
+              style={{ background: 'rgba(255,255,255,0.1)' }}
+            />
+            <div 
+              className="h-4 w-32 rounded-lg"
+              style={{ background: 'rgba(255,255,255,0.05)' }}
+            />
           </div>
           <div className="flex gap-2">
-            <Skeleton className="h-6 w-12 rounded-full bg-muted" />
-            <Skeleton className="h-6 w-12 rounded-full bg-muted" />
+            <div 
+              className="h-6 w-12 rounded-full"
+              style={{ background: 'rgba(255,255,255,0.1)' }}
+            />
+            <div 
+              className="h-6 w-12 rounded-full"
+              style={{ background: 'rgba(255,255,255,0.1)' }}
+            />
           </div>
         </div>
 
         {/* Progress skeleton */}
-        <Skeleton className="h-2 w-full bg-muted" />
+        <div 
+          className="h-2 w-full rounded-full"
+          style={{ background: 'rgba(255,255,255,0.1)' }}
+        />
 
         {/* Main card skeleton */}
         <div className="space-y-4">
-          <Skeleton className="h-40 w-full rounded-xl bg-muted" />
+          <div 
+            className="h-40 w-full rounded-2xl"
+            style={{ background: 'rgba(255,255,255,0.05)' }}
+          />
           <div className="grid grid-cols-2 gap-3">
-            <Skeleton className="h-24 rounded-xl bg-muted" />
-            <Skeleton className="h-24 rounded-xl bg-muted" />
+            <div 
+              className="h-24 rounded-2xl"
+              style={{ background: 'rgba(255,255,255,0.05)' }}
+            />
+            <div 
+              className="h-24 rounded-2xl"
+              style={{ background: 'rgba(255,255,255,0.05)' }}
+            />
           </div>
-          <Skeleton className="h-32 w-full rounded-xl bg-muted" />
+          <div 
+            className="h-32 w-full rounded-2xl"
+            style={{ background: 'rgba(255,255,255,0.05)' }}
+          />
         </div>
 
         {/* Loading text */}
-        <p className="text-center text-muted-foreground text-sm animate-pulse">
+        <p className="text-center text-white/40 text-sm animate-pulse">
           Загрузка LeakFixer...
         </p>
       </div>

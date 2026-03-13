@@ -1,6 +1,8 @@
 'use client'
 
 import { useAppStore } from '@/lib/store'
+import { showErrorToast, showSuccessToast, isOnline } from '@/lib/network-utils'
+import { useTheme } from 'next-themes'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -47,7 +49,8 @@ import {
   Sparkles,
   Wallet,
   StickyNote,
-  BookOpen
+  BookOpen,
+  Download
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
@@ -57,94 +60,21 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ATTRIBUTE_LABELS, type AttributeKey } from '@/lib/rituals/data'
-
-// Work profile labels
-const WORK_PROFILE_LABELS: Record<string, string> = {
-  sedentary: 'Сидячий',
-  moderate: 'Умеренный',
-  active: 'Активный',
-  very_active: 'Очень активный'
-}
-
-// Measurement types
-const MEASUREMENT_TYPES = [
-  { key: 'weight', label: 'Вес', unit: 'кг', icon: Scale },
-  { key: 'waist', label: 'Талия', unit: 'см', icon: Ruler },
-  { key: 'hips', label: 'Бёдра', unit: 'см', icon: Ruler },
-  { key: 'chest', label: 'Грудь', unit: 'см', icon: Ruler },
-  { key: 'bicep', label: 'Бицепс', unit: 'см', icon: Ruler },
-  { key: 'thigh', label: 'Бедро', unit: 'см', icon: Ruler },
-]
-
-// Feedback types
-const FEEDBACK_TYPES = [
-  { key: 'bug', label: 'Баг / Ошибка', icon: Bug },
-  { key: 'idea', label: 'Идея', icon: Lightbulb },
-  { key: 'question', label: 'Вопрос', icon: HelpCircle },
-  { key: 'review', label: 'Отзыв', icon: Star },
-]
-
-// Zones config
-const ZONES_CONFIG = [
-  { key: 'zoneSteamEnabled', label: 'Steam', emoji: '🎮' },
-  { key: 'zoneLeakfixerEnabled', label: 'LeakFixer', emoji: '🔧' },
-  { key: 'zoneAiEnabled', label: 'ИИ', emoji: '🤖' },
-  { key: 'zonePokerEnabled', label: 'Покер', emoji: '♠️' },
-  { key: 'zoneHealthEnabled', label: 'Здоровье', emoji: '💪' },
-]
-
-// Theme options
-const THEME_OPTIONS = [
-  { value: 'light', label: 'Светлая', icon: Sun },
-  { value: 'dark', label: 'Тёмная', icon: Moon },
-  { value: 'system', label: 'Системная', icon: Monitor },
-]
-
-// Donate URL (hardcoded for MVP)
-const DONATE_URL = 'https://boosty.to/leakfixer'
-
-interface Measurement {
-  type: string
-  value: number
-  date: string
-  trend: number
-}
-
-interface Buddy {
-  id: string
-  partnerId: string
-  partnerName: string
-  partnerPhoto?: string
-  status: string
-}
-
-interface UserAttribute {
-  key: AttributeKey
-  points: number
-  level: number
-}
-
-interface UserSettings {
-  ritualReminders: boolean
-  taskReminders: boolean
-  zoneSteamEnabled: boolean
-  zoneLeakfixerEnabled: boolean
-  zoneAiEnabled: boolean
-  zonePokerEnabled: boolean
-  zoneHealthEnabled: boolean
-  theme: string
-}
-
-interface ActivityStats {
-  activeRituals: number
-  completedTasks7Days: number
-  activeChains: number
-  completedChains: number
-  inProgressContent: number
-}
+import {
+  MEASUREMENT_TYPES,
+  FEEDBACK_TYPES,
+  ZONES_CONFIG,
+  THEME_OPTIONS,
+  type Measurement,
+  type Buddy,
+  type UserSettings,
+  type ActivityStats,
+} from '@/features/profile'
+import { QuickAccess, DonateCard } from '@/features/profile'
 
 export function ProfileScreen() {
-  const { user, profile, isDemoMode, setScreen } = useAppStore()
+  const { user, profile, isDemoMode, isOwnerMode, setScreen } = useAppStore()
+  const { setTheme } = useTheme()
   const [stats, setStats] = useState({
     totalWorkouts: 0,
     totalCaloriesBurned: 0,
@@ -154,9 +84,7 @@ export function ProfileScreen() {
   const [buddies, setBuddies] = useState<Buddy[]>([])
   const [attributes, setAttributes] = useState<UserAttribute[]>([])
   const [showMeasurements, setShowMeasurements] = useState(false)
-  const [showAddBuddy, setShowAddBuddy] = useState(false)
   const [newMeasurement, setNewMeasurement] = useState({ type: 'weight', value: '' })
-  const [newBuddy, setNewBuddy] = useState({ name: '', telegramId: '' })
   
   // New state
   const [bio, setBio] = useState('')
@@ -207,6 +135,10 @@ export function ProfileScreen() {
         const settingsData = await settingsRes.json()
         if (settingsData.settings) {
           setSettings(settingsData.settings)
+          // Apply saved theme
+          if (settingsData.settings.theme) {
+            setTheme(settingsData.settings.theme)
+          }
         }
 
         // Load activity stats
@@ -221,21 +153,20 @@ export function ProfileScreen() {
             inProgressContent: statsData.stats.inProgressContent || 0
           })
           setAttributes(statsData.stats.attributes || attributes)
+          
+          // Set real workout count from API
+          setStats(prev => ({
+            ...prev,
+            totalWorkouts: statsData.stats.totalWorkouts || 0
+          }))
         }
 
         // Set bio from profile
         if (profile?.bio) {
           setBio(profile.bio)
         }
-
-        // Mock stats
-        setStats({
-          totalWorkouts: 12,
-          totalCaloriesBurned: 3250,
-          totalWaterMl: 45000
-        })
       } catch (error) {
-        console.error('Failed to load data:', error)
+        showErrorToast(error, 'load data')
       }
     }
 
@@ -255,8 +186,9 @@ export function ProfileScreen() {
         })
       })
       setIsEditingBio(false)
+      showSuccessToast('Биография сохранена')
     } catch (error) {
-      console.error('Failed to save bio:', error)
+      showErrorToast(error, 'save bio')
     }
   }
 
@@ -264,6 +196,11 @@ export function ProfileScreen() {
   const handleSettingChange = async (key: keyof UserSettings, value: boolean | string) => {
     const newSettings = { ...settings, [key]: value }
     setSettings(newSettings)
+    
+    // Apply theme immediately
+    if (key === 'theme' && typeof value === 'string') {
+      setTheme(value)
+    }
     
     if (user?.id) {
       try {
@@ -273,7 +210,7 @@ export function ProfileScreen() {
           body: JSON.stringify({ userId: user.id, ...newSettings })
         })
       } catch (error) {
-        console.error('Failed to save setting:', error)
+        showErrorToast(error, 'save setting')
       }
     }
   }
@@ -296,7 +233,7 @@ export function ProfileScreen() {
       setFeedbackSent(true)
       setTimeout(() => setFeedbackSent(false), 3000)
     } catch (error) {
-      console.error('Failed to send feedback:', error)
+      showErrorToast(error, 'send feedback')
     }
   }
 
@@ -320,33 +257,9 @@ export function ProfileScreen() {
       setMeasurements(data.latestByType || {})
       setShowMeasurements(false)
       setNewMeasurement({ type: 'weight', value: '' })
+      showSuccessToast('Замер добавлен')
     } catch (error) {
-      console.error('Failed to add measurement:', error)
-    }
-  }
-
-  const handleAddBuddy = async () => {
-    if (!user?.id || !newBuddy.name) return
-
-    try {
-      await fetch('/api/buddies', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          partnerId: newBuddy.telegramId || `demo_${Date.now()}`,
-          partnerName: newBuddy.name
-        })
-      })
-
-      // Refresh buddies
-      const res = await fetch(`/api/buddies?userId=${user.id}`)
-      const data = await res.json()
-      setBuddies(data.buddies || [])
-      setShowAddBuddy(false)
-      setNewBuddy({ name: '', telegramId: '' })
-    } catch (error) {
-      console.error('Failed to add buddy:', error)
+      showErrorToast(error, 'add measurement')
     }
   }
 
@@ -545,73 +458,7 @@ export function ProfileScreen() {
       </Card>
 
       {/* Quick Access */}
-      <Card className="bg-card/50 backdrop-blur">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Быстрый доступ</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <button
-            className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
-            onClick={() => setScreen('fitness')}
-          >
-            <div className="flex items-center gap-3">
-              <Flame className="w-5 h-5 text-orange-400" />
-              <span className="font-medium">Фитнес</span>
-            </div>
-            <ChevronRight className="w-5 h-5 text-muted-foreground" />
-          </button>
-          <button
-            className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
-            onClick={() => setScreen('health')}
-          >
-            <div className="flex items-center gap-3">
-              <Heart className="w-5 h-5 text-red-400" />
-              <span className="font-medium">Здоровье</span>
-            </div>
-            <ChevronRight className="w-5 h-5 text-muted-foreground" />
-          </button>
-          <button
-            className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
-            onClick={() => setScreen('finance')}
-          >
-            <div className="flex items-center gap-3">
-              <Wallet className="w-5 h-5 text-emerald-400" />
-              <span className="font-medium">Финансы</span>
-            </div>
-            <ChevronRight className="w-5 h-5 text-muted-foreground" />
-          </button>
-          <button
-            className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
-            onClick={() => setScreen('notes')}
-          >
-            <div className="flex items-center gap-3">
-              <StickyNote className="w-5 h-5 text-yellow-400" />
-              <span className="font-medium">Заметки</span>
-            </div>
-            <ChevronRight className="w-5 h-5 text-muted-foreground" />
-          </button>
-          <button
-            className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
-            onClick={() => setScreen('development')}
-          >
-            <div className="flex items-center gap-3">
-              <BookOpen className="w-5 h-5 text-purple-400" />
-              <span className="font-medium">Развитие / Контент</span>
-            </div>
-            <ChevronRight className="w-5 h-5 text-muted-foreground" />
-          </button>
-          <button
-            className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
-            onClick={() => setScreen('gym')}
-          >
-            <div className="flex items-center gap-3">
-              <Calendar className="w-5 h-5 text-primary" />
-              <span className="font-medium">GYM / Тренировки</span>
-            </div>
-            <ChevronRight className="w-5 h-5 text-muted-foreground" />
-          </button>
-        </CardContent>
-      </Card>
+      <QuickAccess onNavigate={setScreen} />
 
       {/* Body Measurements */}
       <Card className="bg-card/50 backdrop-blur">
@@ -668,27 +515,20 @@ export function ProfileScreen() {
       </Card>
 
       {/* Buddies */}
-      <Card className="bg-card/50 backdrop-blur">
+      <Card className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors" onClick={() => setScreen('buddies')}>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
               <Users className="w-5 h-5" />
               Бадди
             </CardTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0"
-              onClick={() => setShowAddBuddy(true)}
-            >
-              <Plus className="w-4 h-4" />
-            </Button>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </div>
         </CardHeader>
         <CardContent>
-          {buddies.length > 0 ? (
+          {buddies.filter(b => b.status === 'accepted').length > 0 ? (
             <div className="space-y-2">
-              {buddies.map(buddy => (
+              {buddies.filter(b => b.status === 'accepted').slice(0, 3).map(buddy => (
                 <div
                   key={buddy.id}
                   className="flex items-center justify-between p-3 rounded-lg bg-muted/30"
@@ -703,33 +543,26 @@ export function ProfileScreen() {
                     <div>
                       <p className="font-medium">{buddy.partnerName}</p>
                       <p className="text-xs text-muted-foreground">
-                        {buddy.status === 'accepted' ? '🤝 Партнёр' :
-                         buddy.status === 'pending' ? '⏳ Ожидание' : '❌ Отклонено'}
+                        🤝 Партнёр
                       </p>
                     </div>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={buddy.status === 'accepted' ? 'border-emerald-500 text-emerald-400' : 'border-yellow-500 text-yellow-400'}
-                  >
-                    {buddy.status === 'accepted' ? 'Активен' : 'Ожидание'}
+                  <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                    Активен
                   </Badge>
                 </div>
               ))}
+              {buddies.filter(b => b.status === 'accepted').length > 3 && (
+                <p className="text-xs text-center text-muted-foreground pt-2">
+                  + ещё {buddies.filter(b => b.status === 'accepted').length - 3} бадди
+                </p>
+              )}
             </div>
           ) : (
             <div className="text-center py-4">
               <Users className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
               <p className="text-sm text-muted-foreground">Добавьте партнёра для отчётности</p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-2"
-                onClick={() => setShowAddBuddy(true)}
-              >
-                <Plus className="w-4 h-4 mr-1" />
-                Добавить бадди
-              </Button>
+              <p className="text-xs text-primary mt-1">Нажмите, чтобы найти бадди →</p>
             </div>
           )}
         </CardContent>
@@ -767,6 +600,30 @@ export function ProfileScreen() {
                 onCheckedChange={(checked) => handleSettingChange('taskReminders', checked)}
               />
             </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Scale className="w-5 h-5 text-muted-foreground" />
+                <div>
+                  <Label className="text-sm">Напоминание о весе</Label>
+                  <p className="text-xs text-muted-foreground">Если не записал сегодня</p>
+                </div>
+              </div>
+              <Switch 
+                checked={settings.weightReminder}
+                onCheckedChange={(checked) => handleSettingChange('weightReminder', checked)}
+              />
+            </div>
+            {settings.weightReminder && (
+              <div className="flex items-center justify-between pl-8">
+                <Label className="text-sm text-muted-foreground">Время напоминания</Label>
+                <Input
+                  type="time"
+                  value={settings.weightReminderTime || '08:00'}
+                  onChange={(e) => handleSettingChange('weightReminderTime', e.target.value)}
+                  className="w-28 h-8 text-sm"
+                />
+              </div>
+            )}
           </div>
 
           {/* Zones */}
@@ -870,36 +727,58 @@ export function ProfileScreen() {
       </Card>
 
       {/* Support / Donate */}
-      <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
-        <CardContent className="pt-4">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
-              <Coffee className="w-6 h-6 text-primary" />
-            </div>
-            <div className="flex-1">
-              <p className="font-medium">Поддержать проект</p>
-              <p className="text-xs text-muted-foreground">Помочь развитию LeakFixer</p>
-            </div>
-            <Button 
-              variant="default" 
-              className="bg-primary"
-              onClick={() => window.open(DONATE_URL, '_blank')}
-            >
-              <Heart className="w-4 h-4 mr-1" />
-              Донат
-              <ExternalLink className="w-3 h-3 ml-1" />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <DonateCard />
 
       {/* Demo notice */}
       {isDemoMode && (
         <Card className="bg-amber-500/10 border-amber-500/30">
           <CardContent className="pt-4">
-            <p className="text-sm text-amber-400">
-              🎮 Демо-режим активен. Данные сохраняются локально в браузере.
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-amber-400">
+                🎮 Демо-режим активен
+              </p>
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="text-xs"
+                onClick={() => {
+                  if (confirm('Переключиться на Owner-режим? Демо-данные будут недоступны.')) {
+                    localStorage.removeItem('leakfixer-auth-mode')
+                    localStorage.setItem('leakfixer-auth-mode', 'owner')
+                    window.location.reload()
+                  }
+                }}
+              >
+                Owner
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Owner notice */}
+      {isOwnerMode && (
+        <Card className="bg-emerald-500/10 border-emerald-500/30">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-emerald-400">
+                👤 Owner-режим (тестовый профиль)
+              </p>
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="text-xs"
+                onClick={() => {
+                  if (confirm('Переключиться на Демо-режим?')) {
+                    localStorage.removeItem('leakfixer-auth-mode')
+                    localStorage.setItem('leakfixer-auth-mode', 'demo')
+                    window.location.reload()
+                  }
+                }}
+              >
+                Demo
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -957,51 +836,6 @@ export function ProfileScreen() {
                 disabled={!newMeasurement.value}
               >
                 Сохранить
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Buddy Dialog */}
-      <Dialog open={showAddBuddy} onOpenChange={setShowAddBuddy}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Добавить бадди</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-4">
-            <div className="space-y-2">
-              <Label htmlFor="buddyName">Имя</Label>
-              <Input
-                id="buddyName"
-                placeholder="Как зовут партнёра?"
-                value={newBuddy.name}
-                onChange={e => setNewBuddy(prev => ({ ...prev, name: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="telegramId">Telegram ID (опционально)</Label>
-              <Input
-                id="telegramId"
-                placeholder="@username или ID"
-                value={newBuddy.telegramId}
-                onChange={e => setNewBuddy(prev => ({ ...prev, telegramId: e.target.value }))}
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setShowAddBuddy(false)}
-              >
-                Отмена
-              </Button>
-              <Button
-                className="flex-1 bg-primary"
-                onClick={handleAddBuddy}
-                disabled={!newBuddy.name}
-              >
-                Добавить
               </Button>
             </div>
           </div>

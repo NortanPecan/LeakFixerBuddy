@@ -48,6 +48,7 @@ import {
 import { NOTE_TYPES, NOTE_ZONES, getNoteTypeInfo, getNoteZoneInfo, parseReframeData, serializeReframeData, ReframeData, ReframeAction, getReframePreview, countLinkedActions } from '@/lib/notes-config'
 import { ReframeForm } from '@/components/ReframeForm'
 import { cn } from '@/lib/utils'
+import { showErrorToast, showSuccessToast, isOnline } from '@/lib/network-utils'
 
 interface NoteLink {
   id: string
@@ -119,7 +120,7 @@ export function NotesScreen() {
       const data = await response.json()
       setNotes(data.notes || [])
     } catch (error) {
-      console.error('Failed to load notes:', error)
+      showErrorToast(error, 'load notes')
     } finally {
       setIsLoading(false)
     }
@@ -148,9 +149,10 @@ export function NotesScreen() {
       if (data.note) {
         setNotes(prev => [data.note, ...prev])
         setQuickNote('')
+        showSuccessToast('Note created')
       }
     } catch (error) {
-      console.error('Failed to save note:', error)
+      showErrorToast(error, 'save note')
     } finally {
       setIsSaving(false)
     }
@@ -163,8 +165,9 @@ export function NotesScreen() {
       setNotes(prev => prev.filter(n => n.id !== id))
       setShowDetail(false)
       setSelectedNote(null)
+      showSuccessToast('Note deleted')
     } catch (error) {
-      console.error('Failed to delete note:', error)
+      showErrorToast(error, 'delete note')
     }
   }
 
@@ -187,9 +190,10 @@ export function NotesScreen() {
         setNotes(prev => prev.map(n => n.id === data.note.id ? data.note : n))
         setSelectedNote(data.note)
         setIsEditing(false)
+        showSuccessToast('Note updated')
       }
     } catch (error) {
-      console.error('Failed to update note:', error)
+      showErrorToast(error, 'update note')
     }
   }
 
@@ -220,7 +224,7 @@ export function NotesScreen() {
         setScreen('tasks')
       }
     } catch (error) {
-      console.error('Failed to create task:', error)
+      showErrorToast(error, 'create task')
     }
   }
 
@@ -249,7 +253,7 @@ export function NotesScreen() {
         setScreen('rituals')
       }
     } catch (error) {
-      console.error('Failed to create ritual:', error)
+      showErrorToast(error, 'create ritual')
     }
   }
 
@@ -265,7 +269,7 @@ export function NotesScreen() {
         setSelectedChainId(data.chains[0].id)
       }
     } catch (error) {
-      console.error('Failed to load chains:', error)
+      showErrorToast(error, 'load chains')
     } finally {
       setIsLoadingChains(false)
     }
@@ -328,7 +332,7 @@ export function NotesScreen() {
         setScreen('tasks')
       }
     } catch (error) {
-      console.error('Failed to create chain step:', error)
+      showErrorToast(error, 'create chain step')
     }
   }
 
@@ -373,6 +377,7 @@ export function NotesScreen() {
           setShowReframeModal(false)
           setSelectedNote(null)
           setReframeEditData(undefined)
+          showSuccessToast('Reframe note updated')
         }
       } else {
         // Create new
@@ -390,10 +395,11 @@ export function NotesScreen() {
         if (result.note) {
           setNotes(prev => [result.note, ...prev])
           setShowReframeModal(false)
+          showSuccessToast('Reframe note created')
         }
       }
     } catch (error) {
-      console.error('Failed to save reframe:', error)
+      showErrorToast(error, 'save reframe')
     } finally {
       setIsSavingReframe(false)
     }
@@ -443,9 +449,10 @@ export function NotesScreen() {
         
         setReframeDetailData(updatedData)
         loadNotes()
+        showSuccessToast('Task created from action')
       }
     } catch (error) {
-      console.error('Failed to create task from action:', error)
+      showErrorToast(error, 'create task from action')
     }
   }
 
@@ -501,9 +508,10 @@ export function NotesScreen() {
         
         setReframeDetailData(updatedData)
         loadNotes()
+        showSuccessToast('Ritual created from action')
       }
     } catch (error) {
-      console.error('Failed to create ritual from action:', error)
+      showErrorToast(error, 'create ritual from action')
     }
   }
 

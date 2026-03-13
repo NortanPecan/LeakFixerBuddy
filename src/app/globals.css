@@ -175,3 +175,71 @@
     padding-bottom: calc(env(safe-area-inset-bottom) + 1rem);
   }
 }
+
+/* Glassmorphism panel styles */
+@layer utilities {
+  .glass-panel {
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  .glass-panel-light {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+}
+
+/* Smooth animations for touch */
+@layer utilities {
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+  
+  .press-effect {
+    transition: transform 0.15s ease-out;
+  }
+  
+  .press-effect:active {
+    transform: scale(0.95);
+  }
+}
+
+/* Glow effects */
+@layer utilities {
+  .glow-emerald {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+  }
+  
+  .glow-white {
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+  }
+  
+  .text-glow {
+    text-shadow: 0 0 10px currentColor;
+  }
+}
+
+/* Telegram Mini App specific adjustments */
+html {
+  /* Prevent overscroll bounce on iOS */
+  overscroll-behavior: none;
+}
+
+body {
+  /* Prevent text selection on buttons */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Hide scrollbar for cleaner look on mobile */
+@media (max-width: 640px) {
+  ::-webkit-scrollbar {
+    display: none;
+  }
+  * {
+    scrollbar-width: none;
+  }
+}

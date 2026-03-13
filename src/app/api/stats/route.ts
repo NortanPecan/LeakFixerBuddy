@@ -15,6 +15,13 @@ export async function GET(request: NextRequest) {
     const now = new Date()
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
 
+    // Get user's gym period IDs for filtering workouts
+    const userPeriods = await db.gymPeriod.findMany({
+      where: { userId },
+      select: { id: true }
+    })
+    const periodIds = userPeriods.map(p => p.id)
+
     // Run all queries in parallel for efficiency
     const [
       activeRituals,
@@ -22,7 +29,8 @@ export async function GET(request: NextRequest) {
       activeChains,
       completedChains,
       inProgressContent,
-      userAttributes
+      userAttributes,
+      totalWorkouts
     ] = await Promise.all([
       // Active rituals count
       db.ritual.count({
@@ -56,6 +64,17 @@ export async function GET(request: NextRequest) {
       // User attributes
       db.userAttribute.findMany({
         where: { userId }
+      }),
+
+      // Total completed workouts (status = 'completed' OR completed = true)
+      db.gymWorkout.count({
+        where: {
+          periodId: { in: periodIds },
+          OR: [
+            { status: 'completed' },
+            { completed: true }
+          ]
+        }
       })
     ])
 
@@ -80,7 +99,8 @@ export async function GET(request: NextRequest) {
         activeChains,
         completedChains,
         inProgressContent,
-        attributes
+        attributes,
+        totalWorkouts
       }
     })
   } catch (error) {

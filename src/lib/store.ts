@@ -1,8 +1,10 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { formatDateKey, normalizeToDate, getToday } from '@/lib/date-utils'
+import { getMoodStatus } from '@/lib/mood-utils'
 
 // Navigation state
-export type Screen = 'home' | 'fitness' | 'rituals' | 'gym' | 'profile' | 'create-ritual' | 'catalog' | 'all-rituals' | 'tasks' | 'chain' | 'create-task' | 'create-chain' | 'notes' | 'note-detail' | 'development' | 'content-detail' | 'finance' | 'challenges' | 'challenge-detail' | 'health'
+export type Screen = 'home' | 'fitness' | 'rituals' | 'gym' | 'profile' | 'create-ritual' | 'catalog' | 'all-rituals' | 'tasks' | 'chain' | 'create-task' | 'create-chain' | 'notes' | 'note-detail' | 'development' | 'content-detail' | 'finance' | 'challenges' | 'challenge-detail' | 'health' | 'daily-summary' | 'goals' | 'skills' | 'traits' | 'export' | 'stats' | 'buddies' | 'journey' | 'onboarding'
 
 interface User {
   id: string
@@ -74,6 +76,18 @@ interface AppState {
   setScreen: (screen: Screen) => void
   selectedContentId: string | null
   setSelectedContentId: (id: string | null) => void
+  selectedChainId: string | null
+  setSelectedChainId: (id: string | null) => void
+
+  // Date selection (for daily tracking)
+  selectedDate: string // YYYY-MM-DD format
+  selectedDateObj: Date // Date object for convenience
+  setSelectedDate: (date: Date) => void
+  goToPrevDay: () => void
+  goToNextDay: () => void
+  goToToday: () => void
+  isToday: () => boolean
+  isFutureDate: () => boolean
 
   // User
   user: User | null
@@ -100,6 +114,8 @@ interface AppState {
   // Demo mode
   isDemoMode: boolean
   setDemoMode: (demo: boolean) => void
+  isOwnerMode: boolean
+  setOwnerMode: (owner: boolean) => void
 
   // Loading
   isLoading: boolean
@@ -108,7 +124,7 @@ interface AppState {
   setIsInitialized: (initialized: boolean) => void
 
   // Actions
-  login: (isDemo?: boolean) => Promise<boolean>
+  login: (isDemo?: boolean, isOwner?: boolean) => Promise<boolean>
   logout: () => void
   updateProgress: (day?: number, streak?: number, points?: number) => Promise<void>
   updateGlobalState: (mood: number, energy: number) => Promise<void>
@@ -120,15 +136,6 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-// Mood status helper
-function getMoodStatus(mood: number): { status: string; color: string } {
-  if (mood >= 9) return { status: 'Пиковое состояние! 🚀', color: '#fcd34d' }
-  if (mood >= 7) return { status: 'Хороший тон, есть ресурс', color: '#34d399' }
-  if (mood >= 5) return { status: 'Нормально, можно лучше', color: '#60a5fa' }
-  if (mood >= 3) return { status: 'Низкий ресурс, береги силы', color: '#fb923c' }
-  return { status: 'Кризис, нужна поддержка', color: '#f87171' }
-}
-
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -137,6 +144,43 @@ export const useAppStore = create<AppState>()(
       setScreen: (screen) => set({ currentScreen: screen }),
       selectedContentId: null,
       setSelectedContentId: (id) => set({ selectedContentId: id }),
+      selectedChainId: null,
+      setSelectedChainId: (id) => set({ selectedChainId: id }),
+
+      // Date selection
+      selectedDate: formatDateKey(getToday()),
+      selectedDateObj: getToday(),
+      setSelectedDate: (date) => set({
+        selectedDate: formatDateKey(date),
+        selectedDateObj: normalizeToDate(date)
+      }),
+      goToPrevDay: () => {
+        const current = get().selectedDateObj
+        const prev = new Date(current)
+        prev.setDate(prev.getDate() - 1)
+        set({
+          selectedDate: formatDateKey(prev),
+          selectedDateObj: normalizeToDate(prev)
+        })
+      },
+      goToNextDay: () => {
+        const current = get().selectedDateObj
+        const next = new Date(current)
+        next.setDate(next.getDate() + 1)
+        // Don't allow future dates
+        const today = getToday()
+        if (next > today) return
+        set({
+          selectedDate: formatDateKey(next),
+          selectedDateObj: normalizeToDate(next)
+        })
+      },
+      goToToday: () => set({
+        selectedDate: formatDateKey(getToday()),
+        selectedDateObj: getToday()
+      }),
+      isToday: () => get().selectedDate === formatDateKey(getToday()),
+      isFutureDate: () => get().selectedDateObj > getToday(),
 
       // User
       user: null,
@@ -165,6 +209,8 @@ export const useAppStore = create<AppState>()(
       // Demo mode
       isDemoMode: false,
       setDemoMode: (demo) => set({ isDemoMode: demo }),
+      isOwnerMode: false,
+      setOwnerMode: (owner) => set({ isOwnerMode: owner }),
 
       // Loading
       isLoading: false,
@@ -173,16 +219,27 @@ export const useAppStore = create<AppState>()(
       setIsInitialized: (initialized) => set({ isInitialized: initialized }),
 
       // Login
-      login: async (isDemo = false) => {
+      login: async (isDemo = false, isOwner = false) => {
         set({ isLoading: true })
 
+        // Save auth mode to localStorage for persistence
+        if (typeof window !== 'undefined') {
+          if (isOwner) {
+            localStorage.setItem('leakfixer-auth-mode', 'owner')
+          } else if (isDemo) {
+            localStorage.setItem('leakfixer-auth-mode', 'demo')
+          }
+        }
+
         try {
-          const endpoint = isDemo ? '/api/auth?demo=true' : '/api/auth'
           let response: Response
 
-          if (isDemo) {
+          if (isDemo || isOwner) {
+            // Demo/Owner mode - use legacy endpoint for now
+            const endpoint = isOwner ? '/api/auth?owner=true' : '/api/auth?demo=true'
             response = await fetch(endpoint)
           } else {
+            // Telegram auth - use Supabase endpoint
             const tg = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp
             const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : ''
             const isTelegramContext = !!tg || /Telegram/i.test(userAgent)
@@ -198,13 +255,15 @@ export const useAppStore = create<AppState>()(
             }
 
             if (!initData) {
-              if (isTelegramContext) {
-                throw new Error('Telegram initData is missing. Open the app from Telegram bot menu button.')
+              // Fallback to demo mode if no initData (local dev / preview)
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('leakfixer-auth-mode', 'demo')
               }
               return get().login(true)
             }
 
-            response = await fetch('/api/auth', {
+            // Use Supabase Telegram auth endpoint
+            response = await fetch('/api/auth/telegram', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ initData })
@@ -235,6 +294,7 @@ export const useAppStore = create<AppState>()(
             profile: data.profile,
             globalState,
             isDemoMode: data.isDemo || false,
+            isOwnerMode: data.isOwner || false,
             isInitialized: true,
             isLoading: false
           })
@@ -261,6 +321,7 @@ export const useAppStore = create<AppState>()(
           buddies: [],
           activeGymPeriod: null,
           isDemoMode: false,
+          isOwnerMode: false,
           isInitialized: false
         })
       },
@@ -365,15 +426,20 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'leakfixer-storage',
+      // Only use localStorage on client side to avoid SSR errors
+      storage: typeof window !== 'undefined' ? localStorage : undefined,
       partialize: (state) => ({
         user: state.user,
         profile: state.profile,
         globalState: state.globalState,
         isDemoMode: state.isDemoMode,
+        isOwnerMode: state.isOwnerMode,
         dailyData: state.dailyData,
         buddies: state.buddies,
         activeGymPeriod: state.activeGymPeriod,
-        selectedContentId: state.selectedContentId
+        selectedContentId: state.selectedContentId,
+        selectedChainId: state.selectedChainId,
+        selectedDate: state.selectedDate
       })
     }
   )

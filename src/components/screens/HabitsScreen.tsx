@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '@/lib/store'
+import { showErrorToast, showSuccessToast, isOnline } from '@/lib/network-utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -12,7 +13,8 @@ import {
   Target,
   Flame,
   Sparkles,
-  X
+  X,
+  Trash2
 } from 'lucide-react'
 import {
   Dialog,
@@ -23,6 +25,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
 
 interface Habit {
   id: string
@@ -35,6 +38,12 @@ interface Habit {
   isCompleted: boolean
 }
 
+interface WeeklyStat {
+  date: string
+  completed: number
+  total: number
+}
+
 // Icons for habit selection
 const HABIT_ICONS = ['🧘', '📚', '🚶', '💊', '💪', '🏃', '💧', '🥗', '😴', '✍️', '🎯', '⚡']
 const HABIT_COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#6366F1', '#14B8A6']
@@ -42,8 +51,11 @@ const HABIT_COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#E
 export function HabitsScreen() {
   const { user } = useAppStore()
   const [habits, setHabits] = useState<Habit[]>([])
+  const [weeklyStats, setWeeklyStats] = useState<WeeklyStat[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isAddOpen, setIsAddOpen] = useState(false)
+  const [deletingHabit, setDeletingHabit] = useState<Habit | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [newHabit, setNewHabit] = useState({
     name: '',
     icon: '✨',
@@ -54,14 +66,19 @@ export function HabitsScreen() {
   // Load habits from API
   const loadHabits = useCallback(async () => {
     if (!user?.id) return
+    if (!isOnline()) {
+      showErrorToast(new Error('No internet connection'), 'loading habits')
+      return
+    }
 
     setIsLoading(true)
     try {
       const response = await fetch(`/api/habits?userId=${user.id}`)
       const data = await response.json()
       setHabits(data.habits || [])
+      setWeeklyStats(data.weeklyStats || [])
     } catch (error) {
-      console.error('Failed to load habits:', error)
+      showErrorToast(error, 'loading habits')
     } finally {
       setIsLoading(false)
     }
@@ -74,6 +91,10 @@ export function HabitsScreen() {
   // Complete habit
   const handleCompleteHabit = async (habitId: string) => {
     if (!user?.id) return
+    if (!isOnline()) {
+      showErrorToast(new Error('No internet connection'), 'completing habit')
+      return
+    }
 
     try {
       const response = await fetch('/api/habits/log', {
@@ -95,15 +116,20 @@ export function HabitsScreen() {
             ? { ...h, completed: data.log.count, isCompleted: data.log.isCompleted }
             : h
         ))
+        showSuccessToast('Habit completed!')
       }
     } catch (error) {
-      console.error('Failed to log habit:', error)
+      showErrorToast(error, 'completing habit')
     }
   }
 
   // Create new habit
   const handleCreateHabit = async () => {
     if (!user?.id || !newHabit.name.trim()) return
+    if (!isOnline()) {
+      showErrorToast(new Error('No internet connection'), 'creating habit')
+      return
+    }
 
     try {
       const response = await fetch('/api/habits', {
@@ -124,21 +150,54 @@ export function HabitsScreen() {
         setHabits(prev => [...prev, data.habit])
         setIsAddOpen(false)
         setNewHabit({ name: '', icon: '✨', color: '#10b981', target: 1 })
+        showSuccessToast('Habit created successfully!')
       }
     } catch (error) {
-      console.error('Failed to create habit:', error)
+      showErrorToast(error, 'creating habit')
+    }
+  }
+
+  // Delete habit
+  const handleDeleteHabit = async () => {
+    if (!deletingHabit) return
+    if (!isOnline()) {
+      showErrorToast(new Error('No internet connection'), 'deleting habit')
+      return
+    }
+
+    setIsDeleting(true)
+    try {
+      const response = await fetch(`/api/habits?habitId=${deletingHabit.id}`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        setHabits(prev => prev.filter(h => h.id !== deletingHabit.id))
+        setDeletingHabit(null)
+        showSuccessToast('Привычка удалена')
+      } else {
+        throw new Error('Failed to delete')
+      }
+    } catch (error) {
+      showErrorToast(error, 'deleting habit')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
   const completedCount = habits.filter(h => h.isCompleted).length
   const totalProgress = habits.length > 0 ? (completedCount / habits.length) * 100 : 0
 
-  // Weekly stats mock (would need separate API endpoint for real data)
-  const weeklyData = [0, 1, 2, 3, 4, 5, 6].map((_, i) => {
-    const dayIndex = (new Date().getDay() + 6 + i) % 7 // Monday = 0
-    const completed = i < 5 ? Math.min(habits.length, Math.floor(Math.random() * habits.length) + 2) : 0
-    return { completed, total: habits.length }
-  })
+  // Use real weekly stats from API, fallback to empty if not loaded
+  const weeklyData = weeklyStats.length === 7 ? weeklyStats : [
+    { date: '', completed: 0, total: habits.length },
+    { date: '', completed: 0, total: habits.length },
+    { date: '', completed: 0, total: habits.length },
+    { date: '', completed: 0, total: habits.length },
+    { date: '', completed: 0, total: habits.length },
+    { date: '', completed: 0, total: habits.length },
+    { date: '', completed: 0, total: habits.length }
+  ]
 
   return (
     <div className="flex flex-col gap-4 pb-20">
@@ -254,11 +313,22 @@ export function HabitsScreen() {
 
       {/* Habits list */}
       {isLoading ? (
-        <Card className="bg-card/50">
-          <CardContent className="pt-6 text-center">
-            <p className="text-muted-foreground">Загрузка привычек...</p>
-          </CardContent>
-        </Card>
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => (
+            <Card key={i} className="bg-card/50 backdrop-blur">
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="w-12 h-12 rounded-xl" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                  <Skeleton className="w-9 h-9 rounded-md" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       ) : habits.length > 0 ? (
         <div className="space-y-3">
           {habits.map((habit) => {
@@ -299,18 +369,28 @@ export function HabitsScreen() {
                     </div>
 
                     {/* Action button */}
-                    <Button
-                      variant={habit.isCompleted ? 'outline' : 'default'}
-                      size="sm"
-                      className={`shrink-0 ${habit.isCompleted ? '' : 'bg-primary hover:bg-primary/90'}`}
-                      onClick={() => handleCompleteHabit(habit.id)}
-                    >
-                      {habit.isCompleted ? (
-                        <CheckCircle2 className="w-4 h-4 text-primary" />
-                      ) : (
-                        <Plus className="w-4 h-4" />
-                      )}
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant={habit.isCompleted ? 'outline' : 'default'}
+                        size="sm"
+                        className={`shrink-0 ${habit.isCompleted ? '' : 'bg-primary hover:bg-primary/90'}`}
+                        onClick={() => handleCompleteHabit(habit.id)}
+                      >
+                        {habit.isCompleted ? (
+                          <CheckCircle2 className="w-4 h-4 text-primary" />
+                        ) : (
+                          <Plus className="w-4 h-4" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0 h-8 w-8 p-0 text-muted-foreground hover:text-red-400"
+                        onClick={() => setDeletingHabit(habit)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -364,6 +444,39 @@ export function HabitsScreen() {
           </CardContent>
         </Card>
       )}
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deletingHabit} onOpenChange={() => setDeletingHabit(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Удалить привычку?</DialogTitle>
+          </DialogHeader>
+          <div className="pt-4">
+            <p className="text-muted-foreground mb-4">
+              Вы уверены, что хотите удалить привычку "{deletingHabit?.name}"? 
+              История выполнений будет потеряна.
+            </p>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                className="flex-1" 
+                onClick={() => setDeletingHabit(null)}
+                disabled={isDeleting}
+              >
+                Отмена
+              </Button>
+              <Button 
+                variant="destructive" 
+                className="flex-1" 
+                onClick={handleDeleteHabit}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Удаление...' : 'Удалить'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

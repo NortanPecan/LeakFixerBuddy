@@ -95,10 +95,11 @@ interface Props {
 
 export function ContentDetailScreen({ contentId: contentIdProp }: Props) {
   const { user, setScreen } = useAppStore()
-  const contentId = contentIdProp || '' // In real app, get from URL/store
-  
+  const contentId = contentIdProp
+
   const [item, setItem] = useState<ContentItem | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [editData, setEditData] = useState({
     title: '',
@@ -119,8 +120,13 @@ export function ContentDetailScreen({ contentId: contentIdProp }: Props) {
 
   // Load content item
   const loadItem = useCallback(async () => {
-    if (!contentId) return
+    if (!contentId) {
+      setIsLoading(false)
+      setError('ID контента не указан. Выберите контент из списка.')
+      return
+    }
     setIsLoading(true)
+    setError(null)
     try {
       const response = await fetch(`/api/content?userId=${user?.id}&id=${contentId}`)
       const data = await response.json()
@@ -133,9 +139,12 @@ export function ContentDetailScreen({ contentId: contentIdProp }: Props) {
           totalUnits: data.items[0].totalUnits || 0,
           currentUnits: data.items[0].currentUnits || 0,
         })
+      } else {
+        setError('Контент не найден')
       }
     } catch (error) {
       console.error('Failed to load content:', error)
+      setError('Ошибка загрузки контента')
     } finally {
       setIsLoading(false)
     }
@@ -325,7 +334,7 @@ export function ContentDetailScreen({ contentId: contentIdProp }: Props) {
     )
   }
 
-  if (!item) {
+  if (error || !item) {
     return (
       <div className="flex flex-col gap-4 pb-20">
         <div className="flex items-center gap-2">
@@ -334,6 +343,20 @@ export function ContentDetailScreen({ contentId: contentIdProp }: Props) {
           </Button>
           <h1 className="text-xl font-bold">Контент не найден</h1>
         </div>
+        <Card className="bg-card/50 backdrop-blur">
+          <CardContent className="pt-4 text-center">
+            <Sparkles className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+            <p className="text-muted-foreground">{error || 'Контент не найден'}</p>
+            <Button
+              variant="outline"
+              className="mt-4"
+              onClick={() => setScreen('development')}
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Вернуться к списку
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     )
   }

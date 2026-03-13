@@ -47,7 +47,7 @@ interface Chain {
 }
 
 export function ChainDetailScreen() {
-  const { user, setScreen } = useAppStore()
+  const { user, setScreen, selectedChainId } = useAppStore()
   const [chain, setChain] = useState<Chain | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [showAddStep, setShowAddStep] = useState(false)
@@ -59,14 +59,13 @@ export function ChainDetailScreen() {
   // Load chain data
   useEffect(() => {
     const loadChain = async () => {
-      const chainId = localStorage.getItem('selectedChainId')
-      if (!chainId || !user?.id) return
+      if (!selectedChainId || !user?.id) return
 
       setIsLoading(true)
       try {
         const response = await fetch(`/api/chains?userId=${user.id}&status=all`)
         const data = await response.json()
-        const foundChain = data.chains?.find((c: Chain) => c.id === chainId)
+        const foundChain = data.chains?.find((c: Chain) => c.id === selectedChainId)
         setChain(foundChain || null)
       } catch (error) {
         console.error('Failed to load chain:', error)

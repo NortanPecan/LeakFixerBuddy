@@ -147,34 +147,48 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'taskId is required' }, { status: 400 })
     }
 
-    // Get task to find its chain and order
-    const task = await db.task.findUnique({
-      where: { id: taskId },
-      select: { chainId: true, order: true }
-    })
-
-    // Delete task
-    await db.task.delete({
-      where: { id: taskId }
-    })
-
-    // Reorder remaining tasks in chain if needed
-    if (task?.chainId) {
-      const remainingTasks = await db.task.findMany({
-        where: { chainId: task.chainId },
-        orderBy: { order: 'asc' }
+    // Use transaction for atomic delete + reorder
+    await db.$transaction(async (tx) => {
+      // Get task to find its chain and order
+      const task = await tx.task.findUnique({
+        where: { id: taskId },
+        select: { chainId: true, order: true }
       })
 
-      // Update order for all tasks
-      for (let i = 0; i < remainingTasks.length; i++) {
-        if (remainingTasks[i].order !== i) {
-          await db.task.update({
-            where: { id: remainingTasks[i].id },
-            data: { order: i }
-          })
-        }
+      if (!task) {
+        throw new Error('Task not found')
       }
-    }
+
+      // Delete task
+      await tx.task.delete({
+        where: { id: taskId }
+      })
+
+      // Reorder remaining tasks in chain if needed
+      if (task.chainId) {
+        const remainingTasks = await tx.task.findMany({
+          where: { chainId: task.chainId },
+          orderBy: { order: 'asc' },
+          select: { id: true, order: true }
+        })
+
+        // Build bulk update operations
+        const updates = remainingTasks
+          .map((t, i) => {
+            if (t.order !== i) {
+              return tx.task.update({
+                where: { id: t.id },
+                data: { order: i }
+              })
+            }
+            return null
+          })
+          .filter((u): u is NonNullable<typeof u> => u !== null)
+
+        // Execute all updates in parallel within transaction
+        await Promise.all(updates)
+      }
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { normalizeToDate, parseDateKey, formatDateKey, getDayOfWeek } from '@/lib/date-utils'
 
 // GET /api/supplements?userId=xxx - Get all supplements with today's intake status
 // GET /api/supplements?userId=xxx&date=YYYY-MM-DD - Get supplements for specific date
@@ -13,21 +14,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Debug: log available models
-    console.log('Available db models:', Object.keys(db))
-    
     // Get all active supplements for user
     const supplements = await db.supplement.findMany({
       where: { userId, isActive: true },
       orderBy: { sortOrder: 'asc' }
     })
 
-    // Get today's date (start of day in UTC)
-    const targetDate = dateParam ? new Date(dateParam) : new Date()
-    targetDate.setHours(0, 0, 0, 0)
-    const dayOfWeek = targetDate.getDay() || 7 // Convert 0 (Sunday) to 7
+    // Parse target date (default to today)
+    const targetDate = dateParam ? parseDateKey(dateParam) : normalizeToDate(new Date())
+    const dayOfWeek = getDayOfWeek(targetDate)
 
-    // Filter supplements for today (by days array)
+    // Filter supplements for target day (by days array)
     const todaySupplements = supplements.filter(s => {
       try {
         const days = JSON.parse(s.days) as number[]
@@ -37,14 +34,11 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Get intakes for today
+    // Get intakes for target date
     const intakes = await db.supplementIntake.findMany({
       where: {
         userId,
-        date: {
-          gte: targetDate,
-          lt: new Date(targetDate.getTime() + 24 * 60 * 60 * 1000)
-        }
+        date: targetDate
       }
     })
 
@@ -66,6 +60,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      date: formatDateKey(targetDate),
+      dayOfWeek,
       supplements: result,
       stats: { total, checked, progress }
     })

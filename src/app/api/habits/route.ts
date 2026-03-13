@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { calculateHabitStreak, type CompletionEntry } from '@/lib/streak-utils'
 
 /**
- * Get user's habits with today's logs
+ * Get user's habits with today's logs and weekly stats
  * GET /api/habits?userId=<id>
  */
 export async function GET(request: NextRequest) {
@@ -34,6 +35,41 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    // Get logs for the last 7 days for weekly stats
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6) // 6 days ago + today = 7 days
+    sevenDaysAgo.setHours(0, 0, 0, 0)
+
+    const weeklyLogs = await db.habitLog.findMany({
+      where: {
+        userId,
+        date: { gte: sevenDaysAgo },
+        completed: true
+      },
+      orderBy: { date: 'asc' }
+    })
+
+    // Build weekly stats array (7 days)
+    const weeklyStats: { date: string; completed: number; total: number }[] = []
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(sevenDaysAgo)
+      date.setDate(date.getDate() + i)
+      date.setHours(0, 0, 0, 0)
+
+      // Count completed habits for this date
+      const completedForDate = weeklyLogs.filter(log => {
+        const logDate = new Date(log.date)
+        logDate.setHours(0, 0, 0, 0)
+        return logDate.getTime() === date.getTime()
+      }).length
+
+      weeklyStats.push({
+        date: date.toISOString().split('T')[0],
+        completed: completedForDate,
+        total: habits.length
+      })
+    }
+
     // Calculate streak for each habit
     const habitsWithStats = await Promise.all(habits.map(async (habit) => {
       // Get logs for this habit (last 30 days)
@@ -44,33 +80,21 @@ export async function GET(request: NextRequest) {
       const logs = await db.habitLog.findMany({
         where: {
           habitId: habit.id,
-          completed: true,
           date: { gte: thirtyDaysAgo }
         },
         orderBy: { date: 'desc' }
       })
 
-      // Calculate streak
-      let streak = 0
-      const todayDate = new Date()
-      todayDate.setHours(0, 0, 0, 0)
+      // Convert logs to completion entries for streak calculation
+      const completionEntries: CompletionEntry[] = logs.map(l => ({
+        date: l.date,
+        completed: l.completed
+      }))
 
-      for (let i = 0; i < 30; i++) {
-        const checkDate = new Date(todayDate)
-        checkDate.setDate(checkDate.getDate() - i)
-
-        const logForDate = logs.find(l => {
-          const logDate = new Date(l.date)
-          logDate.setHours(0, 0, 0, 0)
-          return logDate.getTime() === checkDate.getTime()
-        })
-
-        if (logForDate?.completed) {
-          streak++
-        } else if (i > 0) {
-          break
-        }
-      }
+      // Calculate streak using the utility
+      // Note: habit.frequency can be 'daily' or 'weekly'
+      const frequency = (habit.frequency as 'daily' | 'weekly') || 'daily'
+      const streakResult = calculateHabitStreak(completionEntries, frequency, habit.target || 7, 30)
 
       // Find today's log
       const todayLog = todayLogs.find(l => l.habitId === habit.id)
@@ -81,14 +105,15 @@ export async function GET(request: NextRequest) {
         icon: habit.icon || '✨',
         color: habit.color || '#10b981',
         target: habit.target || 1,
-        streak,
+        streak: streakResult.streak,
         completed: todayLog?.count || 0,
         isCompleted: todayLog?.completed || false
       }
     }))
 
     return NextResponse.json({
-      habits: habitsWithStats
+      habits: habitsWithStats,
+      weeklyStats
     })
   } catch (error) {
     console.error('Get habits error:', error)
@@ -144,6 +169,37 @@ export async function POST(request: NextRequest) {
     console.error('Create habit error:', error)
     return NextResponse.json(
       { error: 'Failed to create habit' },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * Delete a habit
+ * DELETE /api/habits?habitId=<id>
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const habitId = searchParams.get('habitId')
+
+    if (!habitId) {
+      return NextResponse.json(
+        { error: 'Habit ID required' },
+        { status: 400 }
+      )
+    }
+
+    // Delete habit (cascade deletes logs automatically via schema)
+    await db.habit.delete({
+      where: { id: habitId }
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Delete habit error:', error)
+    return NextResponse.json(
+      { error: 'Failed to delete habit' },
       { status: 500 }
     )
   }

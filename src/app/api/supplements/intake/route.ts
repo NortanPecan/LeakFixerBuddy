@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getStartOfDay, getEndOfDay } from '@/lib/date-utils'
+import { normalizeToDate, parseDateKey } from '@/lib/date-utils'
 
 // POST /api/supplements/intake - Toggle intake checked status
+// Body: { supplementId, userId, date?: string, checked: boolean }
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -12,19 +13,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'supplementId and userId are required' }, { status: 400 })
     }
 
-    // Get target date (start of day)
-    const targetDate = date ? new Date(date) : new Date()
-    const startOfTargetDay = getStartOfDay(targetDate)
-    const endOfTargetDay = getEndOfDay(targetDate)
+    // Parse date or use today - normalize to start of day
+    const targetDate = date ? parseDateKey(date) : normalizeToDate(new Date())
 
-    // Find or create intake
+    // Find existing intake
     let intake = await db.supplementIntake.findFirst({
       where: {
         supplementId,
-        date: {
-          gte: startOfTargetDay,
-          lt: endOfTargetDay
-        }
+        date: targetDate
       }
     })
 
@@ -40,7 +36,7 @@ export async function POST(request: NextRequest) {
         data: {
           supplementId,
           userId,
-          date: startOfTargetDay,
+          date: targetDate,
           checked
         }
       })

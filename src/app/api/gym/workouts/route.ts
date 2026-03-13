@@ -23,11 +23,53 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PATCH - Update workout (mark as completed)
+// POST - Create a new manual workout (from calendar click)
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { periodId, date, name, muscleGroups, workoutNum, isManual } = body
+
+    if (!periodId || !date) {
+      return NextResponse.json({ error: 'periodId and date required' }, { status: 400 })
+    }
+
+    // Check if workout already exists on this date
+    const existingWorkout = await db.gymWorkout.findFirst({
+      where: {
+        periodId,
+        date: new Date(date)
+      }
+    })
+
+    if (existingWorkout) {
+      return NextResponse.json({ error: 'Workout already exists on this date', existingWorkout }, { status: 400 })
+    }
+
+    // Create the workout
+    const workout = await db.gymWorkout.create({
+      data: {
+        periodId,
+        date: new Date(date),
+        dayOfWeek: new Date(date).getDay() || 7,
+        workoutNum: workoutNum || 1,
+        name: name || 'Тренировка',
+        muscleGroups: JSON.stringify(muscleGroups || []),
+        completed: false
+      }
+    })
+
+    return NextResponse.json({ workout })
+  } catch (error) {
+    console.error('Create workout error:', error)
+    return NextResponse.json({ error: 'Failed to create workout' }, { status: 500 })
+  }
+}
+
+// PATCH - Update workout (mark as completed, reschedule, etc.)
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { workoutId, completed, duration, notes } = body
+    const { workoutId, completed, duration, notes, date } = body
 
     if (!workoutId) {
       return NextResponse.json({ error: 'workoutId required' }, { status: 400 })
@@ -36,9 +78,10 @@ export async function PATCH(request: NextRequest) {
     const workout = await db.gymWorkout.update({
       where: { id: workoutId },
       data: {
-        completed: completed ?? true,
-        duration,
-        notes
+        completed: completed ?? undefined,
+        duration: duration ?? undefined,
+        notes: notes ?? undefined,
+        date: date ? new Date(date) : undefined
       }
     })
 
@@ -85,5 +128,26 @@ export async function PATCH(request: NextRequest) {
   } catch (error) {
     console.error('Update workout error:', error)
     return NextResponse.json({ error: 'Failed to update workout' }, { status: 500 })
+  }
+}
+
+// DELETE - Remove a workout
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const workoutId = searchParams.get('workoutId')
+
+    if (!workoutId) {
+      return NextResponse.json({ error: 'workoutId required' }, { status: 400 })
+    }
+
+    await db.gymWorkout.delete({
+      where: { id: workoutId }
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Delete workout error:', error)
+    return NextResponse.json({ error: 'Failed to delete workout' }, { status: 500 })
   }
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '@/lib/store'
+import { showErrorToast, showSuccessToast, isOnline } from '@/lib/network-utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -22,7 +23,8 @@ import {
   TrendingUp,
   Flame,
   Clock,
-  X
+  X,
+  Trash2
 } from 'lucide-react'
 import {
   Dialog,
@@ -30,6 +32,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { DatePicker, DateBadge } from '@/components/DatePicker'
+import { Skeleton } from '@/components/ui/skeleton'
 import { CATEGORY_LABELS, TIME_WINDOW_LABELS, type Ritual, type RitualCategory, type AttributeKey } from '@/lib/rituals/data'
 
 const CATEGORY_ICONS: Record<RitualCategory, React.ElementType> = {
@@ -42,7 +46,7 @@ const CATEGORY_ICONS: Record<RitualCategory, React.ElementType> = {
 }
 
 export function RitualsScreen() {
-  const { user, setScreen } = useAppStore()
+  const { user, setScreen, selectedDate, selectedDateObj } = useAppStore()
   const [rituals, setRituals] = useState<Ritual[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showPresetModal, setShowPresetModal] = useState(false)
@@ -50,13 +54,16 @@ export function RitualsScreen() {
   const [isApplying, setIsApplying] = useState(false)
   const [selectedRitual, setSelectedRitual] = useState<Ritual | null>(null)
   const [showDetail, setShowDetail] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [deletingRitual, setDeletingRitual] = useState<Ritual | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
-  // Stats
+  // Stats from API
   const [stats, setStats] = useState({
-    todayCompleted: 0,
-    todayTotal: 0,
-    streak: 0,
-    weeklyRate: 0
+    total: 0,
+    completed: 0,
+    percentage: 0
   })
 
   // Load rituals
@@ -64,24 +71,15 @@ export function RitualsScreen() {
     const loadRituals = async () => {
       if (!user?.id) return
       setIsLoading(true)
+      setError(null)
       try {
-        const response = await fetch(`/api/rituals?userId=${user.id}`)
+        const response = await fetch(`/api/rituals?userId=${user.id}&date=${selectedDate}`)
+        if (!response.ok) throw new Error('Failed to load rituals')
         const data = await response.json()
-        setRituals(data.rituals || [])
-
-        // Calculate stats
-        const today = new Date().getDay() || 7
-        const todayRituals = (data.rituals || []).filter((r: Ritual) => {
-          const days = JSON.parse(r.days as string)
-          return days.includes(today) || days.length === 0
-        })
-        const completed = todayRituals.filter((r: Ritual & { completedToday: boolean }) => r.completedToday).length
-
-        setStats(prev => ({
-          ...prev,
-          todayCompleted: completed,
-          todayTotal: todayRituals.length
-        }))
+        
+        // Use data from API directly
+        setRituals(data.todayRituals || [])
+        setStats(data.stats || { total: 0, completed: 0, percentage: 0 })
 
         // Check if preset was offered before
         const presetOffered = localStorage.getItem('ritual_preset_offered')
@@ -89,29 +87,35 @@ export function RitualsScreen() {
           setShowPresetModal(true)
         }
         setPresetChecked(true)
-      } catch (error) {
-        console.error('Failed to load rituals:', error)
+      } catch (err) {
+        showErrorToast(err, 'load rituals')
+        setError('Не удалось загрузить ритуалы')
       } finally {
         setIsLoading(false)
       }
     }
     loadRituals()
-  }, [user?.id])
+  }, [user?.id, selectedDate])
 
   // Toggle ritual completion
   const handleToggleComplete = async (ritual: Ritual, completed: boolean) => {
+    if (!isOnline()) {
+      showErrorToast(new Error('Нет подключения к интернету'), 'toggle ritual')
+      return
+    }
+    setTogglingId(ritual.id)
     try {
-      const today = new Date().toISOString().split('T')[0]
-      await fetch('/api/rituals/complete', {
+      const response = await fetch('/api/rituals/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ritualId: ritual.id,
           userId: user?.id,
-          date: today,
+          date: selectedDate,
           completed
         })
       })
+      if (!response.ok) throw new Error('Failed to toggle')
 
       // Update local state
       setRituals(prev => prev.map(r => 
@@ -121,18 +125,29 @@ export function RitualsScreen() {
       // Update stats
       setStats(prev => ({
         ...prev,
-        todayCompleted: completed 
-          ? prev.todayCompleted + 1 
-          : Math.max(0, prev.todayCompleted - 1)
+        completed: completed 
+          ? prev.completed + 1 
+          : Math.max(0, prev.completed - 1),
+        percentage: prev.total > 0 
+          ? Math.round(((completed ? prev.completed + 1 : prev.completed - 1) / prev.total) * 100)
+          : 0
       }))
-    } catch (error) {
-      console.error('Failed to toggle ritual:', error)
+
+      showSuccessToast(completed ? 'Ритуал выполнен!' : 'Ритуал отменен')
+    } catch (err) {
+      showErrorToast(err, 'toggle ritual')
+    } finally {
+      setTogglingId(null)
     }
   }
 
   // Apply preset
   const handleApplyPreset = async () => {
     if (!user?.id) return
+    if (!isOnline()) {
+      showErrorToast(new Error('Нет подключения к интернету'), 'apply preset')
+      return
+    }
     setIsApplying(true)
     try {
       const response = await fetch('/api/rituals/preset', {
@@ -144,12 +159,14 @@ export function RitualsScreen() {
       
       if (data.success) {
         // Reload rituals
-        const ritualsResponse = await fetch(`/api/rituals?userId=${user.id}`)
+        const ritualsResponse = await fetch(`/api/rituals?userId=${user.id}&date=${selectedDate}`)
         const ritualsData = await ritualsResponse.json()
-        setRituals(ritualsData.rituals || [])
+        setRituals(ritualsData.todayRituals || [])
+        setStats(ritualsData.stats || { total: 0, completed: 0, percentage: 0 })
+        showSuccessToast('Пакет ритуалов подключен!')
       }
     } catch (error) {
-      console.error('Failed to apply preset:', error)
+      showErrorToast(error, 'apply preset')
     } finally {
       setIsApplying(false)
       setShowPresetModal(false)
@@ -163,25 +180,45 @@ export function RitualsScreen() {
     localStorage.setItem('ritual_preset_offered', 'true')
   }
 
-  // Get today's rituals
-  const todayDay = new Date().getDay() || 7
-  const todayRituals = rituals.filter(r => {
-    if (r.status !== 'active') return false
-    const days = JSON.parse(r.days as string)
-    return days.includes(todayDay) || days.length === 0
-  })
+  // Delete/archive ritual
+  const handleDeleteRitual = async () => {
+    if (!deletingRitual) return
+    if (!isOnline()) {
+      showErrorToast(new Error('Нет подключения к интернету'), 'delete ritual')
+      return
+    }
+
+    setIsDeleting(true)
+    try {
+      const response = await fetch(`/api/rituals?ritualId=${deletingRitual.id}`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        setRituals(prev => prev.filter(r => r.id !== deletingRitual.id))
+        setDeletingRitual(null)
+        setShowDetail(false)
+        showSuccessToast('Ритуал архивирован')
+      } else {
+        throw new Error('Failed to delete')
+      }
+    } catch (error) {
+      showErrorToast(error, 'delete ritual')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   // Group by time window
   const groupedRituals = {
-    morning: todayRituals.filter(r => r.timeWindow === 'morning'),
-    day: todayRituals.filter(r => r.timeWindow === 'day'),
-    evening: todayRituals.filter(r => r.timeWindow === 'evening'),
-    any: todayRituals.filter(r => r.timeWindow === 'any')
+    morning: rituals.filter(r => r.timeWindow === 'morning'),
+    day: rituals.filter(r => r.timeWindow === 'day'),
+    evening: rituals.filter(r => r.timeWindow === 'evening'),
+    any: rituals.filter(r => r.timeWindow === 'any')
   }
 
-  const progressPercent = stats.todayTotal > 0 
-    ? Math.round((stats.todayCompleted / stats.todayTotal) * 100)
-    : 0
+  // Calculate progress from stats
+  const progressPercent = stats.percentage
 
   return (
     <div className="flex flex-col gap-4 pb-20">
@@ -193,30 +230,69 @@ export function RitualsScreen() {
             {isLoading ? 'Загрузка...' : `${rituals.length} активных`}
           </p>
         </div>
-        <Button
-          size="sm"
-          className="bg-primary hover:bg-primary/90"
-          onClick={() => setScreen('create-ritual')}
-        >
-          <Plus className="w-4 h-4 mr-1" />
-          Создать
-        </Button>
+        <div className="flex items-center gap-2">
+          <DateBadge />
+          <Button
+            size="sm"
+            className="bg-primary hover:bg-primary/90"
+            onClick={() => setScreen('create-ritual')}
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Создать
+          </Button>
+        </div>
       </div>
 
-      {/* Today's progress */}
-      {!isLoading && stats.todayTotal > 0 && (
+      {/* Date Picker */}
+      <DatePicker variant="compact" />
+
+      {/* Error state */}
+      {error && (
+        <Card className="bg-red-500/10 border-red-500/30">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <p className="text-red-400">{error}</p>
+              <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
+                Повторить
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Loading skeleton */}
+      {isLoading && (
+        <div className="space-y-2">
+          {[1, 2, 3].map(i => (
+            <Card key={i} className="bg-card/50 backdrop-blur">
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="w-10 h-10 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Progress for selected day */}
+      {!isLoading && stats.total > 0 && (
         <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
           <CardContent className="pt-4">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <p className="text-sm text-muted-foreground">Прогресс на сегодня</p>
+                <p className="text-sm text-muted-foreground">Прогресс</p>
                 <p className="text-2xl font-bold">
-                  {stats.todayCompleted} / {stats.todayTotal}
+                  {stats.completed} / {stats.total}
                 </p>
               </div>
               <div className="text-right">
                 <p className="text-3xl font-black text-primary">{progressPercent}%</p>
-                {stats.todayCompleted === stats.todayTotal && stats.todayTotal > 0 && (
+                {stats.completed === stats.total && stats.total > 0 && (
                   <Badge className="bg-emerald-500/20 text-emerald-300">
                     <CheckCircle2 className="w-3 h-3 mr-1" />
                     Все выполнено!
@@ -253,7 +329,7 @@ export function RitualsScreen() {
       )}
 
       {/* Rituals by time window */}
-      {!isLoading && todayRituals.length > 0 && (
+      {!isLoading && rituals.length > 0 && (
         <>
           {(['morning', 'day', 'evening', 'any'] as const).map(timeWindow => {
             const ritualsInWindow = groupedRituals[timeWindow]
@@ -293,13 +369,18 @@ export function RitualsScreen() {
                                 (ritual as Ritual & { completedToday?: boolean }).completedToday
                                   ? 'bg-emerald-500 text-white'
                                   : 'bg-muted hover:bg-muted/70'
-                              }`}
+                              } ${togglingId === ritual.id ? 'opacity-50' : ''}`}
                               onClick={(e) => {
                                 e.stopPropagation()
-                                handleToggleComplete(ritual, !(ritual as Ritual & { completedToday?: boolean }).completedToday)
+                                if (togglingId !== ritual.id) {
+                                  handleToggleComplete(ritual, !(ritual as Ritual & { completedToday?: boolean }).completedToday)
+                                }
                               }}
+                              disabled={togglingId === ritual.id}
                             >
-                              {(ritual as Ritual & { completedToday?: boolean }).completedToday ? (
+                              {togglingId === ritual.id ? (
+                                <div className="w-5 h-5 border-2 border-muted-foreground border-t-transparent rounded-full animate-spin" />
+                              ) : (ritual as Ritual & { completedToday?: boolean }).completedToday ? (
                                 <CheckCircle2 className="w-5 h-5" />
                               ) : (
                                 <Circle className="w-5 h-5 text-muted-foreground" />
@@ -328,15 +409,20 @@ export function RitualsScreen() {
                               {/* Attributes */}
                               {ritual.attributes && (
                                 <div className="flex gap-1 mt-1">
-                                  {(JSON.parse(ritual.attributes as string) as AttributeKey[]).map(attr => (
-                                    <Badge 
-                                      key={attr} 
-                                      variant="outline" 
-                                      className="text-[10px] px-1.5 py-0"
-                                    >
-                                      {attr === 'health' ? '❤️' : attr === 'mind' ? '🧠' : '💪'}
-                                    </Badge>
-                                  ))}
+                                  {(() => {
+                                    try {
+                                      const attrs = JSON.parse(ritual.attributes as string) as AttributeKey[]
+                                      return attrs.map(attr => (
+                                        <Badge 
+                                          key={attr} 
+                                          variant="outline" 
+                                          className="text-[10px] px-1.5 py-0"
+                                        >
+                                          {attr === 'health' ? '❤️' : attr === 'mind' ? '🧠' : '💪'}
+                                        </Badge>
+                                      ))
+                                    } catch { return null }
+                                  })()}
                                 </div>
                               )}
                             </div>
@@ -441,8 +527,44 @@ export function RitualsScreen() {
                 handleToggleComplete(selectedRitual, completed)
                 setSelectedRitual(prev => prev ? { ...prev, completedToday: completed } : null)
               }}
+              onDelete={() => {
+                setDeletingRitual(selectedRitual)
+              }}
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deletingRitual} onOpenChange={() => setDeletingRitual(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Архивировать ритуал?</DialogTitle>
+          </DialogHeader>
+          <div className="pt-4">
+            <p className="text-muted-foreground mb-4">
+              Ритуал "{deletingRitual?.title}" будет перенесён в архив. 
+              Вы сможете восстановить его позже.
+            </p>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                className="flex-1" 
+                onClick={() => setDeletingRitual(null)}
+                disabled={isDeleting}
+              >
+                Отмена
+              </Button>
+              <Button 
+                variant="destructive" 
+                className="flex-1" 
+                onClick={handleDeleteRitual}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Архивирование...' : 'Архивировать'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
@@ -452,10 +574,12 @@ export function RitualsScreen() {
 // Ritual Detail Content Component
 function RitualDetailContent({ 
   ritual, 
-  onComplete 
+  onComplete,
+  onDelete
 }: { 
   ritual: Ritual; 
-  onComplete: (completed: boolean) => void 
+  onComplete: (completed: boolean) => void;
+  onDelete: () => void;
 }) {
   const [completions, setCompletions] = useState<Array<{ date: Date; completed: boolean; note?: string }>>([])
   const [stats, setStats] = useState({ streak: 0, completionRate: 0 })
@@ -464,13 +588,18 @@ function RitualDetailContent({
 
   useEffect(() => {
     const loadCompletions = async () => {
+      if (!isOnline()) {
+        showErrorToast(new Error('Нет подключения к интернету'), 'load completions')
+        setIsLoading(false)
+        return
+      }
       try {
         const response = await fetch(`/api/rituals/complete?ritualId=${ritual.id}`)
         const data = await response.json()
         setCompletions(data.completions || [])
         setStats(data.stats || { streak: 0, completionRate: 0 })
       } catch (error) {
-        console.error('Failed to load completions:', error)
+        showErrorToast(error, 'load completions')
       } finally {
         setIsLoading(false)
       }
@@ -587,6 +716,16 @@ function RitualDetailContent({
             Отметить выполненным
           </>
         )}
+      </Button>
+
+      {/* Delete button */}
+      <Button
+        variant="ghost"
+        className="w-full text-muted-foreground hover:text-red-400"
+        onClick={onDelete}
+      >
+        <Trash2 className="w-4 h-4 mr-2" />
+        Архивировать ритуал
       </Button>
     </div>
   )

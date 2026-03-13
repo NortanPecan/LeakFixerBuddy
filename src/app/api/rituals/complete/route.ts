@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { normalizeToDate, parseDateKey, formatDateKey } from '@/lib/date-utils'
+import { calculateStreak, type CompletionEntry } from '@/lib/streak-utils'
 
 // POST - Mark ritual as complete/incomplete for a date
+// Body: { ritualId, userId, date?: string, completed: boolean, note?: string, mood?: string }
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -20,16 +23,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Ritual not found' }, { status: 404 })
     }
 
-    // Parse date or use today
-    const completionDate = date ? new Date(date) : new Date()
-    completionDate.setHours(12, 0, 0, 0) // Normalize to noon
+    // Parse date or use today - normalize to start of day
+    const targetDate = date ? parseDateKey(date) : normalizeToDate(new Date())
 
-    // Upsert completion
+    // Upsert completion using unique constraint
     const completion = await db.ritualCompletion.upsert({
       where: {
         ritualId_date: {
           ritualId,
-          date: completionDate
+          date: targetDate
         }
       },
       update: {
@@ -40,7 +42,7 @@ export async function POST(request: NextRequest) {
       create: {
         ritualId,
         userId,
-        date: completionDate,
+        date: targetDate,
         completed,
         note,
         mood
@@ -91,7 +93,13 @@ export async function POST(request: NextRequest) {
       await checkAchievements(userId, ritualId)
     }
 
-    return NextResponse.json({ completion })
+    return NextResponse.json({
+      success: true,
+      completion: {
+        ...completion,
+        date: formatDateKey(completion.date)
+      }
+    })
   } catch (error) {
     console.error('Complete ritual error:', error)
     return NextResponse.json({ error: 'Failed to complete ritual' }, { status: 500 })
@@ -99,6 +107,7 @@ export async function POST(request: NextRequest) {
 }
 
 // GET - Get completions for a ritual
+// /api/rituals/complete?ritualId=xxx&days=30
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -122,55 +131,52 @@ export async function GET(request: NextRequest) {
       orderBy: { date: 'asc' }
     })
 
-    // Calculate streak
-    let streak = 0
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    
-    // Get ritual to check days
+    // Get ritual to check scheduled days
     const ritual = await db.ritual.findUnique({
       where: { id: ritualId }
     })
-    
+
+    // Calculate streak using the utility
+    let streak = 0
+    let maxStreak = 0
+    let completionRate = 0
+    let scheduledDays = days
+    let completedScheduledDays = 0
+
     if (ritual) {
       const ritualDays = JSON.parse(ritual.days as string) as number[]
-      const completionMap = new Map(
-        completions.map(c => [
-          c.date.toISOString().split('T')[0],
-          c.completed
-        ])
-      )
 
-      // Count consecutive completed days
-      let checkDate = new Date(today)
-      for (let i = 0; i < days; i++) {
-        const dateStr = checkDate.toISOString().split('T')[0]
-        const dayOfWeek = checkDate.getDay() || 7
-        
-        // Only check days that should have this ritual
-        if (ritualDays.includes(dayOfWeek)) {
-          if (completionMap.get(dateStr)) {
-            streak++
-          } else if (checkDate < today) {
-            // Past day without completion breaks streak
-            break
-          }
-        }
-        
-        checkDate.setDate(checkDate.getDate() - 1)
-      }
+      // Convert completions to the format expected by streak utils
+      const completionEntries: CompletionEntry[] = completions.map(c => ({
+        date: c.date,
+        completed: c.completed
+      }))
+
+      const streakResult = calculateStreak(completionEntries, ritualDays, days)
+      streak = streakResult.streak
+      maxStreak = streakResult.maxStreak
+      completionRate = streakResult.completionRate
+      scheduledDays = streakResult.scheduledDays
+      completedScheduledDays = streakResult.completedScheduledDays
     }
 
-    // Calculate stats
-    const completedCount = completions.filter(c => c.completed).length
     const stats = {
       streak,
-      completedDays: completedCount,
+      maxStreak,
+      completedDays: completedScheduledDays,
+      scheduledDays,
       totalDays: days,
-      completionRate: Math.round((completedCount / days) * 100)
+      completionRate
     }
 
-    return NextResponse.json({ completions, stats })
+    return NextResponse.json({
+      success: true,
+      completions: completions.map(c => ({
+        ...c,
+        date: formatDateKey(c.date)
+      })),
+      stats
+    })
   } catch (error) {
     console.error('Fetch completions error:', error)
     return NextResponse.json({ error: 'Failed to fetch completions' }, { status: 500 })

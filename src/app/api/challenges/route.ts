@@ -1,21 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { calculateStreak, type CompletionEntry } from '@/lib/streak-utils'
 
 // Helper to calculate progress for a challenge
 async function calculateChallengeProgress(challenge: {
   id: string
   userId: string
   name: string
+  description?: string | null
   type: string
   zone: string
-  chainId: string | null
+  directionId?: string | null
+  chainId?: string | null
   config: string
   duration: number
   progress: number
   startDate: Date
-  endDate: Date | null
+  endDate?: Date | null
   status: string
-  createdAt: Date
 }, userId: string) {
   let progress = challenge.progress
   let daysCompleted = 0
@@ -32,10 +34,10 @@ async function calculateChallengeProgress(challenge: {
   }
 
   if (challenge.type === 'ritual') {
-    const selectedRitualIds = config.selectedRitualIds || []
+    const selectedRitualIds = config.selectedRitualIds as string[] | undefined || []
     const expectedDays = challenge.duration || 30
 
-    if (selectedRitualIds && selectedRitualIds.length > 0) {
+    if (selectedRitualIds.length > 0) {
       const startDate = new Date(challenge.startDate)
       const endDate = new Date(startDate)
       endDate.setDate(endDate.getDate() + expectedDays)
@@ -56,30 +58,31 @@ async function calculateChallengeProgress(challenge: {
 
       daysCompleted = completedDaysSet.size
 
-      const sortedDays = Array.from(completedDaysSet).sort()
+      // Calculate currentStreak: count consecutive days from today backwards
       currentStreak = 0
-      let prevDate = ''
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
       
-      for (const dateStr of sortedDays) {
-        if (prevDate) {
-          const diff = Math.floor(
-            (new Date(dateStr).getTime() - new Date(prevDate).getTime()) / (1000 * 60 * 60 * 24)
-          )
-          if (diff === 1) currentStreak++
-          else currentStreak = 1
+      for (let i = 0; i < expectedDays; i++) {
+        const checkDate = new Date(today)
+        checkDate.setDate(checkDate.getDate() - i)
+        const dateStr = checkDate.toISOString().split('T')[0]
+        
+        if (completedDaysSet.has(dateStr)) {
+          currentStreak++
+        } else if (checkDate >= startDate) {
+          // Only break if the date is within the challenge period
+          break
         }
-        prevDate = dateStr
       }
 
       progress = Math.round((daysCompleted / expectedDays) * 100)
     } else {
-      // No specific rituals selected - count all ritual completions
       const startDate = new Date(challenge.startDate)
       const endDate = new Date(startDate)
       endDate.setDate(endDate.getDate() + expectedDays)
       endDate.setHours(23, 59, 59, 999)
 
-      // Get all user rituals
       const rituals = await db.ritual.findMany({
         where: { userId, status: 'active' },
         select: { id: true }
@@ -109,16 +112,16 @@ async function calculateChallengeProgress(challenge: {
     })
 
     if (chain) {
-      const targetSteps = config.targetSteps || chain.tasks.length
+      const targetSteps = (config.targetSteps as number) || chain.tasks.length
       const completedSteps = chain.tasks.filter(t => t.status === 'done').length
       daysCompleted = completedSteps
       progress = Math.round((completedSteps / targetSteps) * 100)
     }
   } else if (challenge.type === 'custom') {
-    const zone = config.zone || challenge.zone
-    const targetCount = config.targetCount || 0
-    const periodDays = config.periodDays || 30
-    const actionType = config.actionType || 'actions'
+    const zone = (config.zone as string) || challenge.zone
+    const targetCount = (config.targetCount as number) || 0
+    const periodDays = (config.periodDays as number) || 30
+    const actionType = (config.actionType as string) || 'actions'
 
     const startDate = new Date(challenge.startDate)
     const endDate = new Date(startDate)
@@ -147,8 +150,24 @@ async function calculateChallengeProgress(challenge: {
       })
       daysCompleted = completedDaysSet.size
       progress = targetCount > 0 ? Math.round((daysCompleted / targetCount) * 100) : 0
+      
+      // Calculate currentStreak: count consecutive days from today backwards
+      currentStreak = 0
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      
+      for (let i = 0; i < periodDays; i++) {
+        const checkDate = new Date(today)
+        checkDate.setDate(checkDate.getDate() - i)
+        const dateStr = checkDate.toISOString().split('T')[0]
+        
+        if (completedDaysSet.has(dateStr)) {
+          currentStreak++
+        } else if (checkDate >= startDate) {
+          break
+        }
+      }
     }
-    currentStreak = daysCompleted
   }
 
   let newStatus = challenge.status
@@ -181,12 +200,17 @@ export async function GET(request: NextRequest) {
   const userId = searchParams.get('userId')
   const challengeId = searchParams.get('id')
   const status = searchParams.get('status')
+  const directionId = searchParams.get('directionId')
 
   // Get single challenge by ID
   if (challengeId && !userId) {
     try {
       const challenge = await db.challenge.findUnique({
-        where: { id: challengeId }
+        where: { id: challengeId },
+        include: {
+          direction: true,
+          progressDetails: true
+        }
       })
 
       if (!challenge) {
@@ -194,7 +218,45 @@ export async function GET(request: NextRequest) {
       }
 
       const challengeWithProgress = await calculateChallengeProgress(challenge, challenge.userId)
-      return NextResponse.json({ success: true, challenge: challengeWithProgress })
+      
+      // Get linked entities from config
+      let linkedRituals: unknown[] = []
+      let linkedSkills: unknown[] = []
+      let linkedTraits: unknown[] = []
+      
+      try {
+        const config = JSON.parse(challenge.config || '{}')
+        if (config.linkedRitualIds?.length) {
+          linkedRituals = await db.ritual.findMany({
+            where: { id: { in: config.linkedRitualIds } },
+            select: { id: true, title: true, category: true }
+          })
+        }
+        if (config.linkedSkillIds?.length) {
+          linkedSkills = await db.skill.findMany({
+            where: { id: { in: config.linkedSkillIds } },
+            select: { id: true, name: true, level: true }
+          })
+        }
+        if (config.linkedTraitIds?.length) {
+          linkedTraits = await db.trait.findMany({
+            where: { id: { in: config.linkedTraitIds } },
+            select: { id: true, name: true, score: true }
+          })
+        }
+      } catch {
+        // ignore parse errors
+      }
+
+      return NextResponse.json({ 
+        success: true, 
+        challenge: {
+          ...challengeWithProgress,
+          linkedRituals,
+          linkedSkills,
+          linkedTraits
+        }
+      })
     } catch (error) {
       console.error('Error fetching challenge:', error)
       return NextResponse.json({ error: 'Failed to fetch challenge' }, { status: 500 })
@@ -208,10 +270,17 @@ export async function GET(request: NextRequest) {
   try {
     const where: Record<string, unknown> = { userId }
     if (status) where.status = status
+    if (directionId) where.directionId = directionId
 
     const challenges = await db.challenge.findMany({
       where,
-      orderBy: { createdAt: 'desc' }
+      orderBy: [
+        { status: 'asc' },
+        { createdAt: 'desc' }
+      ],
+      include: {
+        direction: { select: { id: true, title: true, color: true } }
+      }
     })
 
     // Calculate progress for each challenge
@@ -230,14 +299,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, name, type, zone, chainId, config, startDate, duration, endDate } = body
+    const { 
+      userId, name, title, description, type, category, zone, directionId, chainId, 
+      config, startDate, duration, endDate, status 
+    } = body
 
-    if (!userId || !name || !type) {
-      return NextResponse.json({ error: 'userId, name, and type are required' }, { status: 400 })
-    }
-
-    if (!['ritual', 'chain', 'custom'].includes(type)) {
-      return NextResponse.json({ error: 'Invalid type' }, { status: 400 })
+    if (!userId || !name) {
+      return NextResponse.json({ error: 'userId and name are required' }, { status: 400 })
     }
 
     const start = startDate ? new Date(startDate) : new Date()
@@ -253,14 +321,21 @@ export async function POST(request: NextRequest) {
       data: {
         userId,
         name,
-        type,
+        title,
+        description,
+        type: type || 'custom',
+        category: category || 'general',
         zone: zone || 'general',
-        chainId,
+        directionId: directionId || null,
+        chainId: chainId || null,
         config: typeof config === 'object' ? JSON.stringify(config) : (config || '{}'),
         startDate: start,
         duration: duration || 30,
         endDate: calculatedEndDate,
-        status: 'active'
+        status: status || 'active'
+      },
+      include: {
+        direction: { select: { id: true, title: true, color: true } }
       }
     })
 
@@ -275,15 +350,29 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, ...data } = body
+    const { id, name, title, description, category, directionId, config, status, progress, endDate } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
 
+    const updateData: Record<string, unknown> = {}
+    if (name !== undefined) updateData.name = name
+    if (title !== undefined) updateData.title = title
+    if (description !== undefined) updateData.description = description
+    if (category !== undefined) updateData.category = category
+    if (directionId !== undefined) updateData.directionId = directionId || null
+    if (config !== undefined) updateData.config = typeof config === 'object' ? JSON.stringify(config) : config
+    if (status !== undefined) updateData.status = status
+    if (progress !== undefined) updateData.progress = progress
+    if (endDate !== undefined) updateData.endDate = endDate ? new Date(endDate) : null
+
     const challenge = await db.challenge.update({
       where: { id },
-      data
+      data: updateData,
+      include: {
+        direction: { select: { id: true, title: true, color: true } }
+      }
     })
 
     return NextResponse.json({ success: true, challenge })

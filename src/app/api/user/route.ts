@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       user: {
         id: user.id,
-        telegramId: user.telegramId,
+        telegramId: user.telegramId?.toString(),
         username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,

@@ -31,6 +31,7 @@ import {
   RefreshCw
 } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
+import { showErrorToast, showSuccessToast, isOnline, getOfflineMessage } from '@/lib/network-utils'
 
 // Account types
 const ACCOUNT_TYPES = [
@@ -99,6 +100,7 @@ export function FinanceScreen() {
   const { user } = useAppStore()
   const [summary, setSummary] = useState<FinanceSummary | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   
   // Dialogs
   const [showAddTransaction, setShowAddTransaction] = useState(false)
@@ -126,15 +128,25 @@ export function FinanceScreen() {
     const loadData = async () => {
       if (!user?.id) return
       
+      // Check online status
+      if (!isOnline()) {
+        setError(getOfflineMessage())
+        setLoading(false)
+        return
+      }
+      
       setLoading(true)
+      setError(null)
       try {
         const res = await fetch(`/api/finance?userId=${user.id}`)
+        if (!res.ok) throw new Error('Failed to load data')
         const data = await res.json()
         if (data.success) {
           setSummary(data.summary)
         }
-      } catch (error) {
-        console.error('Failed to load finance data:', error)
+      } catch (err) {
+        showErrorToast(err, 'загрузка финансов')
+        setError('Не удалось загрузить данные')
       } finally {
         setLoading(false)
       }
@@ -147,8 +159,13 @@ export function FinanceScreen() {
   const handleCreateAccount = async () => {
     if (!user?.id || !newAccount.name) return
     
+    if (!isOnline()) {
+      showErrorToast(new Error('Network error'), 'создание счёта')
+      return
+    }
+    
     try {
-      await fetch('/api/accounts', {
+      const res = await fetch('/api/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -160,17 +177,20 @@ export function FinanceScreen() {
         })
       })
       
+      if (!res.ok) throw new Error('Failed to create account')
+      
       // Reload data
-      const res = await fetch(`/api/finance?userId=${user.id}`)
-      const data = await res.json()
+      const financeRes = await fetch(`/api/finance?userId=${user.id}`)
+      const data = await financeRes.json()
       if (data.success) {
         setSummary(data.summary)
       }
       
       setShowAddAccount(false)
       setNewAccount({ name: '', type: 'cash', initialBalance: '', icon: '💳' })
-    } catch (error) {
-      console.error('Failed to create account:', error)
+      showSuccessToast('Счёт создан')
+    } catch (err) {
+      showErrorToast(err, 'создание счёта')
     }
   }
 
@@ -178,8 +198,13 @@ export function FinanceScreen() {
   const handleCreateTransaction = async () => {
     if (!user?.id || !newTransaction.accountId || !newTransaction.amount) return
     
+    if (!isOnline()) {
+      showErrorToast(new Error('Network error'), 'создание транзакции')
+      return
+    }
+    
     try {
-      await fetch('/api/transactions', {
+      const res = await fetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -192,9 +217,11 @@ export function FinanceScreen() {
         })
       })
       
+      if (!res.ok) throw new Error('Failed to create transaction')
+      
       // Reload data
-      const res = await fetch(`/api/finance?userId=${user.id}`)
-      const data = await res.json()
+      const financeRes = await fetch(`/api/finance?userId=${user.id}`)
+      const data = await financeRes.json()
       if (data.success) {
         setSummary(data.summary)
       }
@@ -207,8 +234,9 @@ export function FinanceScreen() {
         description: '',
         date: new Date().toISOString().split('T')[0]
       })
-    } catch (error) {
-      console.error('Failed to create transaction:', error)
+      showSuccessToast('Транзакция добавлена')
+    } catch (err) {
+      showErrorToast(err, 'создание транзакции')
     }
   }
 
@@ -234,9 +262,37 @@ export function FinanceScreen() {
     return (
       <div className="flex flex-col gap-4 pb-20">
         <h1 className="text-2xl font-bold text-foreground">Финансы</h1>
-        <div className="text-center py-8 text-muted-foreground">
-          Загрузка...
-        </div>
+        {error && (
+          <Card className="bg-red-500/10 border-red-500/30">
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <p className="text-red-400">{error}</p>
+                <Button size="sm" variant="outline" onClick={() => {
+                  setError(null)
+                  setLoading(true)
+                  // Retry load
+                  const loadData = async () => {
+                    if (!user?.id) return
+                    try {
+                      const res = await fetch(`/api/finance?userId=${user.id}`)
+                      const data = await res.json()
+                      if (data.success) {
+                        setSummary(data.summary)
+                      }
+                    } catch (err) {
+                      showErrorToast(err, 'загрузка финансов')
+                    } finally {
+                      setLoading(false)
+                    }
+                  }
+                  loadData()
+                }}>
+                  Повторить
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     )
   }

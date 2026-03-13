@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useAppStore } from '@/lib/store'
+import { showSuccessToast, showErrorToast, isOnline } from '@/lib/network-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -26,13 +27,34 @@ export function CreateTaskScreen() {
   const [zone, setZone] = useState('')
   const [notes, setNotes] = useState('')
   const [noDate, setNoDate] = useState(false)
+  const [quickDate, setQuickDate] = useState<'today' | 'tomorrow' | 'custom'>('today')
+
+  // Quick date helpers
+  const getToday = () => new Date().toISOString().split('T')[0]
+  const getTomorrow = () => {
+    const d = new Date()
+    d.setDate(d.getDate() + 1)
+    return d.toISOString().split('T')[0]
+  }
+
+  const handleQuickDate = (mode: 'today' | 'tomorrow' | 'custom') => {
+    setQuickDate(mode)
+    setNoDate(false)
+    if (mode === 'today') setDate(getToday())
+    else if (mode === 'tomorrow') setDate(getTomorrow())
+  }
 
   const handleSave = async () => {
     if (!user?.id || !text.trim()) return
 
+    if (!isOnline()) {
+      showErrorToast(new Error('Нет подключения к интернету'), 'создание дела')
+      return
+    }
+
     setIsSaving(true)
     try {
-      await fetch('/api/tasks', {
+      const response = await fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -44,9 +66,11 @@ export function CreateTaskScreen() {
           notes: notes.trim() || undefined
         })
       })
+      if (!response.ok) throw new Error('Failed to create task')
+      showSuccessToast('Дело создано')
       setScreen('tasks')
     } catch (error) {
-      console.error('Failed to save task:', error)
+      showErrorToast(error, 'создание дела')
     } finally {
       setIsSaving(false)
     }
@@ -76,27 +100,63 @@ export function CreateTaskScreen() {
           />
         </div>
 
-        {/* Date */}
+        {/* Date - Quick Actions */}
         <div className="space-y-2">
           <Label className="flex items-center gap-2">
             <Calendar className="w-4 h-4" />
             Дата
           </Label>
+          
+          {/* Quick date buttons */}
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant={noDate ? 'outline' : quickDate === 'today' ? 'default' : 'outline'}
+              onClick={() => handleQuickDate('today')}
+              className="flex-1"
+            >
+              Сегодня
+            </Button>
+            <Button
+              size="sm"
+              variant={quickDate === 'tomorrow' ? 'default' : 'outline'}
+              onClick={() => handleQuickDate('tomorrow')}
+              className="flex-1"
+            >
+              Завтра
+            </Button>
+            <Button
+              size="sm"
+              variant={quickDate === 'custom' ? 'default' : 'outline'}
+              onClick={() => handleQuickDate('custom')}
+              className="flex-1"
+            >
+              <Calendar className="w-4 h-4" />
+            </Button>
+          </div>
+          
+          {/* Custom date picker or no date toggle */}
           <div className="flex gap-2">
             <Button
               size="sm"
               variant={noDate ? 'default' : 'outline'}
-              onClick={() => setNoDate(true)}
+              onClick={() => setNoDate(!noDate)}
+              className="text-xs"
             >
               Без даты
             </Button>
-            {!noDate && (
+            {!noDate && quickDate === 'custom' && (
               <Input
                 type="date"
                 value={date}
                 onChange={e => setDate(e.target.value)}
                 className="flex-1"
               />
+            )}
+            {!noDate && quickDate !== 'custom' && (
+              <div className="flex-1 text-sm text-muted-foreground flex items-center">
+                {quickDate === 'today' ? getToday() : getTomorrow()}
+              </div>
             )}
           </div>
         </div>
