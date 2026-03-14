@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useAppStore } from '@/lib/store'
+import { showErrorToast, showSuccessToast } from '@/lib/network-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -58,7 +59,7 @@ export function CreateRitualScreen() {
     
     setIsSaving(true)
     try {
-      await fetch('/api/rituals', {
+      const response = await fetch('/api/rituals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -73,9 +74,22 @@ export function CreateRitualScreen() {
           attributes: selectedAttributes
         })
       })
+      
+      const data = await response.json()
+      
+      if (!response.ok) {
+        // Check for duplicate error
+        if (data.error?.includes('уже существует')) {
+          showErrorToast(new Error(data.error), 'создание ритуала')
+          return
+        }
+        throw new Error(data.error || 'Failed to create ritual')
+      }
+      
+      showSuccessToast('Ритуал создан')
       setScreen('rituals')
     } catch (error) {
-      console.error('Failed to save ritual:', error)
+      showErrorToast(error, 'создание ритуала')
     } finally {
       setIsSaving(false)
     }

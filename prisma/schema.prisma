@@ -943,6 +943,7 @@ model FoodEntry {
   date      DateTime @default(now()) @db.Timestamptz
   mealType  String   @default("snack") @map("meal_type") // breakfast, lunch, dinner, snack
   name      String   // "Овсянка с ягодами"
+  time      String?  // "08:30", "12:00" (optional time of meal)
   calories  Int?
   protein   Float?
   fat       Float?

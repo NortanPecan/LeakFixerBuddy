@@ -111,6 +111,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'userId, title, and category required' }, { status: 400 })
     }
 
+    // Check for duplicate title (case insensitive, active rituals only)
+    const existingRitual = await db.ritual.findFirst({
+      where: {
+        userId,
+        title: { equals: title, mode: 'insensitive' },
+        status: 'active'
+      }
+    })
+
+    if (existingRitual) {
+      return NextResponse.json(
+        { error: `Ритуал с названием "${title}" уже существует` },
+        { status: 400 }
+      )
+    }
+
     const ritual = await db.ritual.create({
       data: {
         userId,

@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, name, mealType, calories, protein, fat, carbs, amount, quality, note, date } = body
+    const { userId, name, mealType, time, calories, protein, fat, carbs, amount, quality, note, date } = body
 
     if (!userId || !name) {
       return NextResponse.json({ error: 'userId and name are required' }, { status: 400 })
@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
         userId,
         name,
         mealType: mealType || 'snack',
+        time,
         calories,
         protein,
         fat,
@@ -108,5 +109,40 @@ export async function DELETE(request: NextRequest) {
   } catch (error) {
     console.error('Error deleting food entry:', error)
     return NextResponse.json({ error: 'Failed to delete food entry' }, { status: 500 })
+  }
+}
+
+// PATCH /api/food - Update food entry
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { id, name, mealType, time, calories, protein, fat, carbs, amount, quality, note, date } = body
+
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 })
+    }
+
+    const updateData: Record<string, unknown> = {}
+    if (name !== undefined) updateData.name = name
+    if (mealType !== undefined) updateData.mealType = mealType
+    if (time !== undefined) updateData.time = time
+    if (calories !== undefined) updateData.calories = calories
+    if (protein !== undefined) updateData.protein = protein
+    if (fat !== undefined) updateData.fat = fat
+    if (carbs !== undefined) updateData.carbs = carbs
+    if (amount !== undefined) updateData.amount = amount
+    if (quality !== undefined) updateData.quality = quality
+    if (note !== undefined) updateData.note = note
+    if (date !== undefined) updateData.date = parseDateKey(date)
+
+    const entry = await db.foodEntry.update({
+      where: { id },
+      data: updateData
+    })
+
+    return NextResponse.json({ success: true, entry })
+  } catch (error) {
+    console.error('Error updating food entry:', error)
+    return NextResponse.json({ error: 'Failed to update food entry' }, { status: 500 })
   }
 }

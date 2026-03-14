@@ -75,6 +75,7 @@ interface FoodEntry {
   id: string
   name: string
   mealType: string
+  time: string | null
   calories: number | null
   quality: string | null
   amount: string | null
@@ -123,10 +124,13 @@ export function HealthScreen() {
   const [newFood, setNewFood] = useState({
     name: '',
     mealType: 'snack',
+    time: '',
     calories: '',
     quality: 'neutral',
     amount: ''
   })
+  
+  const [editingFood, setEditingFood] = useState<FoodEntry | null>(null)
 
   // Load all data
   useEffect(() => {
@@ -263,6 +267,7 @@ export function HealthScreen() {
           date: selectedDate,
           name: newFood.name,
           mealType: newFood.mealType,
+          time: newFood.time || null,
           calories: newFood.calories ? parseInt(newFood.calories) : null,
           quality: newFood.quality,
           amount: newFood.amount || null
@@ -280,6 +285,7 @@ export function HealthScreen() {
       setNewFood({
         name: '',
         mealType: 'snack',
+        time: '',
         calories: '',
         quality: 'neutral',
         amount: ''
@@ -306,6 +312,39 @@ export function HealthScreen() {
       showSuccessToast('Запись удалена')
     } catch (error) {
       showErrorToast(error, 'удаление еды')
+    }
+  }
+
+  // Update food entry
+  const handleUpdateFood = async () => {
+    if (!user?.id || !editingFood) return
+    
+    try {
+      await fetch('/api/food', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingFood.id,
+          name: editingFood.name,
+          mealType: editingFood.mealType,
+          time: editingFood.time,
+          calories: editingFood.calories,
+          quality: editingFood.quality,
+          amount: editingFood.amount
+        })
+      })
+      
+      // Reload food
+      const res = await fetch(`/api/food?userId=${user.id}&date=${selectedDate}`)
+      const json = await res.json()
+      if (json.success) {
+        setFoodData(json)
+      }
+      
+      setEditingFood(null)
+      showSuccessToast('Запись обновлена')
+    } catch (error) {
+      showErrorToast(error, 'обновление еды')
     }
   }
 
@@ -523,12 +562,14 @@ export function HealthScreen() {
                         return (
                           <div
                             key={entry.id}
-                            className="flex items-center justify-between p-3 rounded-lg bg-muted/30"
+                            className="flex items-center justify-between p-3 rounded-lg bg-muted/30 group"
                           >
-                            <div className="flex items-center gap-3">
-                              <div>
-                                <p className="font-medium text-sm">{entry.name}</p>
+                            <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={() => setEditingFood(entry)}>
+                              <div className="min-w-0">
+                                <p className="font-medium text-sm truncate">{entry.name}</p>
                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  {entry.time && <span>{entry.time}</span>}
+                                  {entry.time && entry.calories && <span>•</span>}
                                   {entry.calories && <span>{entry.calories} ккал</span>}
                                   {entry.amount && <span>• {entry.amount}</span>}
                                 </div>
@@ -540,6 +581,14 @@ export function HealthScreen() {
                                   {quality.label}
                                 </Badge>
                               )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100"
+                                onClick={() => setEditingFood(entry)}
+                              >
+                                <ChevronRight className="w-4 h-4" />
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -790,7 +839,18 @@ export function HealthScreen() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Калории <span className="text-muted-foreground text-xs">(для энергии тела)</span></Label>
+                <Label>Время</Label>
+                <Input
+                  type="time"
+                  value={newFood.time}
+                  onChange={e => setNewFood({ ...newFood, time: e.target.value })}
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Калории</Label>
                 <Input
                   type="number"
                   placeholder="300"
@@ -798,9 +858,6 @@ export function HealthScreen() {
                   onChange={e => setNewFood({ ...newFood, calories: e.target.value })}
                 />
               </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Количество</Label>
                 <Input
@@ -809,24 +866,25 @@ export function HealthScreen() {
                   onChange={e => setNewFood({ ...newFood, amount: e.target.value })}
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Качество</Label>
-                <Select
-                  value={newFood.quality}
-                  onValueChange={v => setNewFood({ ...newFood, quality: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(QUALITY_LABELS).map(([key, { label }]) => (
-                      <SelectItem key={key} value={key}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Качество</Label>
+              <Select
+                value={newFood.quality}
+                onValueChange={v => setNewFood({ ...newFood, quality: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(QUALITY_LABELS).map(([key, { label }]) => (
+                    <SelectItem key={key} value={key}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             
             <div className="flex gap-2">
@@ -846,6 +904,108 @@ export function HealthScreen() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* EDIT FOOD DIALOG */}
+      <Dialog open={!!editingFood} onOpenChange={() => setEditingFood(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Редактировать еду</DialogTitle>
+          </DialogHeader>
+          {editingFood && (
+            <div className="space-y-4 pt-4">
+              <div className="space-y-2">
+                <Label>Название</Label>
+                <Input
+                  value={editingFood.name}
+                  onChange={e => setEditingFood({ ...editingFood, name: e.target.value })}
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Приём пищи</Label>
+                  <Select
+                    value={editingFood.mealType}
+                    onValueChange={v => setEditingFood({ ...editingFood, mealType: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(MEAL_TYPE_LABELS).map(([key, { label, emoji }]) => (
+                        <SelectItem key={key} value={key}>
+                          {emoji} {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Время</Label>
+                  <Input
+                    type="time"
+                    value={editingFood.time || ''}
+                    onChange={e => setEditingFood({ ...editingFood, time: e.target.value })}
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Калории</Label>
+                  <Input
+                    type="number"
+                    value={editingFood.calories || ''}
+                    onChange={e => setEditingFood({ ...editingFood, calories: e.target.value ? parseInt(e.target.value) : null })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Количество</Label>
+                  <Input
+                    value={editingFood.amount || ''}
+                    onChange={e => setEditingFood({ ...editingFood, amount: e.target.value })}
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Качество</Label>
+                <Select
+                  value={editingFood.quality || 'neutral'}
+                  onValueChange={v => setEditingFood({ ...editingFood, quality: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(QUALITY_LABELS).map(([key, { label }]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setEditingFood(null)}
+                >
+                  Отмена
+                </Button>
+                <Button
+                  className="flex-1 bg-primary"
+                  onClick={handleUpdateFood}
+                >
+                  Сохранить
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
