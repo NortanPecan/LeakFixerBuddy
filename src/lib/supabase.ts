@@ -15,8 +15,6 @@ let _supabaseAdmin: SupabaseClient<Database> | null = null
 /**
  * Get Supabase client for browser/frontend usage (uses anon key)
  * Lazy-initialized to avoid errors at build time
- * 
- * Environment: Uses SANDBOX variables if set, otherwise PROD variables
  */
 export function getSupabase(): SupabaseClient<Database> {
   if (!_supabase) {
@@ -42,8 +40,6 @@ export function getSupabase(): SupabaseClient<Database> {
 /**
  * Get Supabase admin client for server-side operations (uses service role key)
  * Lazy-initialized to avoid errors at build time
- * 
- * Environment: Uses SANDBOX variables if set, otherwise PROD variables
  */
 export function getSupabaseAdmin(): SupabaseClient<Database> | null {
   if (!_supabaseAdmin) {

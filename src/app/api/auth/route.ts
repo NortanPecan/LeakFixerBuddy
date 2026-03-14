@@ -16,7 +16,7 @@ const DEMO_TELEGRAM_ID_TEXT = '9000000001'
 const DEMO_TELEGRAM_ID_BIGINT = 9000000001n
 const DEMO_EMAIL = 'demo@leakfixer.local'
 
-// Owner user constants (for sandbox testing with clean data)
+// Owner user constants (for testing with clean data)
 const OWNER_TELEGRAM_ID_TEXT = '9000000002'
 const OWNER_EMAIL = 'owner@leakfixer.local'
 const OWNER_USERNAME = 'liveleak_owner'

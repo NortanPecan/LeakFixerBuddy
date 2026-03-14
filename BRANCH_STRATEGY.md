@@ -2,33 +2,15 @@
 
 ## Overview
 
-LeakFixer uses two branches with different database providers:
+LeakFixer uses the **main** branch for production deployment with Supabase PostgreSQL.
 
-- `master`: sandbox/local development, SQLite
-- `main`: production deployment, Supabase PostgreSQL
+**Note:** The `master` branch is historical and not used. All development happens in `main`.
 
-## Schema files
+## Database
 
-- `prisma/schema.prisma`: sandbox schema (SQLite)
-- `prisma/schema.supabase.prisma`: production schema (Supabase/PostgreSQL)
-
-Both schemas must describe the same domain models. Differences are only DB-specific types/constraints.
-
-## Sandbox (`master`)
-
-- DB: SQLite (`DATABASE_URL="file:./db/custom.db"`)
-- No required network access
-- Telegram can run in demo/mock mode for local development
-
-Commands:
-
-```bash
-bun run db:generate:sandbox
-bun run db:push:sandbox
-bun run db:migrate:sandbox
-bun run db:studio:sandbox
-bun run db:validate:sandbox
-```
+- **Provider:** Supabase PostgreSQL
+- **Schema:** `prisma/schema.prisma` (PostgreSQL only)
+- **Connection:** `DATABASE_URL` (pooling) + `DIRECT_DATABASE_URL` (migrations)
 
 ## Production (`main`)
 
@@ -39,11 +21,11 @@ bun run db:validate:sandbox
 Commands:
 
 ```bash
-bun run db:generate:prod
-bun run db:push:prod
-bun run db:migrate:prod
-bun run db:studio:prod
-bun run db:validate:prod
+bun run db:generate    # Generate Prisma client
+bun run db:push        # Push schema changes
+bun run db:migrate     # Create and apply migrations
+bun run db:studio      # Open Prisma Studio
+bun run db:validate    # Validate schema
 ```
 
 ## Important rule for this project
@@ -52,19 +34,19 @@ Codex/agent does not apply SQL directly to production Supabase.
 
 Production synchronization flow is manual:
 
-1. Update `prisma/schema.supabase.prisma`.
+1. Update `prisma/schema.prisma`.
 2. Update `SUPABASE_CHECKLIST.md`.
 3. Project owner applies SQL manually in Supabase SQL Editor.
-4. Re-run `bun run db:validate:prod` and compare against checklist.
+4. Re-run `bun run db:validate` and compare against checklist.
 
-## Demo Auth (Production)
+## Demo Auth
 
 Endpoint: `GET /api/auth?demo=true`
 
 Purpose:
 
 - Fallback login path when Telegram `initData` is unavailable.
-- Works in production with Supabase, independent from Telegram signature validation.
+- Works with Supabase, independent from Telegram signature validation.
 
 Environment expectations:
 

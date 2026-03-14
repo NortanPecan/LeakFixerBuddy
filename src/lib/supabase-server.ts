@@ -5,7 +5,6 @@ import { getSupabaseUrl, getSupabaseAnonKey } from './supabaseClient'
 
 /**
  * Create Supabase server client for Server Components
- * Uses environment detection (SANDBOX -> PROD fallback)
  */
 export async function createSupabaseServerClient() {
   const cookieStore = await cookies()
@@ -13,7 +12,7 @@ export async function createSupabaseServerClient() {
   const anonKey = getSupabaseAnonKey()
   
   if (!url || !anonKey) {
-    throw new Error('[Supabase] Missing URL or Anon Key. Set NEXT_PUBLIC_SUPABASE_URL_SANDBOX or NEXT_PUBLIC_SUPABASE_URL')
+    throw new Error('[Supabase] Missing URL or Anon Key. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY')
   }
   
   return createServerClient(url, anonKey, {
@@ -38,14 +37,13 @@ export async function createSupabaseServerClient() {
 
 /**
  * Create Supabase client for API routes (req/res pattern)
- * Uses environment detection (SANDBOX -> PROD fallback)
  */
-export function createSupabaseReqResClient(req: NextRequest, res: Response) {
+export function createSupabaseReqResClient(req: NextRequest, _res: Response) {
   const url = getSupabaseUrl()
   const anonKey = getSupabaseAnonKey()
   
   if (!url || !anonKey) {
-    throw new Error('[Supabase] Missing URL or Anon Key. Set NEXT_PUBLIC_SUPABASE_URL_SANDBOX or NEXT_PUBLIC_SUPABASE_URL')
+    throw new Error('[Supabase] Missing URL or Anon Key. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY')
   }
   
   return createServerClient(url, anonKey, {

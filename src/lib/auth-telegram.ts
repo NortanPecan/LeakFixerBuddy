@@ -11,8 +11,6 @@ let _supabaseAuth: SupabaseClient | null = null
 /**
  * Get Supabase Auth client (uses service role key for admin operations)
  * Lazy-initialized to avoid errors at build time
- * 
- * Environment: Uses SANDBOX variables if set, otherwise PROD variables
  */
 function getSupabaseAuth(): SupabaseClient {
   if (!_supabaseAuth) {
@@ -20,7 +18,7 @@ function getSupabaseAuth(): SupabaseClient {
     const serviceKey = getSupabaseServiceKey()
     
     if (!url || !serviceKey) {
-      throw new Error('[Supabase Auth] Missing credentials. Set NEXT_PUBLIC_SUPABASE_URL_SANDBOX/NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY_SANDBOX/SUPABASE_SERVICE_ROLE_KEY')
+      throw new Error('[Supabase Auth] Missing credentials. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY')
     }
     
     _supabaseAuth = createClient(url, serviceKey, {

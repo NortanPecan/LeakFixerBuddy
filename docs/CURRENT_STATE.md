@@ -5,8 +5,31 @@
 **LeakFixerBuddy** — Telegram Mini App для саморазвития (привычки, фитнес, GYM, wellbeing).
 
 - **Фреймворк**: Next.js 16 + React 19
-- **База данных**: SQLite (локально), Supabase PostgreSQL (прод)
+- **База данных**: Supabase PostgreSQL (только облачная, локальной БД нет)
+- **ORM**: Prisma (схема в `prisma/schema.prisma`)
 - **Рабочая ветка**: `main`
+
+## База данных
+
+**ВАЖНО: Проект использует ТОЛЬКО Supabase PostgreSQL. Локальной БД не существует.**
+
+Все данные хранятся в Supabase:
+- Prisma подключается через `DATABASE_URL` (pooling) и `DIRECT_DATABASE_URL` (direct)
+- REST API через `src/lib/supabase-rest.ts`
+- JS клиент через `@supabase/supabase-js`
+
+### Переменные окружения
+
+```env
+# Supabase (обязательно)
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+
+# Database (для Prisma)
+DATABASE_URL="postgresql://...pooler.supabase.com:6543/postgres?pgbouncer=true..."
+DIRECT_DATABASE_URL="postgresql://...supabase.co:5432/postgres?sslmode=require"
+```
 
 ## Структура feature-модулей
 
@@ -55,52 +78,6 @@ const text = getMoodStatusText(7)
 | Дубликаты схем Prisma | 3 файла | 1 файл | -2 файла |
 | getMoodStatus дубли | 3 копии | 1 копия | -2 копии |
 
-## Окружения: песочница и онлайн
-
-Проект поддерживает две среды разработки:
-
-| Среда | Описание | База данных | Env-файл |
-|-------|----------|-------------|----------|
-| **DEV_SANDBOX** | Локальная разработка | SQLite или локальный Supabase | `.env.local` |
-| **PROD_ONLINE** | Боевая версия | Supabase PostgreSQL | `.env.production` |
-
-### Переменные окружения
-
-**Песочница (`.env.local`):**
-```env
-# Supabase (опционально, для работы с Supabase локально)
-NEXT_PUBLIC_SUPABASE_URL_SANDBOX=https://xxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY_SANDBOX=eyJ...
-SUPABASE_SERVICE_ROLE_KEY_SANDBOX=eyJ...
-
-# База данных (для Prisma)
-DATABASE_URL_SANDBOX=postgresql://...
-DIRECT_DATABASE_URL_SANDBOX=postgresql://...
-```
-
-**Продакшн (Vercel/`.env.production`):**
-```env
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_ROLE_KEY=eyJ...
-
-# База данных (для Prisma)
-DATABASE_URL=postgresql://...
-DIRECT_DATABASE_URL=postgresql://...
-
-# Telegram
-TELEGRAM_BOT_TOKEN=...
-```
-
-### Логика выбора среды
-
-Файл `src/lib/supabaseClient.ts` определяет среду автоматически:
-- Если заданы `*_SANDBOX` переменные → используется песочница
-- Иначе → используются боевые переменные
-
-**Важно:** Supabase используется ТОЛЬКО через REST/JS-API, не через прямой SQL.
-
 ---
 
 ## Supabase Client
@@ -116,12 +93,14 @@ TELEGRAM_BOT_TOKEN=...
 | `supabase-server.ts` | SSR клиент для Server Components |
 | `supabase-browser.ts` | Клиент для Client Components |
 | `auth-telegram.ts` | Auth клиент для Telegram аутентификации |
+| `supabase-rest.ts` | PostgREST query builder |
+| `db.ts` | Prisma client для Supabase PostgreSQL |
 
 ### Использование:
 
 ```typescript
-// Получить env-переменные (с fallback SANDBOX -> PROD)
-import { getSupabaseUrl, getSupabaseAnonKey, isSandboxMode } from '@/lib/supabaseClient'
+// Получить env-переменные
+import { getSupabaseUrl, getSupabaseAnonKey } from '@/lib/supabaseClient'
 
 // Основной клиент (anon key)
 import { getSupabase, supabase } from '@/lib/supabase'
@@ -134,6 +113,9 @@ import { createSupabaseServerClient } from '@/lib/supabase-server'
 
 // Клиент для браузера
 import { createSupabaseBrowserClient } from '@/lib/supabase-browser'
+
+// Prisma client
+import { db } from '@/lib/db'
 ```
 
 ### Проверка конфигурации:
@@ -143,7 +125,7 @@ import { isSupabaseConfigured, getEnvironmentInfo } from '@/lib/supabaseClient'
 
 if (isSupabaseConfigured()) {
   console.log(getEnvironmentInfo())
-  // { mode: 'sandbox', hasSupabaseUrl: true, hasAnonKey: true, ... }
+  // { hasSupabaseUrl: true, hasAnonKey: true, ... }
 }
 ```
 
@@ -156,8 +138,9 @@ if (isSupabaseConfigured()) {
 
 ```bash
 bun run lint        # Проверка линтера
-bun run db:push     # Применить схему Prisma
+bun run db:push     # Применить схему Prisma к Supabase
 bun run db:generate # Генерация Prisma клиента
+bun run db:studio   # Открыть Prisma Studio
 ```
 
 ---
