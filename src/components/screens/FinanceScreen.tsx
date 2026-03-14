@@ -23,12 +23,13 @@ import {
   ArrowDownRight,
   CreditCard,
   Banknote,
-  Gamepad2,
   Sparkles,
   Filter,
   Calendar,
   PiggyBank,
-  RefreshCw
+  RefreshCw,
+  Trash2,
+  Edit2
 } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
 import { showErrorToast, showSuccessToast, isOnline, getOfflineMessage } from '@/lib/network-utils'
@@ -38,9 +39,42 @@ const ACCOUNT_TYPES = [
   { value: 'cash', label: 'Наличные', icon: Banknote },
   { value: 'card', label: 'Карта', icon: CreditCard },
   { value: 'poker', label: 'Банкролл', icon: Sparkles },
-  { value: 'steam', label: 'Steam', icon: Gamepad2 },
   { value: 'other', label: 'Другое', icon: Wallet },
 ]
+
+// Currencies
+const CURRENCIES = [
+  { value: 'RUB', label: 'Рубль (₽)', symbol: '₽' },
+  { value: 'USD', label: 'Доллар ($)', symbol: '$' },
+  { value: 'EUR', label: 'Евро (€)', symbol: '€' },
+  { value: 'KZT', label: 'Тенге (₸)', symbol: '₸' },
+  { value: 'UZS', label: 'Сум (сўм)', symbol: 'сўм' },
+  { value: 'custom', label: 'Другая валюта', symbol: '' },
+]
+
+// Currency formatters cache
+const currencyFormatters: Record<string, Intl.NumberFormat> = {}
+
+function getCurrencyFormatter(currency: string): Intl.NumberFormat {
+  if (!currencyFormatters[currency]) {
+    try {
+      currencyFormatters[currency] = new Intl.NumberFormat('ru-RU', {
+        style: 'currency',
+        currency: currency,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+      })
+    } catch {
+      // Fallback for unknown currencies
+      currencyFormatters[currency] = new Intl.NumberFormat('ru-RU', {
+        style: 'decimal',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+      })
+    }
+  }
+  return currencyFormatters[currency]
+}
 
 // Zone config
 const ZONE_CONFIG: Record<string, { label: string; emoji: string; color: string }> = {
@@ -58,6 +92,7 @@ interface Account {
   id: string
   name: string
   type: string
+  currency: string
   icon: string | null
   color: string | null
   initialBalance: number
@@ -80,7 +115,7 @@ interface Transaction {
   amount: number
   description: string | null
   zone: string | null
-  account: { id: string; name: string; icon: string | null }
+  account: { id: string; name: string; icon: string | null; currency?: string }
   category: { id: string; name: string; icon: string | null; zone: string } | null
 }
 
@@ -106,6 +141,11 @@ export function FinanceScreen() {
   const [showAddTransaction, setShowAddTransaction] = useState(false)
   const [showAddAccount, setShowAddAccount] = useState(false)
   
+  // Loading states
+  const [isCreatingAccount, setIsCreatingAccount] = useState(false)
+  const [isCreatingTransaction, setIsCreatingTransaction] = useState(false)
+  const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null)
+  
   // New transaction form
   const [newTransaction, setNewTransaction] = useState({
     accountId: '',
@@ -119,6 +159,7 @@ export function FinanceScreen() {
   const [newAccount, setNewAccount] = useState({
     name: '',
     type: 'cash',
+    currency: 'RUB',
     initialBalance: '',
     icon: '💳'
   })
@@ -157,13 +198,14 @@ export function FinanceScreen() {
 
   // Create account
   const handleCreateAccount = async () => {
-    if (!user?.id || !newAccount.name) return
+    if (!user?.id || !newAccount.name || isCreatingAccount) return
     
     if (!isOnline()) {
       showErrorToast(new Error('Network error'), 'создание счёта')
       return
     }
     
+    setIsCreatingAccount(true)
     try {
       const res = await fetch('/api/accounts', {
         method: 'POST',
@@ -172,12 +214,22 @@ export function FinanceScreen() {
           userId: user.id,
           name: newAccount.name,
           type: newAccount.type,
+          currency: newAccount.currency,
           initialBalance: parseFloat(newAccount.initialBalance) || 0,
           icon: newAccount.icon
         })
       })
       
-      if (!res.ok) throw new Error('Failed to create account')
+      const responseData = await res.json()
+      
+      if (!res.ok) {
+        // Check for duplicate error
+        if (responseData.error?.includes('уже существует')) {
+          showErrorToast(new Error(responseData.error), 'создание счёта')
+          return
+        }
+        throw new Error(responseData.error || 'Failed to create account')
+      }
       
       // Reload data
       const financeRes = await fetch(`/api/finance?userId=${user.id}`)
@@ -187,10 +239,47 @@ export function FinanceScreen() {
       }
       
       setShowAddAccount(false)
-      setNewAccount({ name: '', type: 'cash', initialBalance: '', icon: '💳' })
+      setNewAccount({ name: '', type: 'cash', currency: 'RUB', initialBalance: '', icon: '💳' })
       showSuccessToast('Счёт создан')
     } catch (err) {
       showErrorToast(err, 'создание счёта')
+    } finally {
+      setIsCreatingAccount(false)
+    }
+  }
+
+  // Delete account
+  const handleDeleteAccount = async (accountId: string, accountName: string) => {
+    if (!user?.id || deletingAccountId) return
+    
+    // Confirm deletion
+    if (!confirm(`Удалить счёт "${accountName}"?\n\nТранзакции сохранятся в истории.`)) {
+      return
+    }
+    
+    setDeletingAccountId(accountId)
+    try {
+      const res = await fetch(`/api/accounts?id=${accountId}`, {
+        method: 'DELETE'
+      })
+      
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to delete account')
+      }
+      
+      // Reload data
+      const financeRes = await fetch(`/api/finance?userId=${user.id}`)
+      const data = await financeRes.json()
+      if (data.success) {
+        setSummary(data.summary)
+      }
+      
+      showSuccessToast('Счёт удалён')
+    } catch (err) {
+      showErrorToast(err, 'удаление счёта')
+    } finally {
+      setDeletingAccountId(null)
     }
   }
 
@@ -240,14 +329,10 @@ export function FinanceScreen() {
     }
   }
 
-  // Format currency
-  const formatMoney = (amount: number) => {
-    return new Intl.NumberFormat('ru-RU', {
-      style: 'currency',
-      currency: 'RUB',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount)
+  // Format money with currency
+  const formatMoney = (amount: number, currency: string = 'RUB') => {
+    const formatter = getCurrencyFormatter(currency)
+    return formatter.format(amount)
   }
 
   // Format date
@@ -366,18 +451,40 @@ export function FinanceScreen() {
               {summary.accounts.map(account => (
                 <div
                   key={account.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/30"
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted/30 group"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
                     <span className="text-2xl">{account.icon || '💳'}</span>
-                    <div>
-                      <p className="font-medium">{account.name}</p>
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{account.name}</p>
                       <p className="text-xs text-muted-foreground capitalize">{account.type}</p>
                     </div>
                   </div>
-                  <p className={`font-bold ${account.currentBalance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {formatMoney(account.currentBalance)}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className={`font-bold ${account.currentBalance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {formatMoney(account.currentBalance, account.currency || 'RUB')}
+                    </p>
+                    {/* Action buttons - visible on hover/tap */}
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
+                        onClick={() => {/* TODO: Edit account */}}
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400"
+                        onClick={() => handleDeleteAccount(account.id, account.name)}
+                        disabled={deletingAccountId === account.id}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -524,7 +631,7 @@ export function FinanceScreen() {
                     </div>
                   </div>
                   <p className={`font-bold ${transaction.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {transaction.amount >= 0 ? '+' : ''}{formatMoney(transaction.amount)}
+                    {transaction.amount >= 0 ? '+' : ''}{formatMoney(transaction.amount, transaction.account.currency || 'RUB')}
                   </p>
                 </div>
               ))}
@@ -572,6 +679,21 @@ export function FinanceScreen() {
               </Select>
             </div>
             <div className="space-y-2">
+              <Label>Валюта</Label>
+              <Select value={newAccount.currency} onValueChange={v => setNewAccount(prev => ({ ...prev, currency: v }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CURRENCIES.map(curr => (
+                    <SelectItem key={curr.value} value={curr.value}>
+                      {curr.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label>Начальный баланс</Label>
               <Input
                 type="number"
@@ -584,8 +706,8 @@ export function FinanceScreen() {
               <Button variant="outline" className="flex-1" onClick={() => setShowAddAccount(false)}>
                 Отмена
               </Button>
-              <Button className="flex-1 bg-primary" onClick={handleCreateAccount} disabled={!newAccount.name}>
-                Создать
+              <Button className="flex-1 bg-primary" onClick={handleCreateAccount} disabled={!newAccount.name || isCreatingAccount}>
+                {isCreatingAccount ? 'Создание...' : 'Создать'}
               </Button>
             </div>
           </div>

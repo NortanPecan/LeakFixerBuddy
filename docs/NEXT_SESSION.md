@@ -9,10 +9,13 @@
 ```
 Работаем над проектом LeakFixerBuddy.
 
+ПУТЬ К ПРОЕКТУ: /home/z/my-project
+
 ОБЯЗАТЕЛЬНО прочитай перед работой (в порядке приоритета):
 1. docs/NEXT_SESSION.md — текущее состояние и незавершённые задачи
-2. docs/AGENT_INSTRUCTIONS.md — правила работы (git, БД, ветки)
-3. worklog.md — последние выполненные задачи (читай конец)
+2. docs/BUG_ANALYSIS.md — детальный анализ 23 багов с решениями
+3. docs/AGENT_INSTRUCTIONS.md — правила работы (git, БД, ветки)
+4. worklog.md — последние выполненные задачи (читай конец)
 
 КРИТИЧЕСКИ ВАЖНО:
 - ВЕТКА: только main (master не существует)
@@ -21,7 +24,7 @@
 - Git: НЕ делаю git команды сам, только предлагаю
 - Push: разрешён без force после согласования
 
-После чтения файлов подтверди, что понял контекст, и жду задачу.
+После чтения файлов подтверди, что понял контекст, и начинай исправлять баги по порядку.
 ```
 
 ---
@@ -31,27 +34,46 @@
 ## Последняя выполненная задача
 - ✅ Удалены все упоминания sandbox/local DB из проекта
 - ✅ Проект работает ТОЛЬКО с Supabase PostgreSQL
-- ✅ Упрощены supabaseClient.ts, supabase.ts, db.ts
-- ✅ Закоммичено и запушено в main (commit 652e0fa)
+- ✅ Создан BUG_ANALYSIS.md с 23 багами (согласовано)
 
-## Незавершённые задачи
+## Незавершённые задачи (23 пункта)
 
-### Баги Finance (из списка пользователя):
-1. **Finance: Duplicate accounts created** — нужно добавить:
-   - Проверку дубликата в API перед созданием
-   - Состояние isCreating на фронте (блокировка кнопки)
-2. **Finance: Can't delete account** — проверить DELETE endpoint
-3. **Finance: No currency selection** — добавить RUB/USD/EUR + custom
-4. **Finance: No categories visible** — проверить отображение
-5. **Finance: Can't edit transactions** — добавить редактирование
+### 🔴 Finance (8)
+- [ ] **F-1:** Duplicate accounts — добавить isCreating state + API check
+- [ ] **F-2:** Can't delete account — добавить кнопку удаления с подтверждением
+- [ ] **F-3:** Currency selection — RUB/USD/EUR + custom (добавить поле в schema)
+- [ ] **F-4:** Categories not visible — проверить API
+- [ ] **F-5:** Can't edit transactions — добавить диалог редактирования
+- [ ] **F-6:** Can't edit accounts — добавить диалог редактирования
+- [ ] **F-7:** Initial balance in edit — добавить в диалог
+- [ ] **F-8:** Account history + period filter — создать детальный просмотр счёта с фильтром по периоду
 
-### Другие баги (из списка ~20 пунктов):
-- Challenges: Can't clear number field
-- Tasks: Date issues, checkbox not working
-- Zones: CRUD needed, inactive zones should hide
-- Rituals: Duplicates from notes, can't delete
-- Food: Can't edit entries
-- Удалить все Steam references
+### 🔴 Tasks (3)
+- [ ] **T-1:** Date not initialized — инициализировать selectedDate в store
+- [ ] **T-2:** Creates on previous date — проверить CreateTaskScreen
+- [ ] **T-3:** Checkbox not working — исправить SortableTaskCard
+
+### 🟡 Challenges (2)
+- [ ] **C-1:** Can't clear number field — использовать string value
+- [ ] **C-2:** Unclear ritual connection — добавить подсказку в UI
+
+### 🟡 Rituals (3)
+- [ ] **R-1:** Duplicate from note — проверить создание
+- [ ] **R-2:** Can't delete — добавить DELETE с подтверждением
+- [ ] **R-3:** Tags cause duplicates — проверить парсинг
+
+### 🟡 Zones (2)
+- [ ] **Z-1:** CRUD for zones — создать ZonesScreen
+- [ ] **Z-2:** Hide inactive zones — фильтровать по isActive
+
+### 🟡 Food (2)
+- [ ] **FD-1:** Can't edit entries — добавить диалог
+- [ ] **FD-2:** Time tracking — добавить поле time
+
+### 🟢 Steam (1)
+- [ ] **ST-1:** Remove Steam references — очистить 6 файлов
+
+---
 
 ## Важно помнить
 
@@ -69,11 +91,13 @@
 ```
 src/
 ├── app/api/          # 66 API endpoints (Prisma → Supabase)
-├── components/       # UI компоненты + экраны
+├── components/
+│   ├── screens/      # Основные экраны
+│   └── ui/           # shadcn/ui компоненты
 ├── lib/
 │   ├── db.ts         # Prisma client
-│   ├── supabase*.ts  # Supabase clients
-│   └── store.ts      # Zustand
+│   ├── store.ts      # Zustand store
+│   └── supabase*.ts  # Supabase clients
 └── prisma/
     └── schema.prisma # PostgreSQL only
 ```
@@ -94,5 +118,5 @@ DIRECT_DATABASE_URL="postgresql://...supabase.co:5432/postgres"
 
 После каждой задачи обновляй:
 1. **Последняя выполненная задача** — что сделано
-2. **Незавершённые задачи** — убрать завершённые, добавить новые
+2. **Незавершённые задачи** — отметить [x] выполненные
 3. **Дата** — обновить дату в заголовке

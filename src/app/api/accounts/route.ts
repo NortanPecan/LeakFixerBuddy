@@ -44,10 +44,26 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, name, type, initialBalance, icon, color, sortOrder } = body
+    const { userId, name, type, currency, initialBalance, icon, color, sortOrder } = body
 
     if (!userId || !name) {
       return NextResponse.json({ error: 'userId and name are required' }, { status: 400 })
+    }
+
+    // Check for duplicate account name
+    const existingAccount = await db.account.findFirst({
+      where: { 
+        userId, 
+        name: { equals: name, mode: 'insensitive' },
+        isActive: true 
+      }
+    })
+    
+    if (existingAccount) {
+      return NextResponse.json(
+        { error: `Счёт с названием "${name}" уже существует` }, 
+        { status: 400 }
+      )
     }
 
     const account = await db.account.create({
@@ -55,6 +71,7 @@ export async function POST(request: NextRequest) {
         userId,
         name,
         type: type || 'cash',
+        currency: currency || 'RUB',
         initialBalance: initialBalance || 0,
         icon,
         color,

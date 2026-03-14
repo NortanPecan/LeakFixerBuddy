@@ -783,6 +783,7 @@ model Account {
   userId         String   @map("user_id") @db.Uuid
   name           String   // "Карта Тинькофф", "Наличные", "Банкролл покер"
   type           String   @default("cash") // cash, card, poker, steam, other
+  currency       String   @default("RUB") // RUB, USD, EUR, KZT, UZS, etc.
   initialBalance Float    @default(0) @map("initial_balance") // Starting balance
   icon           String?  // Emoji or icon name
   color          String?  // Hex color

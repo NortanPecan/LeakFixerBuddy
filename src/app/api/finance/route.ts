@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+// Default categories for new users
+const DEFAULT_CATEGORIES = [
+  { name: 'LeakFixer / разработка', zone: 'leakfixer', icon: '🔧', color: '#4a5568' },
+  { name: 'ИИ / подписки', zone: 'ai', icon: '🤖', color: '#6366f1' },
+  { name: 'Покер / банкролл', zone: 'poker', icon: '♠️', color: '#059669' },
+  { name: 'Здоровье / зал', zone: 'health', icon: '💪', color: '#dc2626' },
+  { name: 'Быт / жизнь', zone: 'life', icon: '🏠', color: '#f59e0b' },
+  { name: 'Подушка / резерв', zone: 'savings', icon: '💰', color: '#10b981' },
+  { name: 'Общее', zone: 'general', icon: '📦', color: '#6b7280' },
+]
+
 // GET /api/finance/summary?userId=xxx - Get finance summary
 export async function GET(request: NextRequest) {
   try {
@@ -26,6 +37,7 @@ export async function GET(request: NextRequest) {
         id: account.id,
         name: account.name,
         type: account.type,
+        currency: account.currency || 'RUB',
         icon: account.icon,
         color: account.color,
         initialBalance: account.initialBalance,
@@ -36,27 +48,47 @@ export async function GET(request: NextRequest) {
     // Total balance across all accounts
     const totalBalance = accountsWithBalance.reduce((sum, a) => sum + a.currentBalance, 0)
 
-    // Get all categories with their transactions
-    const categories = await db.category.findMany({
-      where: { userId },
-      include: {
-        transactions: true
-      }
+    // Get or create categories
+    let categories = await db.category.findMany({
+      where: { userId }
     })
 
-    // Calculate spent for each category
-    const categoriesWithSpent = categories.map(category => {
-      const spent = category.transactions.reduce((sum, t) => sum + t.amount, 0)
-      return {
-        id: category.id,
-        name: category.name,
-        zone: category.zone,
-        icon: category.icon,
-        color: category.color,
-        monthlyTarget: category.monthlyTarget,
-        spent
-      }
-    })
+    // Create default categories if none exist
+    if (categories.length === 0) {
+      categories = await Promise.all(
+        DEFAULT_CATEGORIES.map((cat, index) =>
+          db.category.create({
+            data: {
+              userId,
+              name: cat.name,
+              zone: cat.zone,
+              icon: cat.icon,
+              color: cat.color,
+              sortOrder: index
+            }
+          })
+        )
+      )
+    }
+
+    // Get transactions for each category
+    const categoriesWithTransactions = await Promise.all(
+      categories.map(async (category) => {
+        const transactions = await db.transaction.findMany({
+          where: { categoryId: category.id }
+        })
+        const spent = transactions.reduce((sum, t) => sum + t.amount, 0)
+        return {
+          id: category.id,
+          name: category.name,
+          zone: category.zone,
+          icon: category.icon,
+          color: category.color,
+          monthlyTarget: category.monthlyTarget,
+          spent
+        }
+      })
+    )
 
     // Get recent transactions (last 10)
     const recentTransactions = await db.transaction.findMany({
@@ -64,7 +96,7 @@ export async function GET(request: NextRequest) {
       orderBy: { date: 'desc' },
       take: 10,
       include: {
-        account: { select: { id: true, name: true, icon: true } },
+        account: { select: { id: true, name: true, icon: true, currency: true } },
         category: { select: { id: true, name: true, icon: true, zone: true } }
       }
     })
@@ -104,7 +136,7 @@ export async function GET(request: NextRequest) {
       summary: {
         totalBalance,
         accounts: accountsWithBalance,
-        categories: categoriesWithSpent,
+        categories: categoriesWithTransactions,
         recentTransactions,
         byZone,
         income,
