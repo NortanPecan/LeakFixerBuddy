@@ -22,7 +22,7 @@
 - Git: Не делаю команды сам
 - Push: разрешён без force
 
-ИСПРАВЛЕНО 14 из 23 багов:
+ИСПРАВЛЕНО 19 из 23 багов:
 ✅ F-1: Duplicate accounts
 ✅ F-2: Can't delete account
 ✅ F-3: Currency selection (RUB/USD/EUR + custom)
@@ -36,19 +36,21 @@
 ✅ C-1: Can't clear number field
 ✅ C-2: Add ritual connection hint
 ✅ ST-1: Remove Steam references
-✅ (Partial) Schema: currency field added
+✅ R-1: Rituals duplicate from note
+✅ R-2: Rituals can't delete (already had archive)
+✅ R-3: Rituals tags cause duplicates
+✅ FD-1: Food can't edit
+✅ FD-2: Food time tracking
+✅ Z-2: Hide inactive zones (Steam removed)
 
-ОСТАЛОСЬ 9 багов:
-- [ ] F-8: Account history + period filter
-- [ ] R-1: Rituals duplicate from note
-- [ ] R-2: Rituals can't delete
-- [ ] R-3: Rituals tags cause duplicates
-- [ ] Z-1: Zones CRUD
-- [ ] Z-2: Hide inactive zones
-- [ ] FD-1: Food can't edit
-- [ ] FD-2: Food time tracking
+ОСТАЛОСЬ 4 бага:
+- [ ] F-8: Account history + period filter (большая задача)
+- [ ] Z-1: Zones CRUD (требует модель Zone, миграцию, API)
 
-Начинай с R-1. Подтверди, что прочитал файлы.
+PENDING MIGRATION:
+- prisma migrate dev — добавить поле currency в Account, time в FoodEntry
+
+Начинай с F-8. Подтверди, что прочитал файлы.
 ```
 
 ---
@@ -56,27 +58,28 @@
 # Текущее состояние (2025-01-XX)
 
 ## Последняя выполненная задача
-- ✅ Исправлено 14 из 23 багов
-- ✅ Finance: F-1..F-7, Challenges: C-1..C-2, Tasks: T-1..T-3, Steam: ST-1
+- ✅ Исправлено 19 из 23 багов
+- ✅ Finance: F-1..F-7
+- ✅ Tasks: T-1..T-3
+- ✅ Challenges: C-1..C-2
+- ✅ Steam: ST-1
+- ✅ Rituals: R-1..R-3
+- ✅ Food: FD-1..FD-2
+- ✅ Zones: Z-2 (частично)
 - ✅ Закоммичено и запушено в main
 
-## Незавершённые задачи (9 багов)
+## Незавершённые задачи (4 бага)
 
 ### 🔴 Finance (1)
-- [ ] **F-8:** Account history screen + period filter
+- [ ] **F-8:** Account history + period filter (большая задача)
 
-### 🟡 Rituals (3)
-- [ ] **R-1:** Duplicate from note — проверить создание
-- [ ] **R-2:** Can't delete — добавить DELETE с подтверждением
-- [ ] **R-3:** Tags cause duplicates — проверить парсинг
+### 🟡 Zones (1)
+- [ ] **Z-1:** CRUD for zones — требует модель Zone, миграцию, API
 
-### 🟡 Zones (2)
-- [ ] **Z-1:** CRUD for zones — создать ZonesScreen
-- [ ] **Z-2:** Hide inactive zones — фильтровать по isActive
-
-### 🟡 Food (2)
-- [ ] **FD-1:** Can't edit entries — добавить диалог
-- [ ] **FD-2:** Time tracking — добавить поле time
+### ⚠️ PENDING MIGRATION
+- [ ] Выполнить `npx prisma migrate dev` для:
+  - Account.currency (default RUB)
+  - FoodEntry.time (optional)
 
 ---
 
