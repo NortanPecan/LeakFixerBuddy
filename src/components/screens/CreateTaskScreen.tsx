@@ -10,7 +10,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { ArrowLeft, Calendar, Clock, Link2 } from 'lucide-react'
 
 const ZONES = [
-  { id: 'Steam', label: 'Steam', icon: '🎮' },
   { id: 'LeakFixer', label: 'LeakFixer', icon: '🔧' },
   { id: 'AI', label: 'ИИ', icon: '🤖' },
   { id: 'Poker', label: 'Покер', icon: '♠️' },

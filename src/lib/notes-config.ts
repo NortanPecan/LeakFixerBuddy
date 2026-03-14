@@ -9,7 +9,6 @@ export const NOTE_TYPES = [
 
 export const NOTE_ZONES = [
   { id: 'general', label: 'Общее', icon: '🌐' },
-  { id: 'steam', label: 'Steam', icon: '🎮' },
   { id: 'leakfixer', label: 'LeakFixer', icon: '🔧' },
   { id: 'ai', label: 'ИИ', icon: '🤖' },
   { id: 'poker', label: 'Покер', icon: '🃏' },

@@ -92,7 +92,6 @@ export function ProfileScreen() {
   const [settings, setSettings] = useState<UserSettings>({
     ritualReminders: true,
     taskReminders: true,
-    zoneSteamEnabled: true,
     zoneLeakfixerEnabled: true,
     zoneAiEnabled: true,
     zonePokerEnabled: true,

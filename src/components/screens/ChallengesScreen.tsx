@@ -31,7 +31,6 @@ import { showErrorToast, showSuccessToast, isOnline } from '@/lib/network-utils'
 
 // Zone config
 const ZONE_CONFIG: Record<string, { label: string; emoji: string; color: string }> = {
-  steam: { label: 'Steam', emoji: '🎮', color: '#1b2838' },
   leakfixer: { label: 'LeakFixer', emoji: '🔧', color: '#4a5568' },
   ai: { label: 'ИИ', emoji: '🤖', color: '#6366f1' },
   poker: { label: 'Покер', emoji: '♠️', color: '#059669' },

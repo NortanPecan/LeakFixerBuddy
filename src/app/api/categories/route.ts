@@ -3,7 +3,6 @@ import { db } from '@/lib/db'
 
 // Default categories for new users
 const DEFAULT_CATEGORIES = [
-  { name: 'Steam / связки', zone: 'steam', icon: '🎮', color: '#1b2838' },
   { name: 'LeakFixer / разработка', zone: 'leakfixer', icon: '🔧', color: '#4a5568' },
   { name: 'ИИ / подписки', zone: 'ai', icon: '🤖', color: '#6366f1' },
   { name: 'Покер / банкролл', zone: 'poker', icon: '♠️', color: '#059669' },

@@ -89,7 +89,7 @@ export function CreateChainScreen() {
           <div className="space-y-2">
             <Label>Примеры</Label>
             <div className="flex flex-wrap gap-2">
-              {['Steam — связка', 'LeakFixer — MVP', 'Похудение к лету', 'Изучение AI'].map(example => (
+              {['LeakFixer — MVP', 'Похудение к лету', 'Изучение AI', 'Марафон привычек'].map(example => (
                 <button
                   key={example}
                   className="px-3 py-1.5 rounded-full text-sm bg-muted/30 hover:bg-muted/50 transition-colors"

@@ -28,7 +28,6 @@ export const FEEDBACK_TYPES = [
 
 // Zones config
 export const ZONES_CONFIG = [
-  { key: 'zoneSteamEnabled', label: 'Steam', emoji: '🎮' },
   { key: 'zoneLeakfixerEnabled', label: 'LeakFixer', emoji: '🔧' },
   { key: 'zoneAiEnabled', label: 'ИИ', emoji: '🤖' },
   { key: 'zonePokerEnabled', label: 'Покер', emoji: '♠️' },
@@ -87,7 +86,6 @@ export interface UserSettings {
   taskReminders: boolean
   weightReminder?: boolean
   weightReminderTime?: string
-  zoneSteamEnabled: boolean
   zoneLeakfixerEnabled: boolean
   zoneAiEnabled: boolean
   zonePokerEnabled: boolean

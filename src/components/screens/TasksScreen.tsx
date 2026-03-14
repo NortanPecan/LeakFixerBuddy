@@ -78,7 +78,6 @@ interface Chain {
 }
 
 const ZONE_COLORS: Record<string, string> = {
-  Steam: 'bg-blue-500/20 text-blue-300',
   LeakFixer: 'bg-emerald-500/20 text-emerald-300',
   AI: 'bg-purple-500/20 text-purple-300',
   Poker: 'bg-orange-500/20 text-orange-300',
