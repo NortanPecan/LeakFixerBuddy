@@ -37,13 +37,28 @@ export async function GET(request: NextRequest) {
       carbs: entries.reduce((sum, e) => sum + (e.carbs || 0), 0)
     }
 
-    // Group by meal type
-    const byMealType = {
-      breakfast: entries.filter(e => e.mealType === 'breakfast'),
-      lunch: entries.filter(e => e.mealType === 'lunch'),
-      dinner: entries.filter(e => e.mealType === 'dinner'),
-      snack: entries.filter(e => e.mealType === 'snack')
+    // Group by meal type (including custom types)
+    const byMealType: Record<string, typeof entries> = {
+      breakfast: [],
+      lunch: [],
+      dinner: [],
+      snack: []
     }
+    
+    entries.forEach(entry => {
+      if (entry.mealType.startsWith('custom:')) {
+        // Custom meal type - use the full type as key
+        if (!byMealType[entry.mealType]) {
+          byMealType[entry.mealType] = []
+        }
+        byMealType[entry.mealType].push(entry)
+      } else if (byMealType[entry.mealType]) {
+        byMealType[entry.mealType].push(entry)
+      } else {
+        // Unknown type - put in snack
+        byMealType.snack.push(entry)
+      }
+    })
 
     return NextResponse.json({
       success: true,

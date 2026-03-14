@@ -232,6 +232,11 @@ export function NotesScreen() {
   const handleCreateRitual = async () => {
     if (!selectedNote || !user?.id) return
     try {
+      // Shorten title: first sentence or max 50 chars
+      const text = selectedNote.text
+      const firstSentence = text.split(/[.!?\n]/)[0]
+      const title = firstSentence.length > 50 ? firstSentence.substring(0, 50).trim() + '...' : firstSentence.trim() || text.substring(0, 50)
+      
       const response = await fetch('/api/notes/link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -239,10 +244,10 @@ export function NotesScreen() {
           noteId: selectedNote.id,
           entity: 'ritual',
           createEntity: true,
-          fragment: selectedNote.text.substring(0, 100),
+          fragment: text.substring(0, 100),
           entityData: {
             userId: user.id,
-            title: selectedNote.text.substring(0, 100),
+            title: title,
           }
         })
       })
@@ -254,6 +259,25 @@ export function NotesScreen() {
       }
     } catch (error) {
       showErrorToast(error, 'create ritual')
+    }
+  }
+
+  // Remove link from note
+  const handleRemoveLink = async (linkId: string) => {
+    if (!confirm('Удалить связь?')) return
+    try {
+      await fetch(`/api/notes/link?id=${linkId}`, { method: 'DELETE' })
+      // Update local state
+      if (selectedNote) {
+        setSelectedNote({
+          ...selectedNote,
+          links: selectedNote.links.filter(l => l.id !== linkId)
+        })
+      }
+      loadNotes()
+      showSuccessToast('Связь удалена')
+    } catch (error) {
+      showErrorToast(error, 'remove link')
     }
   }
 
@@ -1015,15 +1039,26 @@ export function NotesScreen() {
                       return (
                         <div
                           key={link.id}
-                          className="text-sm bg-muted/30 rounded-lg p-2 flex items-center gap-2"
+                          className="text-sm bg-muted/30 rounded-lg p-2 flex items-center gap-2 group"
                         >
-                          <Icon className={`w-4 h-4 ${iconColor}`} />
-                          <span>{displayText}</span>
+                          <Icon className={`w-4 h-4 ${iconColor} shrink-0`} />
+                          <span className="flex-1 truncate">{displayText}</span>
                           {link.fragment && !link.entityDetails?.chain && (
-                            <span className="text-muted-foreground text-xs truncate">
-                              &quot;{link.fragment.substring(0, 30)}...&quot;
+                            <span className="text-muted-foreground text-xs truncate max-w-[100px]">
+                              &quot;{link.fragment.substring(0, 20)}...&quot;
                             </span>
                           )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleRemoveLink(link.id)
+                            }}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
                         </div>
                       )
                     })}

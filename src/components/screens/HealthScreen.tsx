@@ -27,7 +27,8 @@ const MEAL_TYPE_LABELS: Record<string, { label: string; emoji: string }> = {
   breakfast: { label: 'Завтрак', emoji: '🍳' },
   lunch: { label: 'Обед', emoji: '🍽️' },
   dinner: { label: 'Ужин', emoji: '🥗' },
-  snack: { label: 'Перекус', emoji: '🍎' }
+  snack: { label: 'Перекус', emoji: '🍎' },
+  custom: { label: 'Другое...', emoji: '🍴' }
 }
 
 // Quality labels
@@ -124,6 +125,7 @@ export function HealthScreen() {
   const [newFood, setNewFood] = useState({
     name: '',
     mealType: 'snack',
+    customMealType: '',
     time: '',
     calories: '',
     quality: 'neutral',
@@ -258,6 +260,10 @@ export function HealthScreen() {
   const handleAddFood = async () => {
     if (!user?.id || !newFood.name) return
     
+    const mealType = newFood.mealType === 'custom' 
+      ? `custom:${newFood.customMealType || 'Другое'}`
+      : newFood.mealType
+    
     try {
       await fetch('/api/food', {
         method: 'POST',
@@ -266,7 +272,7 @@ export function HealthScreen() {
           userId: user.id,
           date: selectedDate,
           name: newFood.name,
-          mealType: newFood.mealType,
+          mealType: mealType,
           time: newFood.time || null,
           calories: newFood.calories ? parseInt(newFood.calories) : null,
           quality: newFood.quality,
@@ -285,6 +291,7 @@ export function HealthScreen() {
       setNewFood({
         name: '',
         mealType: 'snack',
+        customMealType: '',
         time: '',
         calories: '',
         quality: 'neutral',
@@ -543,7 +550,7 @@ export function HealthScreen() {
           {foodData?.entries.length ? (
             <div className="space-y-4 max-h-80 overflow-y-auto">
               {/* Grouped by meal type */}
-              {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map(mealType => {
+              {['breakfast', 'lunch', 'dinner', 'snack'].map(mealType => {
                 const entries = foodData.byMealType[mealType] || []
                 if (entries.length === 0) return null
                 
@@ -605,6 +612,72 @@ export function HealthScreen() {
                   </div>
                 )
               })}
+              
+              {/* Custom meal types */}
+              {foodData && Object.keys(foodData.byMealType)
+                .filter(type => type.startsWith('custom:'))
+                .map(customType => {
+                  const entries = foodData.byMealType[customType] || []
+                  if (entries.length === 0) return null
+                  
+                  const customName = customType.substring(7) // Remove 'custom:' prefix
+                  
+                  return (
+                    <div key={customType}>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                        <span>🍴</span>
+                        {customName}
+                      </p>
+                      <div className="space-y-2">
+                        {entries.map(entry => {
+                          const quality = entry.quality ? QUALITY_LABELS[entry.quality] : null
+                          
+                          return (
+                            <div
+                              key={entry.id}
+                              className="flex items-center justify-between p-3 rounded-lg bg-muted/30 group"
+                            >
+                              <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={() => setEditingFood(entry)}>
+                                <div className="min-w-0">
+                                  <p className="font-medium text-sm truncate">{entry.name}</p>
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    {entry.time && <span>{entry.time}</span>}
+                                    {entry.time && entry.calories && <span>•</span>}
+                                    {entry.calories && <span>{entry.calories} ккал</span>}
+                                    {entry.amount && <span>• {entry.amount}</span>}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {quality && (
+                                  <Badge variant="outline" className={`text-xs ${quality.color}`}>
+                                    {quality.label}
+                                  </Badge>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100"
+                                  onClick={() => setEditingFood(entry)}
+                                >
+                                  <ChevronRight className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-red-400"
+                                  onClick={() => handleDeleteFood(entry.id)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
             </div>
           ) : (
             <div className="text-center py-4">
@@ -847,6 +920,17 @@ export function HealthScreen() {
                 />
               </div>
             </div>
+            
+            {newFood.mealType === 'custom' && (
+              <div className="space-y-2">
+                <Label>Название приёма пищи</Label>
+                <Input
+                  placeholder="Например: Полдник"
+                  value={newFood.customMealType}
+                  onChange={e => setNewFood({ ...newFood, customMealType: e.target.value })}
+                />
+              </div>
+            )}
             
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">

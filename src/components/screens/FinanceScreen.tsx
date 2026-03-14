@@ -39,7 +39,8 @@ const ACCOUNT_TYPES = [
   { value: 'cash', label: 'Наличные', icon: Banknote },
   { value: 'card', label: 'Карта', icon: CreditCard },
   { value: 'poker', label: 'Банкролл', icon: Sparkles },
-  { value: 'other', label: 'Другое', icon: Wallet },
+  { value: 'savings', label: 'Накопления', icon: PiggyBank },
+  { value: 'custom', label: 'Другое...', icon: Wallet },
 ]
 
 // Currencies
@@ -172,6 +173,7 @@ export function FinanceScreen() {
   const [newAccount, setNewAccount] = useState({
     name: '',
     type: 'cash',
+    customType: '',
     currency: 'RUB',
     initialBalance: '',
     icon: '💳'
@@ -226,7 +228,7 @@ export function FinanceScreen() {
         body: JSON.stringify({
           userId: user.id,
           name: newAccount.name,
-          type: newAccount.type,
+          type: newAccount.type === 'custom' ? `custom:${newAccount.customType || 'Другое'}` : newAccount.type,
           currency: newAccount.currency,
           initialBalance: parseFloat(newAccount.initialBalance) || 0,
           icon: newAccount.icon
@@ -252,7 +254,7 @@ export function FinanceScreen() {
       }
       
       setShowAddAccount(false)
-      setNewAccount({ name: '', type: 'cash', currency: 'RUB', initialBalance: '', icon: '💳' })
+      setNewAccount({ name: '', type: 'cash', customType: '', currency: 'RUB', initialBalance: '', icon: '💳' })
       showSuccessToast('Счёт создан')
     } catch (err) {
       showErrorToast(err, 'создание счёта')
@@ -617,7 +619,9 @@ export function FinanceScreen() {
                     <span className="text-2xl">{account.icon || '💳'}</span>
                     <div className="min-w-0">
                       <p className="font-medium truncate">{account.name}</p>
-                      <p className="text-xs text-muted-foreground capitalize">{account.type}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {account.type.startsWith('custom:') ? account.type.substring(7) : account.type}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -851,6 +855,16 @@ export function FinanceScreen() {
                 </SelectContent>
               </Select>
             </div>
+            {newAccount.type === 'custom' && (
+              <div className="space-y-2">
+                <Label>Название типа</Label>
+                <Input
+                  placeholder="Например: Крипта"
+                  value={newAccount.customType}
+                  onChange={e => setNewAccount(prev => ({ ...prev, customType: e.target.value }))}
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Валюта</Label>
               <Select value={newAccount.currency} onValueChange={v => setNewAccount(prev => ({ ...prev, currency: v }))}>
