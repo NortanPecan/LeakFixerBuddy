@@ -22,7 +22,7 @@
 - Git: Не делаю команды сам
 - Push: разрешён без force
 
-ИСПРАВЛЕНО 20 из 23 багов:
+ИСПРАВЛЕНО 21 из 21 бага:
 ✅ F-1: Duplicate accounts
 ✅ F-2: Can't delete account
 ✅ F-3: Currency selection (RUB/USD/EUR + custom)
@@ -42,14 +42,15 @@
 ✅ R-3: Rituals tags cause duplicates
 ✅ FD-1: Food can't edit
 ✅ FD-2: Food time tracking
+✅ Z-1: Zones CRUD
 ✅ Z-2: Hide inactive zones (Steam removed)
 
-ОСТАЛОСЬ 3 бага:
-- [ ] Z-1: Zones CRUD (требует модель Zone, миграцию, API)
+🎉 ВСЕ БАГИ ИСПРАВЛЕНЫ!
 
 SCHEMA UP TO DATE:
 - Account.currency — ✅ уже в схеме (default RUB)
 - FoodEntry.time — ✅ уже в схеме (optional)
+- Zone model — ✅ добавлена (Z-1)
 
 Начинай с Z-1 (Zones CRUD). Подтверди, что прочитал файлы.
 ```
@@ -59,23 +60,24 @@ SCHEMA UP TO DATE:
 # Текущее состояние (2025-01-XX)
 
 ## Последняя выполненная задача
-- ✅ Исправлено 20 из 23 багов
-- ✅ Finance: F-1..F-8 (F-8 — Account history + period filter)
-- ✅ Tasks: T-1..T-3
-- ✅ Challenges: C-1..C-2
-- ✅ Steam: ST-1
-- ✅ Rituals: R-1..R-3
-- ✅ Food: FD-1..FD-2
-- ✅ Zones: Z-2 (частично)
+- ✅ Исправлено **21 из 21 бага**
+- ✅ Finance: F-1..F-8 (Account CRUD + History)
+- ✅ Tasks: T-1..T-3 (Date + Checkbox)
+- ✅ Challenges: C-1..C-2 (Number field + Hint)
+- ✅ Steam: ST-1 (References removed)
+- ✅ Rituals: R-1..R-3 (Duplicate + Delete + Tags)
+- ✅ Food: FD-1..FD-2 (Edit + Time)
+- ✅ Zones: Z-1..Z-2 (CRUD + Hide inactive)
+- ✅ Закоммичено и запушено в main
 
-## Незавершённые задачи (1 баг)
+## Незавершённые задачи
 
-### 🟡 Zones (1)
-- [ ] **Z-1:** CRUD for zones — требует модель Zone, миграцию, API
+**НЕТ!** Все 21 баг из BUG_ANALYSIS.md исправлены! 🎉
 
 ### ✅ SCHEMA UP TO DATE
 - Account.currency — уже в схеме (default RUB)
 - FoodEntry.time — уже в схеме (optional)
+- Zone model — добавлена в этой сессии
 
 ---
 

@@ -1206,3 +1206,65 @@ bun run lint ✅
 
 **Изменённые файлы:**
 - `src/components/screens/FinanceScreen.tsx`
+
+---
+Task ID: 42
+Agent: Main Agent
+Task: Z-1 — Zones CRUD
+
+## 1. Анализ
+
+Требуется создать систему управления зонами:
+- Модель Zone в Prisma
+- API endpoints CRUD
+- ZonesScreen для управления
+- Интеграция с навигацией
+
+## 2. Реализация
+
+### Prisma Schema
+- Добавлена модель Zone с полями:
+  - userId, key, name, emoji, color
+  - isActive, isDefault, sortOrder
+- Добавлена связь zones в AppUser
+
+### API Endpoints
+- `GET /api/zones?userId=xxx` — получить зоны пользователя
+- `POST /api/zones` — создать зону
+- `PATCH /api/zones` — обновить зону
+- `DELETE /api/zones?id=xxx` — удалить зону
+- Автоматическое создание default зон при первом запросе
+
+### ZonesScreen
+- Список активных и скрытых зон
+- Диалог создания новой зоны
+- Диалог редактирования зоны
+- Выбор emoji и цвета
+- Toggle видимости зоны
+- Защита от удаления default зон
+
+### Навигация
+- Добавлен Screen type 'zones'
+- Добавлена кнопка "Зоны" в QuickAccess
+- Иконка MapPin, цвет indigo
+
+## 3. Проверка
+bun run lint ✅
+
+## 4. Результат
+
+**Z-1 ИСПРАВЛЕН** ✅
+
+**Новые файлы:**
+- `src/app/api/zones/route.ts`
+- `src/components/screens/ZonesScreen.tsx`
+
+**Изменённые файлы:**
+- `prisma/schema.prisma`
+- `src/lib/store.ts`
+- `src/app/page.tsx`
+- `src/features/profile/constants.ts`
+- `src/features/profile/components/QuickAccess.tsx`
+
+**Коммит:** `20736b5`
+**Push:** `main -> main` ✅
