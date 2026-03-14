@@ -146,6 +146,12 @@ export function FinanceScreen() {
   const [isCreatingTransaction, setIsCreatingTransaction] = useState(false)
   const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null)
   
+  // Edit states
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null)
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+  const [isUpdatingAccount, setIsUpdatingAccount] = useState(false)
+  const [isUpdatingTransaction, setIsUpdatingTransaction] = useState(false)
+  
   // New transaction form
   const [newTransaction, setNewTransaction] = useState({
     accountId: '',
@@ -280,6 +286,83 @@ export function FinanceScreen() {
       showErrorToast(err, 'удаление счёта')
     } finally {
       setDeletingAccountId(null)
+    }
+  }
+
+  // Update account
+  const handleUpdateAccount = async () => {
+    if (!editingAccount || !user?.id || isUpdatingAccount) return
+    
+    setIsUpdatingAccount(true)
+    try {
+      const res = await fetch('/api/accounts', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingAccount.id,
+          name: editingAccount.name,
+          type: editingAccount.type,
+          currency: editingAccount.currency,
+          icon: editingAccount.icon,
+          initialBalance: editingAccount.initialBalance
+        })
+      })
+      
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to update account')
+      }
+      
+      // Reload data
+      const financeRes = await fetch(`/api/finance?userId=${user.id}`)
+      const data = await financeRes.json()
+      if (data.success) {
+        setSummary(data.summary)
+      }
+      
+      setEditingAccount(null)
+      showSuccessToast('Счёт обновлён')
+    } catch (err) {
+      showErrorToast(err, 'обновление счёта')
+    } finally {
+      setIsUpdatingAccount(false)
+    }
+  }
+
+  // Update transaction
+  const handleUpdateTransaction = async () => {
+    if (!editingTransaction || !user?.id || isUpdatingTransaction) return
+    
+    setIsUpdatingTransaction(true)
+    try {
+      const res = await fetch('/api/transactions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingTransaction.id,
+          accountId: editingTransaction.account.id,
+          categoryId: editingTransaction.category?.id || null,
+          amount: editingTransaction.amount,
+          description: editingTransaction.description,
+          date: editingTransaction.date
+        })
+      })
+      
+      if (!res.ok) throw new Error('Failed to update transaction')
+      
+      // Reload data
+      const financeRes = await fetch(`/api/finance?userId=${user.id}`)
+      const data = await financeRes.json()
+      if (data.success) {
+        setSummary(data.summary)
+      }
+      
+      setEditingTransaction(null)
+      showSuccessToast('Транзакция обновлена')
+    } catch (err) {
+      showErrorToast(err, 'обновление транзакции')
+    } finally {
+      setIsUpdatingTransaction(false)
     }
   }
 
@@ -470,7 +553,7 @@ export function FinanceScreen() {
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
-                        onClick={() => {/* TODO: Edit account */}}
+                        onClick={() => setEditingAccount(account)}
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                       </Button>
@@ -607,7 +690,8 @@ export function FinanceScreen() {
               {summary.recentTransactions.map(transaction => (
                 <div
                   key={transaction.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/30"
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted/30 group cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => setEditingTransaction(transaction)}
                 >
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
@@ -630,9 +714,12 @@ export function FinanceScreen() {
                       </div>
                     </div>
                   </div>
-                  <p className={`font-bold ${transaction.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {transaction.amount >= 0 ? '+' : ''}{formatMoney(transaction.amount, transaction.account.currency || 'RUB')}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className={`font-bold ${transaction.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {transaction.amount >= 0 ? '+' : ''}{formatMoney(transaction.amount, transaction.account.currency || 'RUB')}
+                    </p>
+                    <Edit2 className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
                 </div>
               ))}
             </div>
@@ -792,6 +879,173 @@ export function FinanceScreen() {
                 disabled={!newTransaction.accountId || !newTransaction.amount}
               >
                 Создать
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Account Dialog */}
+      <Dialog open={!!editingAccount} onOpenChange={() => setEditingAccount(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Редактировать счёт</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label>Название</Label>
+              <Input
+                value={editingAccount?.name || ''}
+                onChange={e => setEditingAccount(prev => prev ? { ...prev, name: e.target.value } : null)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Тип</Label>
+              <Select value={editingAccount?.type || 'cash'} onValueChange={v => setEditingAccount(prev => prev ? { ...prev, type: v } : null)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ACCOUNT_TYPES.map(type => (
+                    <SelectItem key={type.value} value={type.value}>
+                      <div className="flex items-center gap-2">
+                        <type.icon className="w-4 h-4" />
+                        {type.label}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Валюта</Label>
+              <Select value={editingAccount?.currency || 'RUB'} onValueChange={v => setEditingAccount(prev => prev ? { ...prev, currency: v } : null)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CURRENCIES.map(curr => (
+                    <SelectItem key={curr.value} value={curr.value}>
+                      {curr.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Начальный баланс</Label>
+              <Input
+                type="number"
+                value={editingAccount?.initialBalance || 0}
+                onChange={e => setEditingAccount(prev => prev ? { ...prev, initialBalance: parseFloat(e.target.value) || 0 } : null)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setEditingAccount(null)}>
+                Отмена
+              </Button>
+              <Button className="flex-1 bg-primary" onClick={handleUpdateAccount} disabled={isUpdatingAccount}>
+                {isUpdatingAccount ? 'Сохранение...' : 'Сохранить'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Transaction Dialog */}
+      <Dialog open={!!editingTransaction} onOpenChange={() => setEditingTransaction(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Редактировать транзакцию</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label>Счёт</Label>
+              <Select 
+                value={editingTransaction?.account?.id || ''} 
+                onValueChange={v => {
+                  const acc = summary?.accounts.find(a => a.id === v)
+                  setEditingTransaction(prev => prev && acc ? { 
+                    ...prev, 
+                    account: { id: acc.id, name: acc.name, icon: acc.icon, currency: acc.currency }
+                  } : null)
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Выберите счёт" />
+                </SelectTrigger>
+                <SelectContent>
+                  {summary?.accounts.map(account => (
+                    <SelectItem key={account.id} value={account.id}>
+                      <div className="flex items-center gap-2">
+                        <span>{account.icon}</span>
+                        {account.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Категория (опц.)</Label>
+              <Select 
+                value={editingTransaction?.category?.id || ''} 
+                onValueChange={v => {
+                  const cat = summary?.categories.find(c => c.id === v)
+                  setEditingTransaction(prev => prev ? { 
+                    ...prev, 
+                    category: cat ? { id: cat.id, name: cat.name, icon: cat.icon, zone: cat.zone } : null
+                  } : null)
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Без категории" />
+                </SelectTrigger>
+                <SelectContent>
+                  {summary?.categories.map(category => (
+                    <SelectItem key={category.id} value={category.id}>
+                      <div className="flex items-center gap-2">
+                        <span>{category.icon}</span>
+                        {category.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Сумма (+ доход / - расход)</Label>
+              <Input
+                type="number"
+                value={editingTransaction?.amount || 0}
+                onChange={e => setEditingTransaction(prev => prev ? { ...prev, amount: parseFloat(e.target.value) || 0 } : null)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Дата</Label>
+              <Input
+                type="date"
+                value={editingTransaction?.date ? editingTransaction.date.split('T')[0] : ''}
+                onChange={e => setEditingTransaction(prev => prev ? { ...prev, date: e.target.value } : null)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Комментарий (опц.)</Label>
+              <Input
+                value={editingTransaction?.description || ''}
+                onChange={e => setEditingTransaction(prev => prev ? { ...prev, description: e.target.value } : null)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setEditingTransaction(null)}>
+                Отмена
+              </Button>
+              <Button 
+                className="flex-1 bg-primary" 
+                onClick={handleUpdateTransaction} 
+                disabled={isUpdatingTransaction}
+              >
+                {isUpdatingTransaction ? 'Сохранение...' : 'Сохранить'}
               </Button>
             </div>
           </div>
