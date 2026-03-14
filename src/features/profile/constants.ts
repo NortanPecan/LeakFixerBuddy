@@ -56,6 +56,7 @@ export const QUICK_ACCESS_ITEMS = [
   { screen: 'gym', label: 'GYM / Тренировки', icon: 'Calendar', color: 'text-primary' },
   { screen: 'skills', label: 'Навыки', icon: 'Star', color: 'text-yellow-400' },
   { screen: 'traits', label: 'Черты характера', icon: 'Heart', color: 'text-pink-400' },
+  { screen: 'zones', label: 'Зоны', icon: 'MapPin', color: 'text-indigo-400' },
   { screen: 'export', label: 'Экспорт в AI', icon: 'Download', color: 'text-cyan-400' },
 ] as const
 

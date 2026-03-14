@@ -4,7 +4,7 @@ import { formatDateKey, normalizeToDate, getToday } from '@/lib/date-utils'
 import { getMoodStatus } from '@/lib/mood-utils'
 
 // Navigation state
-export type Screen = 'home' | 'fitness' | 'rituals' | 'gym' | 'profile' | 'create-ritual' | 'catalog' | 'all-rituals' | 'tasks' | 'chain' | 'create-task' | 'create-chain' | 'notes' | 'note-detail' | 'development' | 'content-detail' | 'finance' | 'challenges' | 'challenge-detail' | 'health' | 'daily-summary' | 'goals' | 'skills' | 'traits' | 'export' | 'stats' | 'buddies' | 'journey' | 'onboarding'
+export type Screen = 'home' | 'fitness' | 'rituals' | 'gym' | 'profile' | 'create-ritual' | 'catalog' | 'all-rituals' | 'tasks' | 'chain' | 'create-task' | 'create-chain' | 'notes' | 'note-detail' | 'development' | 'content-detail' | 'finance' | 'challenges' | 'challenge-detail' | 'health' | 'daily-summary' | 'goals' | 'skills' | 'traits' | 'export' | 'stats' | 'buddies' | 'journey' | 'onboarding' | 'zones'
 
 interface User {
   id: string

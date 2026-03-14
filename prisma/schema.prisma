@@ -99,6 +99,8 @@ model AppUser {
   weeklyWellbeing       WeeklyWellbeing[]
   // Journey course relations
   journeyProgress       JourneyProgress?
+  // Zones
+  zones                 Zone[]
 
   @@index([telegramId])
   @@index([email])
@@ -1235,4 +1237,29 @@ model JourneyReflection {
 
   @@unique([progressId, week])
   @@map("journey_reflections")
+}
+
+// ============================================
+// ZONES MODULE - User-customizable zones
+// ============================================
+
+/// User zone (customizable areas of life)
+model Zone {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  key       String   // "leakfixer", "ai", "poker", "health", "life", "general", or custom
+  name      String   // Display name: "LeakFixer", "ИИ", "Покер"
+  emoji     String?  // "🔧", "🤖", "♠️"
+  color     String?  // Hex color: "#4a5568"
+  isActive  Boolean  @default(true) @map("is_active")
+  isDefault Boolean  @default(false) @map("is_default") // Can't be deleted
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@map("zones")
 }

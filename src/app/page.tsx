@@ -30,6 +30,7 @@ import { StatsScreen } from '@/components/screens/StatsScreen'
 import { BuddyScreen } from '@/components/screens/BuddyScreen'
 import { JourneyScreen } from '@/components/screens/JourneyScreen'
 import { OnboardingScreen } from '@/components/screens/OnboardingScreen'
+import { ZonesScreen } from '@/components/screens/ZonesScreen'
 import { DatePicker, DateBadge } from '@/components/DatePicker'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -98,6 +99,8 @@ function ScreenRouter({ screen, contentId }: { screen: Screen; contentId?: strin
         // После онбординга перенаправляем на journey
         // Goal сохранится в JourneyProgress при старте
       }} />
+    case 'zones':
+      return <ZonesScreen />
     case 'all-rituals':
       return <AllRitualsScreen />
     default:
