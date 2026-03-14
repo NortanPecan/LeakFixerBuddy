@@ -402,19 +402,28 @@ export function ChallengesScreen() {
             <div className="space-y-2">
               <Label>Длительность (дней)</Label>
               <Input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 placeholder="14"
                 value={newChallenge.duration}
                 onChange={e => setNewChallenge(prev => ({ ...prev, duration: e.target.value }))}
               />
             </div>
             
+            {newChallenge.type === 'ritual' && (
+              <p className="text-xs text-muted-foreground">
+                Отслеживает выполнение выбранных ритуалов в течение указанного периода. 
+                Подходит для челленджей вроде "14 дней медитации" или "30 дней занятий спортом".
+              </p>
+            )}
+            
             {newChallenge.type === 'custom' && (
               <>
                 <div className="space-y-2">
                   <Label>Цель (количество действий)</Label>
                   <Input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     placeholder="20"
                     value={newChallenge.targetCount}
                     onChange={e => setNewChallenge(prev => ({ ...prev, targetCount: e.target.value }))}
@@ -423,7 +432,8 @@ export function ChallengesScreen() {
                 <div className="space-y-2">
                   <Label>Период (дней)</Label>
                   <Input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     placeholder="30"
                     value={newChallenge.periodDays}
                     onChange={e => setNewChallenge(prev => ({ ...prev, periodDays: e.target.value }))}
