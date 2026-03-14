@@ -22,7 +22,7 @@
 - Git: Не делаю команды сам
 - Push: разрешён без force
 
-ИСПРАВЛЕНО 21 из 21 бага:
+ИСПРАВЛЕНО 24 из 24 багов:
 ✅ F-1: Duplicate accounts
 ✅ F-2: Can't delete account
 ✅ F-3: Currency selection (RUB/USD/EUR + custom)
@@ -44,6 +44,9 @@
 ✅ FD-2: Food time tracking
 ✅ Z-1: Zones CRUD
 ✅ Z-2: Hide inactive zones (Steam removed)
+✅ #11: Notes edit links + shorten ritual title
+✅ #16: Custom account types
+✅ #19: Custom meal types
 
 🎉 ВСЕ БАГИ ИСПРАВЛЕНЫ!
 
