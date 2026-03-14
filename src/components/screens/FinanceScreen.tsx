@@ -151,6 +151,14 @@ export function FinanceScreen() {
   const [isUpdatingAccount, setIsUpdatingAccount] = useState(false)
   const [isUpdatingTransaction, setIsUpdatingTransaction] = useState(false)
   
+  // Account history states
+  const [viewingAccountHistory, setViewingAccountHistory] = useState<Account | null>(null)
+  const [accountTransactions, setAccountTransactions] = useState<Transaction[]>([])
+  const [periodFilter, setPeriodFilter] = useState<'today' | 'week' | 'month' | 'all' | 'custom'>('month')
+  const [customDateFrom, setCustomDateFrom] = useState('')
+  const [customDateTo, setCustomDateTo] = useState('')
+  const [loadingAccountHistory, setLoadingAccountHistory] = useState(false)
+  
   // New transaction form
   const [newTransaction, setNewTransaction] = useState({
     accountId: '',
@@ -424,6 +432,76 @@ export function FinanceScreen() {
       month: 'short'
     })
   }
+  
+  // Get date range based on period filter
+  const getDateRange = (period: string) => {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    
+    switch (period) {
+      case 'today':
+        return { from: today.toISOString(), to: now.toISOString() }
+      case 'week': {
+        const weekAgo = new Date(today)
+        weekAgo.setDate(weekAgo.getDate() - 7)
+        return { from: weekAgo.toISOString(), to: now.toISOString() }
+      }
+      case 'month': {
+        const monthAgo = new Date(today)
+        monthAgo.setMonth(monthAgo.getMonth() - 1)
+        return { from: monthAgo.toISOString(), to: now.toISOString() }
+      }
+      case 'all':
+        return { from: undefined, to: undefined }
+      case 'custom':
+        return { 
+          from: customDateFrom ? new Date(customDateFrom).toISOString() : undefined,
+          to: customDateTo ? new Date(customDateTo + 'T23:59:59').toISOString() : undefined
+        }
+      default:
+        return { from: undefined, to: undefined }
+    }
+  }
+  
+  // Load account history
+  const loadAccountHistory = async (account: Account, period: string) => {
+    if (!user?.id) return
+    
+    setLoadingAccountHistory(true)
+    try {
+      const { from, to } = getDateRange(period)
+      let url = `/api/transactions?userId=${user.id}&accountId=${account.id}`
+      if (from) url += `&from=${from}`
+      if (to) url += `&to=${to}`
+      
+      const res = await fetch(url)
+      const data = await res.json()
+      
+      if (data.success) {
+        setAccountTransactions(data.transactions)
+      }
+    } catch (err) {
+      showErrorToast(err, 'загрузка истории')
+    } finally {
+      setLoadingAccountHistory(false)
+    }
+  }
+  
+  // Open account history
+  const handleViewAccountHistory = (account: Account) => {
+    setViewingAccountHistory(account)
+    setPeriodFilter('month')
+    setCustomDateFrom('')
+    setCustomDateTo('')
+    loadAccountHistory(account, 'month')
+  }
+  
+  // Calculate period totals
+  const getPeriodTotals = (transactions: Transaction[]) => {
+    const income = transactions.filter(t => t.amount >= 0).reduce((sum, t) => sum + t.amount, 0)
+    const expenses = transactions.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0)
+    return { income, expenses, change: income - expenses }
+  }
 
   if (loading) {
     return (
@@ -552,7 +630,16 @@ export function FinanceScreen() {
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
-                        onClick={() => setEditingAccount(account)}
+                        onClick={(e) => { e.stopPropagation(); handleViewAccountHistory(account); }}
+                        title="История счёта"
+                      >
+                        <Calendar className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
+                        onClick={(e) => { e.stopPropagation(); setEditingAccount(account); }}
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                       </Button>
@@ -560,7 +647,7 @@ export function FinanceScreen() {
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400"
-                        onClick={() => handleDeleteAccount(account.id, account.name)}
+                        onClick={(e) => { e.stopPropagation(); handleDeleteAccount(account.id, account.name); }}
                         disabled={deletingAccountId === account.id}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -1046,6 +1133,161 @@ export function FinanceScreen() {
               >
                 {isUpdatingTransaction ? 'Сохранение...' : 'Сохранить'}
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Account History Dialog */}
+      <Dialog open={!!viewingAccountHistory} onOpenChange={() => setViewingAccountHistory(null)}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="text-2xl">{viewingAccountHistory?.icon || '💳'}</span>
+              {viewingAccountHistory?.name}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 pt-2 overflow-y-auto flex-1">
+            {/* Current Balance */}
+            <div className="text-center p-3 rounded-lg bg-muted/30">
+              <p className="text-xs text-muted-foreground">Текущий баланс</p>
+              <p className={`text-2xl font-bold ${viewingAccountHistory && viewingAccountHistory.currentBalance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {formatMoney(viewingAccountHistory?.currentBalance || 0, viewingAccountHistory?.currency || 'RUB')}
+              </p>
+            </div>
+            
+            {/* Period Filter Buttons */}
+            <div className="flex flex-wrap gap-1">
+              {[
+                { value: 'today', label: 'Сегодня' },
+                { value: 'week', label: 'Неделя' },
+                { value: 'month', label: 'Месяц' },
+                { value: 'all', label: 'Всё' },
+                { value: 'custom', label: 'Период' },
+              ].map(opt => (
+                <Button
+                  key={opt.value}
+                  variant={periodFilter === opt.value ? 'default' : 'outline'}
+                  size="sm"
+                  className="text-xs h-7"
+                  onClick={() => {
+                    setPeriodFilter(opt.value as typeof periodFilter)
+                    if (opt.value !== 'custom' && viewingAccountHistory) {
+                      loadAccountHistory(viewingAccountHistory, opt.value)
+                    }
+                  }}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+            </div>
+            
+            {/* Custom Date Range */}
+            {periodFilter === 'custom' && (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">От</Label>
+                  <Input
+                    type="date"
+                    value={customDateFrom}
+                    onChange={e => setCustomDateFrom(e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">До</Label>
+                  <Input
+                    type="date"
+                    value={customDateTo}
+                    onChange={e => setCustomDateTo(e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  className="col-span-2 h-8"
+                  onClick={() => viewingAccountHistory && loadAccountHistory(viewingAccountHistory, 'custom')}
+                  disabled={!customDateFrom || !customDateTo}
+                >
+                  Применить
+                </Button>
+              </div>
+            )}
+            
+            {/* Period Totals */}
+            {accountTransactions.length > 0 && (
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="p-2 rounded-lg bg-emerald-500/10">
+                  <p className="text-xs text-muted-foreground">Доход</p>
+                  <p className="font-bold text-emerald-400 text-sm">
+                    +{formatMoney(getPeriodTotals(accountTransactions).income, viewingAccountHistory?.currency || 'RUB')}
+                  </p>
+                </div>
+                <div className="p-2 rounded-lg bg-red-500/10">
+                  <p className="text-xs text-muted-foreground">Расход</p>
+                  <p className="font-bold text-red-400 text-sm">
+                    -{formatMoney(getPeriodTotals(accountTransactions).expenses, viewingAccountHistory?.currency || 'RUB')}
+                  </p>
+                </div>
+                <div className="p-2 rounded-lg bg-muted/30">
+                  <p className="text-xs text-muted-foreground">Итого</p>
+                  <p className={`font-bold text-sm ${getPeriodTotals(accountTransactions).change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {getPeriodTotals(accountTransactions).change >= 0 ? '+' : ''}{formatMoney(getPeriodTotals(accountTransactions).change, viewingAccountHistory?.currency || 'RUB')}
+                  </p>
+                </div>
+              </div>
+            )}
+            
+            {/* Transactions List */}
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Транзакции ({accountTransactions.length})
+              </p>
+              
+              {loadingAccountHistory ? (
+                <div className="text-center py-4">
+                  <RefreshCw className="w-6 h-6 mx-auto animate-spin text-muted-foreground" />
+                </div>
+              ) : accountTransactions.length > 0 ? (
+                <div className="space-y-1 max-h-60 overflow-y-auto">
+                  {accountTransactions.map(transaction => (
+                    <div
+                      key={transaction.id}
+                      className="flex items-center justify-between p-2 rounded-lg bg-muted/20 hover:bg-muted/30 cursor-pointer transition-colors"
+                      onClick={() => {
+                        setViewingAccountHistory(null)
+                        setEditingTransaction(transaction)
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                          transaction.amount >= 0 ? 'bg-emerald-500/20' : 'bg-red-500/20'
+                        }`}>
+                          {transaction.amount >= 0 ? (
+                            <ArrowUpRight className="w-4 h-4 text-emerald-400" />
+                          ) : (
+                            <ArrowDownRight className="w-4 h-4 text-red-400" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium truncate max-w-[150px]">
+                            {transaction.description || transaction.category?.name || 'Без категории'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{formatDate(transaction.date)}</p>
+                        </div>
+                      </div>
+                      <p className={`font-bold text-sm ${transaction.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {transaction.amount >= 0 ? '+' : ''}{formatMoney(transaction.amount, viewingAccountHistory?.currency || 'RUB')}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-sm text-muted-foreground">Нет транзакций за период</p>
+                </div>
+              )}
             </div>
           </div>
         </DialogContent>

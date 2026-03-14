@@ -22,7 +22,7 @@
 - Git: Не делаю команды сам
 - Push: разрешён без force
 
-ИСПРАВЛЕНО 19 из 23 багов:
+ИСПРАВЛЕНО 20 из 23 багов:
 ✅ F-1: Duplicate accounts
 ✅ F-2: Can't delete account
 ✅ F-3: Currency selection (RUB/USD/EUR + custom)
@@ -30,6 +30,7 @@
 ✅ F-5: Can't edit transactions
 ✅ F-6: Can't edit accounts
 ✅ F-7: Initial balance in edit
+✅ F-8: Account history + period filter
 ✅ T-1: Date initialization
 ✅ T-2: Creates on previous date
 ✅ T-3: Checkbox not working
@@ -43,14 +44,14 @@
 ✅ FD-2: Food time tracking
 ✅ Z-2: Hide inactive zones (Steam removed)
 
-ОСТАЛОСЬ 4 бага:
-- [ ] F-8: Account history + period filter (большая задача)
+ОСТАЛОСЬ 3 бага:
 - [ ] Z-1: Zones CRUD (требует модель Zone, миграцию, API)
 
-PENDING MIGRATION:
-- prisma migrate dev — добавить поле currency в Account, time в FoodEntry
+SCHEMA UP TO DATE:
+- Account.currency — ✅ уже в схеме (default RUB)
+- FoodEntry.time — ✅ уже в схеме (optional)
 
-Начинай с F-8. Подтверди, что прочитал файлы.
+Начинай с Z-1 (Zones CRUD). Подтверди, что прочитал файлы.
 ```
 
 ---
@@ -58,28 +59,23 @@ PENDING MIGRATION:
 # Текущее состояние (2025-01-XX)
 
 ## Последняя выполненная задача
-- ✅ Исправлено 19 из 23 багов
-- ✅ Finance: F-1..F-7
+- ✅ Исправлено 20 из 23 багов
+- ✅ Finance: F-1..F-8 (F-8 — Account history + period filter)
 - ✅ Tasks: T-1..T-3
 - ✅ Challenges: C-1..C-2
 - ✅ Steam: ST-1
 - ✅ Rituals: R-1..R-3
 - ✅ Food: FD-1..FD-2
 - ✅ Zones: Z-2 (частично)
-- ✅ Закоммичено и запушено в main
 
-## Незавершённые задачи (4 бага)
-
-### 🔴 Finance (1)
-- [ ] **F-8:** Account history + period filter (большая задача)
+## Незавершённые задачи (1 баг)
 
 ### 🟡 Zones (1)
 - [ ] **Z-1:** CRUD for zones — требует модель Zone, миграцию, API
 
-### ⚠️ PENDING MIGRATION
-- [ ] Выполнить `npx prisma migrate dev` для:
-  - Account.currency (default RUB)
-  - FoodEntry.time (optional)
+### ✅ SCHEMA UP TO DATE
+- Account.currency — уже в схеме (default RUB)
+- FoodEntry.time — уже в схеме (optional)
 
 ---
 
