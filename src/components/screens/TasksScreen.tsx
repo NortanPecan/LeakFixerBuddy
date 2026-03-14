@@ -87,7 +87,7 @@ const ZONE_COLORS: Record<string, string> = {
 }
 
 export function TasksScreen() {
-  const { user, setScreen, selectedDate, selectedDateObj, setSelectedChainId } = useAppStore()
+  const { user, setScreen, selectedDate, selectedDateObj, setSelectedChainId, goToToday } = useAppStore()
   const [tasks, setTasks] = useState<Task[]>([])
   const [noDateTasks, setNoDateTasks] = useState<Task[]>([])
   const [chains, setChains] = useState<Chain[]>([])
@@ -131,13 +131,23 @@ export function TasksScreen() {
   }
 
   // Sync dateMode with selectedDate from store
+  // Also reset to today if persisted date is in the past
   useEffect(() => {
     const today = new Date().toISOString().split('T')[0]
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
-    if (selectedDate === today) setDateMode('today')
-    else if (selectedDate === tomorrow) setDateMode('tomorrow')
-    else setDateMode('custom')
-  }, [selectedDate])
+    
+    // Reset to today if selected date is in the past
+    if (selectedDate < today) {
+      goToToday()
+      setDateMode('today')
+    } else if (selectedDate === today) {
+      setDateMode('today')
+    } else if (selectedDate === tomorrow) {
+      setDateMode('tomorrow')
+    } else {
+      setDateMode('custom')
+    }
+  }, [selectedDate, goToToday])
 
   // Load data
   useEffect(() => {
@@ -172,7 +182,7 @@ export function TasksScreen() {
   }, [user?.id, selectedDate])
 
   // Handle date change
-  const { goToToday, goToNextDay } = useAppStore()
+  const { goToNextDay } = useAppStore()
   const handleDateChange = (mode: 'today' | 'tomorrow' | 'custom') => {
     if (mode === 'today') {
       goToToday()
@@ -826,7 +836,7 @@ function SortableTaskCard({
             onClick={(e) => {
               e.stopPropagation()
               if (!isToggling) {
-                onToggle(task, false)
+                onToggle(task, true)  // Mark as done
               }
             }}
             disabled={isToggling}

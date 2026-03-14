@@ -18,11 +18,11 @@ const ZONES = [
 ]
 
 export function CreateTaskScreen() {
-  const { user, setScreen } = useAppStore()
+  const { user, setScreen, selectedDate } = useAppStore()
   const [isSaving, setIsSaving] = useState(false)
 
   const [text, setText] = useState('')
-  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(() => selectedDate || new Date().toISOString().split('T')[0])
   const [time, setTime] = useState('')
   const [zone, setZone] = useState('')
   const [notes, setNotes] = useState('')
