@@ -9,78 +9,67 @@
 ```
 Работаем над проектом LeakFixerBuddy.
 
-ПУТЬ К ПРОЕКТУ: /home/z/my-project
+ПУТЬ К ПРОЕКТУ: /home/user/LeakFixerBuddy
 
 ОБЯЗАТЕЛЬНО прочитай перед работой:
 1. docs/NEXT_SESSION.md — текущее состояние
-2. docs/BUG_ANALYSIS.md — детальный анализ 23 багов
-3. docs/AGENT_INSTRUCTIONS.md — правила
+2. docs/AGENT_INSTRUCTIONS.md — правила
+3. worklog.md — последние шаги
 
 КРИТИЧЕСКИ:
-- ВЕТКА: только main
+- ВЕТКА: только main (не master!)
 - БД: ТОЛЬКО Supabase PostgreSQL (локальной БД нет!)
 - Git: Не делаю команды сам
 - Push: разрешён без force
 
-ИСПРАВЛЕНО 24 из 24 багов:
-✅ F-1: Duplicate accounts
-✅ F-2: Can't delete account
-✅ F-3: Currency selection (RUB/USD/EUR + custom)
-✅ F-4: Categories not visible
-✅ F-5: Can't edit transactions
-✅ F-6: Can't edit accounts
-✅ F-7: Initial balance in edit
-✅ F-8: Account history + period filter
-✅ T-1: Date initialization
-✅ T-2: Creates on previous date
-✅ T-3: Checkbox not working
-✅ C-1: Can't clear number field
-✅ C-2: Add ritual connection hint
-✅ ST-1: Remove Steam references
-✅ R-1: Rituals duplicate from note
-✅ R-2: Rituals can't delete (already had archive)
-✅ R-3: Rituals tags cause duplicates
-✅ FD-1: Food can't edit
-✅ FD-2: Food time tracking
-✅ Z-1: Zones CRUD
-✅ Z-2: Hide inactive zones (Steam removed)
-✅ #11: Notes edit links + shorten ritual title
-✅ #16: Custom account types
-✅ #19: Custom meal types
+ВСЕ 24 БАГА ИСПРАВЛЕНЫ ✅ — новых багов нет.
 
-🎉 ВСЕ БАГИ ИСПРАВЛЕНЫ!
+ТЕКУЩИЙ ФОКУС: Новая концепция — социальная сеть для саморазвития.
+Читай раздел "Следующие задачи" ниже.
 
-SCHEMA UP TO DATE:
-- Account.currency — ✅ уже в схеме (default RUB)
-- FoodEntry.time — ✅ уже в схеме (optional)
-- Zone model — ✅ добавлена (Z-1)
-
-Начинай с Z-1 (Zones CRUD). Подтверди, что прочитал файлы.
+Подтверди, что прочитал файлы.
 ```
 
 ---
 
-# Текущее состояние (2025-01-XX)
+# Текущее состояние (2026-03-16)
 
 ## Последняя выполненная задача
-- ✅ Исправлено **21 из 21 бага**
-- ✅ Finance: F-1..F-8 (Account CRUD + History)
-- ✅ Tasks: T-1..T-3 (Date + Checkbox)
-- ✅ Challenges: C-1..C-2 (Number field + Hint)
-- ✅ Steam: ST-1 (References removed)
-- ✅ Rituals: R-1..R-3 (Duplicate + Delete + Tags)
-- ✅ Food: FD-1..FD-2 (Edit + Time)
-- ✅ Zones: Z-1..Z-2 (CRUD + Hide inactive)
+- ✅ Исправлено все **24 бага** (Finance, Tasks, Challenges, Steam, Rituals, Food, Zones)
 - ✅ Закоммичено и запушено в main
 
-## Незавершённые задачи
+## Новая концепция (обсуждено в сессии 2026-03-16)
 
-**НЕТ!** Все 21 баг из BUG_ANALYSIS.md исправлены! 🎉
+Пользователь хочет развить приложение в **социальную сеть для саморазвития** с фокусом на:
 
-### ✅ SCHEMA UP TO DATE
-- Account.currency — уже в схеме (default RUB)
-- FoodEntry.time — уже в схеме (optional)
-- Zone model — добавлена в этой сессии
+### 1. Leak Engine (система ликов)
+- Алгоритм анализа всех метрик за неделю/месяц
+- Выявление слабых мест ("ликов") из данных пользователя
+- Рекомендации "как исправить" каждый лик
+- Еженедельный и ежемесячный отчёт с ликами
+
+### 2. Smart Buddy Matching
+- Сейчас: базовая модель `Buddy` в БД есть, экран `BuddyScreen` есть
+- Нужно: матчинг по похожим ликам (алгоритм сходства)
+- Закрепление за ОДНИМ бадди (не несколько)
+- Совместный прогресс в исправлении ликов
+
+### 3. Социальная часть
+- Сравнение метрик с бадди
+- Совместный дашборд двух пользователей
+- Простой интерфейс (не перегружать)
+
+## Следующие задачи
+
+**Приоритет 1:** Проработать алгоритм Leak Engine
+- Какие метрики анализируем (привычки, ритуалы, здоровье, финансы, тренировки)
+- Как определяем "лик" (порог, частота, тренд)
+- Формат отчёта
+
+**Приоритет 2:** Weekly/Monthly Report экран
+- Новый экран с ликами и советами
+
+**Приоритет 3:** Buddy Matching алгоритм и обновление BuddyScreen
 
 ---
 
