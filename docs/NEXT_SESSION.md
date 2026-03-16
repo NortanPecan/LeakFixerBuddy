@@ -32,11 +32,25 @@
 
 ---
 
-# Текущее состояние (2026-03-16)
+# Текущее состояние (2026-03-16 — рефакторинг)
 
-## Последняя выполненная задача
-- ✅ Исправлено все **24 бага** (Finance, Tasks, Challenges, Steam, Rituals, Food, Zones)
-- ✅ Закоммичено и запушено в main
+## Последняя выполненная задача — ПОЛНЫЙ РЕФАКТОРИНГ (2026-03-16)
+
+### ✅ Выполнено за сессию:
+
+| # | Задача | Файлы |
+|---|--------|-------|
+| 1 | Lessons API — контент для дней 11–30 | `src/app/api/lessons/route.ts` |
+| 2 | AllRitualsScreen — полная реализация вместо заглушки | `src/components/screens/AllRitualsScreen.tsx` |
+| 3 | Habits — Edit UI + PATCH API | `src/components/screens/HabitsScreen.tsx`, `src/app/api/habits/route.ts` |
+| 4 | Rituals — Edit UI (PATCH API уже был) | `src/components/screens/RitualsScreen.tsx` |
+| 5 | GymScreen — вынести типы в features/gym | `src/features/gym/types.ts`, `src/features/gym/index.ts` |
+| 6 | Удалены неиспользуемые Supabase клиенты | `supabase-browser.ts`, `supabase-server.ts` удалены |
+| 7 | TopNav — добавлены отсутствующие Screen titles | `src/components/TopNav.tsx` |
+| 8 | Zod валидация — habits + tasks API | `src/app/api/habits/route.ts`, `src/app/api/tasks/route.ts` |
+| 9 | Обновлена документация | `docs/CURRENT_STATE.md`, `docs/NEXT_SESSION.md` |
+
+### Ветка: `claude/code-review-cV4rg` (все изменения запушены)
 
 ## Новая концепция (обсуждено в сессии 2026-03-16)
 
@@ -71,6 +85,11 @@
 
 **Приоритет 3:** Buddy Matching алгоритм и обновление BuddyScreen
 
+**Технический долг (оставшийся):**
+- GymScreen (4054 строк) — всё ещё монолит, безопасный сплит требует Context/Hook
+- Pre-existing TypeScript ошибки в journey/route.ts и gym/exercises routes (не критично)
+- Skeleton loading в ProfileScreen (данные загружаются с дефолтами, работает)
+
 ---
 
 ## Важно помнить
@@ -95,7 +114,7 @@ src/
 ├── lib/
 │   ├── db.ts         # Prisma client
 │   ├── store.ts      # Zustand store
-│   └── supabase*.ts  # Supabase clients
+│   └── supabase*.ts  # supabase.ts, supabaseClient.ts, supabase-rest.ts, auth-telegram.ts, db.ts
 └── prisma/
     └── schema.prisma # PostgreSQL only
 ```
