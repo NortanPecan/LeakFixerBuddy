@@ -30,6 +30,7 @@ import {
   GripVertical
 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { getTodayKey, getTomorrowKey } from '@/lib/date-utils'
 import {
   DndContext,
   closestCenter,
@@ -132,9 +133,9 @@ export function TasksScreen() {
   // Sync dateMode with selectedDate from store
   // Also reset to today if persisted date is in the past
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0]
-    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
-    
+    const today = getTodayKey()
+    const tomorrow = getTomorrowKey()
+
     // Reset to today if selected date is in the past
     if (selectedDate < today) {
       goToToday()
@@ -196,7 +197,7 @@ export function TasksScreen() {
   const handleToggleTask = async (task: Task, completed: boolean) => {
     setTogglingId(task.id)
     try {
-      const today = new Date().toISOString().split('T')[0]
+      const today = getTodayKey()
       const response = await fetch('/api/tasks', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

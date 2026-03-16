@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Progress } from '@/components/ui/progress'
 import {
   Users,
   Search,
@@ -17,12 +18,18 @@ import {
   X,
   Clock,
   UserCheck,
-  UserX,
   Flame,
   Target,
-  Loader2
+  Loader2,
+  Dumbbell,
+  Scale,
+  Trophy,
+  BarChart2,
+  RefreshCw,
+  Trash2,
+  Calendar
 } from 'lucide-react'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 
 interface UserProfile {
   id: string
@@ -42,6 +49,26 @@ interface BuddyRequest {
   createdAt: string
 }
 
+interface BuddyStats {
+  buddy: {
+    id: string
+    name: string
+    photoUrl?: string
+    day: number
+    streak: number
+    points: number
+  }
+  stats: {
+    activeRituals: number
+    todayCompletions: number
+    weekWorkouts: number
+    activeChallenges: number
+    gymPeriod: string | null
+    latestWeight: { weight: number; date: string } | null
+    last7Days: { date: string; completions: number }[]
+  }
+}
+
 export function BuddyScreen() {
   const { user, setScreen } = useAppStore()
   const [searchQuery, setSearchQuery] = useState('')
@@ -50,26 +77,24 @@ export function BuddyScreen() {
   const [incomingRequests, setIncomingRequests] = useState<BuddyRequest[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [sendingTo, setSendingTo] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'users' | 'incoming' | 'my'>('users')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'find' | 'incoming'>('dashboard')
+  const [buddyStats, setBuddyStats] = useState<BuddyStats | null>(null)
+  const [loadingStats, setLoadingStats] = useState(false)
 
-  // Load users and buddy data
-  useEffect(() => {
-    if (!user?.id) return
-    loadData()
-  }, [user?.id])
+  const acceptedBuddies = outgoingRequests.filter(b => b.status === 'accepted')
+  const activeBuddy = acceptedBuddies[0]
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!user?.id) return
     setIsLoading(true)
     try {
-      // Load all users
-      const usersRes = await fetch(`/api/users?userId=${user.id}`)
+      const [usersRes, buddiesRes] = await Promise.all([
+        fetch(`/api/users?userId=${user.id}`),
+        fetch(`/api/buddies?userId=${user.id}`)
+      ])
       const usersData = await usersRes.json()
-      setUsers(usersData.users || [])
-
-      // Load buddy data
-      const buddiesRes = await fetch(`/api/buddies?userId=${user.id}`)
       const buddiesData = await buddiesRes.json()
+      setUsers(usersData.users || [])
       setOutgoingRequests(buddiesData.buddies || [])
       setIncomingRequests(buddiesData.incoming || [])
     } catch (error) {
@@ -77,22 +102,45 @@ export function BuddyScreen() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [user?.id])
 
-  // Filter users by search query
+  const loadBuddyStats = useCallback(async (buddyId: string) => {
+    if (!user?.id) return
+    setLoadingStats(true)
+    try {
+      const res = await fetch(`/api/buddies/dashboard?userId=${user.id}&buddyId=${buddyId}`)
+      const data = await res.json()
+      if (data.success) setBuddyStats(data)
+    } catch (error) {
+      showErrorToast(error, 'load buddy stats')
+    } finally {
+      setLoadingStats(false)
+    }
+  }, [user?.id])
+
+  useEffect(() => {
+    if (!user?.id) return
+    loadData()
+  }, [loadData])
+
+  useEffect(() => {
+    if (activeBuddy) {
+      setActiveTab('dashboard')
+      loadBuddyStats(activeBuddy.partnerId)
+    } else {
+      setActiveTab('find')
+    }
+  }, [activeBuddy?.partnerId, loadBuddyStats])
+
   const filteredUsers = useMemo(() => {
     if (!searchQuery.trim()) return users
     const query = searchQuery.toLowerCase()
-    return users.filter(u => 
-      u.name.toLowerCase().includes(query) || 
+    return users.filter(u =>
+      u.name.toLowerCase().includes(query) ||
       (u.username && u.username.toLowerCase().includes(query))
     )
   }, [users, searchQuery])
 
-  // Get accepted buddies (my partners)
-  const acceptedBuddies = outgoingRequests.filter(b => b.status === 'accepted')
-
-  // Send buddy request
   const handleSendRequest = async (partner: UserProfile) => {
     if (!user?.id || !isOnline()) return
     setSendingTo(partner.id)
@@ -107,7 +155,6 @@ export function BuddyScreen() {
           partnerPhoto: partner.photoUrl
         })
       })
-      
       if (!res.ok) {
         const data = await res.json()
         if (data.error?.includes('already exists')) {
@@ -117,7 +164,6 @@ export function BuddyScreen() {
         }
       } else {
         showSuccessToast(`Запрос отправлен ${partner.name}`)
-        // Refresh buddy data
         await loadData()
       }
     } catch (error) {
@@ -127,18 +173,13 @@ export function BuddyScreen() {
     }
   }
 
-  // Accept incoming request
   const handleAcceptRequest = async (request: BuddyRequest) => {
     if (!user?.id || !isOnline()) return
     try {
       await fetch('/api/buddies', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          buddyId: request.id,
-          status: 'accepted',
-          currentUserId: user.id
-        })
+        body: JSON.stringify({ buddyId: request.id, status: 'accepted', currentUserId: user.id })
       })
       showSuccessToast(`${request.partnerName} теперь ваш бадди!`)
       await loadData()
@@ -147,18 +188,13 @@ export function BuddyScreen() {
     }
   }
 
-  // Reject incoming request
   const handleRejectRequest = async (request: BuddyRequest) => {
     if (!user?.id || !isOnline()) return
     try {
       await fetch('/api/buddies', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          buddyId: request.id,
-          status: 'rejected',
-          currentUserId: user.id
-        })
+        body: JSON.stringify({ buddyId: request.id, status: 'rejected', currentUserId: user.id })
       })
       showSuccessToast('Запрос отклонён')
       await loadData()
@@ -167,7 +203,18 @@ export function BuddyScreen() {
     }
   }
 
-  // Check if user already has a request sent
+  const handleRemoveBuddy = async (buddyId: string) => {
+    if (!confirm('Удалить бадди?')) return
+    try {
+      await fetch(`/api/buddies?buddyId=${buddyId}`, { method: 'DELETE' })
+      showSuccessToast('Бадди удалён')
+      setBuddyStats(null)
+      await loadData()
+    } catch (error) {
+      showErrorToast(error, 'remove buddy')
+    }
+  }
+
   const getRequestStatus = (partnerId: string) => {
     const outgoing = outgoingRequests.find(b => b.partnerId === partnerId)
     if (outgoing) return outgoing.status
@@ -176,7 +223,6 @@ export function BuddyScreen() {
     return null
   }
 
-  // Pending incoming count
   const pendingIncomingCount = incomingRequests.filter(b => b.status === 'pending').length
 
   return (
@@ -187,18 +233,35 @@ export function BuddyScreen() {
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <h1 className="text-2xl font-bold text-foreground">Бадди</h1>
+        {activeBuddy && (
+          <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 ml-auto">
+            <Check className="w-3 h-3 mr-1" />
+            Подключён
+          </Badge>
+        )}
       </div>
 
       {/* Tabs */}
       <div className="flex gap-2">
+        {activeBuddy && (
+          <Button
+            variant={activeTab === 'dashboard' ? 'default' : 'outline'}
+            size="sm"
+            className={activeTab === 'dashboard' ? 'bg-primary' : ''}
+            onClick={() => setActiveTab('dashboard')}
+          >
+            <BarChart2 className="w-4 h-4 mr-1" />
+            Дашборд
+          </Button>
+        )}
         <Button
-          variant={activeTab === 'users' ? 'default' : 'outline'}
+          variant={activeTab === 'find' ? 'default' : 'outline'}
           size="sm"
-          className={activeTab === 'users' ? 'bg-primary' : ''}
-          onClick={() => setActiveTab('users')}
+          className={activeTab === 'find' ? 'bg-primary' : ''}
+          onClick={() => setActiveTab('find')}
         >
-          <Users className="w-4 h-4 mr-1" />
-          Все
+          <Search className="w-4 h-4 mr-1" />
+          Найти
         </Button>
         <Button
           variant={activeTab === 'incoming' ? 'default' : 'outline'}
@@ -206,66 +269,269 @@ export function BuddyScreen() {
           className={activeTab === 'incoming' ? 'bg-primary' : ''}
           onClick={() => setActiveTab('incoming')}
         >
-          <UserPlus className="w-4 h-4 mr-1" />
-          Запросы
+          Входящие
           {pendingIncomingCount > 0 && (
-            <Badge className="ml-1 h-5 w-5 p-0 flex items-center justify-center bg-red-500 text-white text-xs">
+            <Badge className="ml-1 bg-red-500 text-white text-xs px-1 py-0 rounded-full">
               {pendingIncomingCount}
             </Badge>
           )}
         </Button>
-        <Button
-          variant={activeTab === 'my' ? 'default' : 'outline'}
-          size="sm"
-          className={activeTab === 'my' ? 'bg-primary' : ''}
-          onClick={() => setActiveTab('my')}
-        >
-          <UserCheck className="w-4 h-4 mr-1" />
-          Мои ({acceptedBuddies.length})
-        </Button>
       </div>
 
-      {/* Search (only on users tab) */}
-      {activeTab === 'users' && (
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Поиск пользователей..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-      )}
-
-      {/* Content */}
       {isLoading ? (
         <div className="space-y-3">
-          {[1, 2, 3, 4, 5].map(i => (
-            <Card key={i} className="bg-card/50 backdrop-blur">
-              <CardContent className="py-4">
-                <div className="flex items-center gap-3">
-                  <Skeleton className="w-12 h-12 rounded-full" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-3 w-16" />
+          {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
+        </div>
+      ) : activeTab === 'dashboard' ? (
+        // Buddy Dashboard
+        <div className="space-y-4">
+          {activeBuddy && (
+            <>
+              {/* Buddy card */}
+              <Card className="bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border-emerald-500/20">
+                <CardContent className="pt-4">
+                  <div className="flex items-center gap-4">
+                    <Avatar className="w-16 h-16 border-2 border-emerald-500/50">
+                      <AvatarImage src={activeBuddy.partnerPhoto} />
+                      <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-xl">
+                        {activeBuddy.partnerName[0]?.toUpperCase() || 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <p className="font-bold text-lg">{activeBuddy.partnerName}</p>
+                      {buddyStats && (
+                        <div className="flex gap-3 mt-1">
+                          <span className="text-sm text-muted-foreground">
+                            🔥 {buddyStats.buddy.streak} дней
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            📅 День {buddyStats.buddy.day}
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            ⭐ {buddyStats.buddy.points} очков
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => activeBuddy && loadBuddyStats(activeBuddy.partnerId)}
+                        disabled={loadingStats}
+                      >
+                        <RefreshCw className={`w-4 h-4 ${loadingStats ? 'animate-spin' : ''}`} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-red-400 hover:text-red-300"
+                        onClick={() => handleRemoveBuddy(activeBuddy.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <Skeleton className="h-9 w-20" />
+                </CardContent>
+              </Card>
+
+              {/* Stats comparison */}
+              {loadingStats ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map(i => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
                 </div>
+              ) : buddyStats ? (
+                <>
+                  {/* Today's activity */}
+                  <Card className="bg-card/50 backdrop-blur">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Flame className="w-4 h-4 text-orange-400" />
+                        Сегодня
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="text-center p-2 rounded-lg bg-muted/30">
+                          <p className="text-2xl font-bold text-primary">{buddyStats.stats.todayCompletions}</p>
+                          <p className="text-xs text-muted-foreground">ритуалов выполнено</p>
+                        </div>
+                        <div className="text-center p-2 rounded-lg bg-muted/30">
+                          <p className="text-2xl font-bold text-orange-400">{buddyStats.buddy.streak}</p>
+                          <p className="text-xs text-muted-foreground">дней подряд</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Activity streak 7 days */}
+                  <Card className="bg-card/50 backdrop-blur">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-blue-400" />
+                        Активность за 7 дней
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex gap-1 justify-between">
+                        {buddyStats.stats.last7Days.map(({ date, completions }) => {
+                          const d = new Date(date)
+                          const dayLabel = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'][d.getDay()]
+                          return (
+                            <div key={date} className="flex flex-col items-center gap-1 flex-1">
+                              <div
+                                className={`w-full rounded-sm transition-all ${
+                                  completions > 0 ? 'bg-emerald-500' : 'bg-muted'
+                                }`}
+                                style={{ height: `${Math.max(8, Math.min(40, completions * 8))}px` }}
+                              />
+                              <span className="text-[9px] text-muted-foreground">{dayLabel}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Module stats */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <Card className="bg-card/50 backdrop-blur">
+                      <CardContent className="pt-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Flame className="w-4 h-4 text-orange-400" />
+                          <span className="text-sm font-medium">Ритуалы</span>
+                        </div>
+                        <p className="text-2xl font-bold">{buddyStats.stats.activeRituals}</p>
+                        <p className="text-xs text-muted-foreground">активных</p>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="bg-card/50 backdrop-blur">
+                      <CardContent className="pt-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Dumbbell className="w-4 h-4 text-blue-400" />
+                          <span className="text-sm font-medium">Тренировки</span>
+                        </div>
+                        <p className="text-2xl font-bold">{buddyStats.stats.weekWorkouts}</p>
+                        <p className="text-xs text-muted-foreground">на этой неделе</p>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="bg-card/50 backdrop-blur">
+                      <CardContent className="pt-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Trophy className="w-4 h-4 text-yellow-400" />
+                          <span className="text-sm font-medium">Вызовы</span>
+                        </div>
+                        <p className="text-2xl font-bold">{buddyStats.stats.activeChallenges}</p>
+                        <p className="text-xs text-muted-foreground">активных</p>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="bg-card/50 backdrop-blur">
+                      <CardContent className="pt-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Scale className="w-4 h-4 text-purple-400" />
+                          <span className="text-sm font-medium">Вес</span>
+                        </div>
+                        {buddyStats.stats.latestWeight ? (
+                          <>
+                            <p className="text-2xl font-bold">{buddyStats.stats.latestWeight.weight}</p>
+                            <p className="text-xs text-muted-foreground">кг</p>
+                          </>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">Нет данных</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Gym program */}
+                  {buddyStats.stats.gymPeriod && (
+                    <Card className="bg-card/50 backdrop-blur">
+                      <CardContent className="pt-4">
+                        <div className="flex items-center gap-2">
+                          <Dumbbell className="w-4 h-4 text-blue-400" />
+                          <div>
+                            <p className="text-sm font-medium">Программа GYM</p>
+                            <p className="text-sm text-muted-foreground">{buddyStats.stats.gymPeriod}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Recommendations */}
+                  <Card className="bg-primary/5 border-primary/20">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Target className="w-4 h-4 text-primary" />
+                        Рекомендации
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 text-sm text-muted-foreground">
+                        {buddyStats.stats.todayCompletions === 0 && (
+                          <p>• {buddyStats.buddy.name} ещё не выполнил ритуалы сегодня — напомните ему!</p>
+                        )}
+                        {buddyStats.buddy.streak < 3 && (
+                          <p>• Стрик бадди низкий ({buddyStats.buddy.streak} дн.) — поддержите его сегодня</p>
+                        )}
+                        {buddyStats.stats.weekWorkouts === 0 && (
+                          <p>• На этой неделе бадди ещё не тренировался — мотивируйте вместе!</p>
+                        )}
+                        {buddyStats.stats.todayCompletions > 0 && buddyStats.buddy.streak > 7 && (
+                          <p>• {buddyStats.buddy.name} на подъёме! Стрик {buddyStats.buddy.streak} дней 🔥 Держите темп вместе</p>
+                        )}
+                        {buddyStats.stats.activeRituals === 0 && (
+                          <p>• У бадди нет активных ритуалов — предложите создать первый</p>
+                        )}
+                        {buddyStats.stats.todayCompletions > 0 && buddyStats.stats.weekWorkouts > 2 && buddyStats.buddy.streak > 5 && (
+                          <p>• Отличная неделя у обоих! Поставьте совместную цель на следующую</p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </>
+              ) : (
+                <Card className="bg-card/50">
+                  <CardContent className="py-6 text-center text-muted-foreground">
+                    Не удалось загрузить данные бадди
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+        </div>
+      ) : activeTab === 'find' ? (
+        // Find users
+        <div className="space-y-3">
+          {!activeBuddy && (
+            <Card className="bg-primary/5 border-primary/20">
+              <CardContent className="py-3">
+                <p className="text-sm text-muted-foreground">
+                  Найдите бадди — партнёра по отчётности. Вы будете видеть прогресс друг друга и поддерживать в достижении целей.
+                </p>
               </CardContent>
             </Card>
-          ))}
-        </div>
-      ) : activeTab === 'users' ? (
-        // All users list
-        <div className="space-y-3">
+          )}
+
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Поиск по имени или @username..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+
           {filteredUsers.length === 0 ? (
-            <Card className="bg-card/50 backdrop-blur">
+            <Card className="bg-card/50">
               <CardContent className="py-8 text-center">
                 <Users className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
-                <p className="text-muted-foreground">
-                  {searchQuery ? 'Пользователи не найдены' : 'Нет других пользователей'}
-                </p>
+                <p className="text-muted-foreground">Пользователи не найдены</p>
               </CardContent>
             </Card>
           ) : (
@@ -273,59 +539,42 @@ export function BuddyScreen() {
               const status = getRequestStatus(u.id)
               return (
                 <Card key={u.id} className="bg-card/50 backdrop-blur">
-                  <CardContent className="py-4">
+                  <CardContent className="py-3">
                     <div className="flex items-center gap-3">
-                      <Avatar className="w-12 h-12 border-2 border-primary/20">
+                      <Avatar className="w-12 h-12">
                         <AvatarImage src={u.photoUrl} />
-                        <AvatarFallback className="bg-primary/10 text-primary text-lg">
+                        <AvatarFallback className="bg-primary/20 text-primary">
                           {u.name[0]?.toUpperCase() || 'U'}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
-                        <p className="font-medium text-foreground">{u.name}</p>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <p className="font-medium">{u.name}</p>
+                        <div className="flex gap-3 text-xs text-muted-foreground">
                           {u.username && <span>@{u.username}</span>}
-                          <Badge variant="secondary" className="text-xs">
-                            <Flame className="w-3 h-3 mr-0.5 text-orange-400" />
-                            {u.streak}
-                          </Badge>
-                          <Badge variant="secondary" className="text-xs">
-                            День {u.day}
-                          </Badge>
+                          <span>🔥 {u.streak} дней</span>
+                          <span>📅 День {u.day}</span>
                         </div>
                       </div>
                       {status === 'accepted' ? (
-                        <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-                          <Check className="w-3 h-3 mr-1" />
-                          Бадди
-                        </Badge>
+                        <Badge className="bg-emerald-500/20 text-emerald-400">Бадди</Badge>
                       ) : status === 'pending' ? (
-                        <Badge variant="outline" className="border-yellow-500 text-yellow-400">
+                        <Badge variant="outline" className="text-muted-foreground">
                           <Clock className="w-3 h-3 mr-1" />
-                          Отправлено
-                        </Badge>
-                      ) : status === 'rejected' ? (
-                        <Badge variant="outline" className="border-red-500 text-red-400">
-                          <X className="w-3 h-3 mr-1" />
-                          Отклонено
-                        </Badge>
-                      ) : status?.startsWith('incoming_') ? (
-                        <Badge variant="outline" className="border-cyan-500 text-cyan-400">
-                          Хочет стать бадди
+                          Ожидание
                         </Badge>
                       ) : (
                         <Button
                           size="sm"
-                          className="bg-primary"
+                          variant="outline"
                           onClick={() => handleSendRequest(u)}
-                          disabled={sendingTo === u.id}
+                          disabled={sendingTo === u.id || !!activeBuddy}
                         >
                           {sendingTo === u.id ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
                           ) : (
                             <>
                               <UserPlus className="w-4 h-4 mr-1" />
-                              Пригласить
+                              Добавить
                             </>
                           )}
                         </Button>
@@ -337,52 +586,56 @@ export function BuddyScreen() {
             })
           )}
         </div>
-      ) : activeTab === 'incoming' ? (
+      ) : (
         // Incoming requests
         <div className="space-y-3">
           {incomingRequests.length === 0 ? (
-            <Card className="bg-card/50 backdrop-blur">
+            <Card className="bg-card/50">
               <CardContent className="py-8 text-center">
-                <UserPlus className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+                <UserCheck className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
                 <p className="text-muted-foreground">Нет входящих запросов</p>
               </CardContent>
             </Card>
           ) : (
             incomingRequests.map(request => (
-              <Card key={request.id} className="bg-card/50 backdrop-blur">
-                <CardContent className="py-4">
+              <Card key={request.id} className={`bg-card/50 backdrop-blur ${request.status === 'pending' ? 'border-primary/30' : ''}`}>
+                <CardContent className="py-3">
                   <div className="flex items-center gap-3">
-                    <Avatar className="w-12 h-12 border-2 border-primary/20">
+                    <Avatar className="w-12 h-12">
                       <AvatarImage src={request.partnerPhoto} />
-                      <AvatarFallback className="bg-primary/10 text-primary text-lg">
+                      <AvatarFallback className="bg-primary/20 text-primary">
                         {request.partnerName[0]?.toUpperCase() || 'U'}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
-                      <p className="font-medium text-foreground">{request.partnerName}</p>
+                      <p className="font-medium">{request.partnerName}</p>
                       <p className="text-xs text-muted-foreground">
-                        {request.status === 'pending' ? 'Хочет стать вашим бадди' :
-                         request.status === 'accepted' ? '🤝 Ваш бадди' : '❌ Отклонено'}
+                        {new Date(request.createdAt).toLocaleDateString('ru-RU')}
                       </p>
                     </div>
-                    {request.status === 'pending' && (
+                    {request.status === 'pending' ? (
                       <div className="flex gap-2">
                         <Button
-                          size="sm"
+                          size="icon"
                           variant="outline"
-                          className="border-red-500 text-red-400 hover:bg-red-500/10"
+                          className="h-8 w-8 border-red-500/30 text-red-400 hover:bg-red-500/10"
                           onClick={() => handleRejectRequest(request)}
                         >
                           <X className="w-4 h-4" />
                         </Button>
                         <Button
-                          size="sm"
-                          className="bg-emerald-500 hover:bg-emerald-600"
+                          size="icon"
+                          className="h-8 w-8 bg-emerald-600 hover:bg-emerald-700"
                           onClick={() => handleAcceptRequest(request)}
+                          disabled={!!activeBuddy}
                         >
                           <Check className="w-4 h-4" />
                         </Button>
                       </div>
+                    ) : (
+                      <Badge variant="outline" className="text-muted-foreground capitalize">
+                        {request.status === 'accepted' ? 'Принят' : 'Отклонён'}
+                      </Badge>
                     )}
                   </div>
                 </CardContent>
@@ -390,68 +643,7 @@ export function BuddyScreen() {
             ))
           )}
         </div>
-      ) : (
-        // My buddies
-        <div className="space-y-3">
-          {acceptedBuddies.length === 0 ? (
-            <Card className="bg-card/50 backdrop-blur">
-              <CardContent className="py-8 text-center">
-                <UserCheck className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
-                <p className="text-muted-foreground mb-3">У вас пока нет бадди</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setActiveTab('users')}
-                >
-                  <UserPlus className="w-4 h-4 mr-1" />
-                  Найти бадди
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            acceptedBuddies.map(buddy => (
-              <Card key={buddy.id} className="bg-card/50 backdrop-blur border-emerald-500/30">
-                <CardContent className="py-4">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="w-14 h-14 border-2 border-emerald-500/50">
-                      <AvatarImage src={buddy.partnerPhoto} />
-                      <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-xl">
-                        {buddy.partnerName[0]?.toUpperCase() || 'U'}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <p className="font-semibold text-foreground">{buddy.partnerName}</p>
-                      <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-                        <Check className="w-3 h-3 mr-1" />
-                        Ваш бадди
-                      </Badge>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground">С {new Date(buddy.createdAt).toLocaleDateString('ru-RU')}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </div>
       )}
-
-      {/* Info card */}
-      <Card className="bg-muted/30 border-dashed">
-        <CardContent className="py-4">
-          <div className="flex items-start gap-3">
-            <Target className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-foreground">Что такое бадди?</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Бадди — это партнёр по отчётности. Вы можете делиться прогрессом, 
-                поддерживать друг друга и следить за выполнением целей вместе.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }

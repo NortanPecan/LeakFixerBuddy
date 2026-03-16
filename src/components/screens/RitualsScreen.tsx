@@ -62,6 +62,7 @@ export function RitualsScreen() {
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [deletingRitual, setDeletingRitual] = useState<Ritual | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isPermanentDeleting, setIsPermanentDeleting] = useState(false)
   const [editingRitual, setEditingRitual] = useState<Ritual | null>(null)
   const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [editForm, setEditForm] = useState({
@@ -264,6 +265,35 @@ export function RitualsScreen() {
       showErrorToast(error, 'delete ritual')
     } finally {
       setIsDeleting(false)
+    }
+  }
+
+  // Permanently delete ritual
+  const handlePermanentDeleteRitual = async () => {
+    if (!deletingRitual) return
+    if (!isOnline()) {
+      showErrorToast(new Error('Нет подключения к интернету'), 'delete ritual')
+      return
+    }
+
+    setIsPermanentDeleting(true)
+    try {
+      const response = await fetch(`/api/rituals?ritualId=${deletingRitual.id}&permanent=true`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        setRituals(prev => prev.filter(r => r.id !== deletingRitual.id))
+        setDeletingRitual(null)
+        setShowDetail(false)
+        showSuccessToast('Ритуал удалён навсегда')
+      } else {
+        throw new Error('Failed to delete')
+      }
+    } catch (error) {
+      showErrorToast(error, 'delete ritual permanently')
+    } finally {
+      setIsPermanentDeleting(false)
     }
   }
 
@@ -677,29 +707,36 @@ export function RitualsScreen() {
       <Dialog open={!!deletingRitual} onOpenChange={() => setDeletingRitual(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Архивировать ритуал?</DialogTitle>
+            <DialogTitle>Удалить ритуал?</DialogTitle>
           </DialogHeader>
           <div className="pt-4">
             <p className="text-muted-foreground mb-4">
-              Ритуал "{deletingRitual?.title}" будет перенесён в архив. 
-              Вы сможете восстановить его позже.
+              Ритуал "{deletingRitual?.title}"
             </p>
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                className="flex-1" 
+            <div className="flex flex-col gap-2">
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handleDeleteRitual}
+                disabled={isDeleting || isPermanentDeleting}
+              >
+                {isDeleting ? 'Архивирование...' : '📦 Архивировать (восстановить можно)'}
+              </Button>
+              <Button
+                variant="destructive"
+                className="w-full"
+                onClick={handlePermanentDeleteRitual}
+                disabled={isDeleting || isPermanentDeleting}
+              >
+                {isPermanentDeleting ? 'Удаление...' : '🗑️ Удалить навсегда'}
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full"
                 onClick={() => setDeletingRitual(null)}
-                disabled={isDeleting}
+                disabled={isDeleting || isPermanentDeleting}
               >
                 Отмена
-              </Button>
-              <Button 
-                variant="destructive" 
-                className="flex-1" 
-                onClick={handleDeleteRitual}
-                disabled={isDeleting}
-              >
-                {isDeleting ? 'Архивирование...' : 'Архивировать'}
               </Button>
             </div>
           </div>

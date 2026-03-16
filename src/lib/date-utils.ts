@@ -10,7 +10,16 @@
  * This is the canonical format for storing and comparing dates in the database.
  */
 export function normalizeToDate(date: Date | string): Date {
-  const d = typeof date === 'string' ? new Date(date) : new Date(date)
+  if (typeof date === 'string') {
+    // For YYYY-MM-DD strings, parse as local to avoid UTC offset issues
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return parseDateKey(date)
+    }
+    const d = new Date(date)
+    d.setHours(0, 0, 0, 0)
+    return d
+  }
+  const d = new Date(date)
   d.setHours(0, 0, 0, 0)
   return d
 }
@@ -35,16 +44,22 @@ export function getEndOfDay(date: Date): Date {
 
 /**
  * Format a date as YYYY-MM-DD string (for API parameters)
+ * Uses LOCAL date components to avoid UTC timezone off-by-one bugs
  */
 export function formatDateKey(date: Date): string {
-  return date.toISOString().split('T')[0]
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 /**
- * Parse a YYYY-MM-DD string to a normalized Date
+ * Parse a YYYY-MM-DD string to a normalized Date (local midnight)
+ * Uses explicit year/month/day to avoid UTC parsing issues
  */
 export function parseDateKey(dateStr: string): Date {
-  return normalizeToDate(dateStr)
+  const [year, month, day] = dateStr.split('-').map(Number)
+  return new Date(year, month - 1, day, 0, 0, 0, 0)
 }
 
 /**
@@ -52,6 +67,23 @@ export function parseDateKey(dateStr: string): Date {
  */
 export function getToday(): Date {
   return normalizeToDate(new Date())
+}
+
+/**
+ * Get today as a YYYY-MM-DD string using LOCAL date (not UTC)
+ * Use this instead of new Date().toISOString().split('T')[0]
+ */
+export function getTodayKey(): string {
+  return formatDateKey(new Date())
+}
+
+/**
+ * Get tomorrow as a YYYY-MM-DD string using LOCAL date
+ */
+export function getTomorrowKey(): string {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  return formatDateKey(d)
 }
 
 /**

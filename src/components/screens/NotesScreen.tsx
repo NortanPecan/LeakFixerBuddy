@@ -95,6 +95,7 @@ export function NotesScreen() {
   const [selectedChainId, setSelectedChainId] = useState<string>('')
   const [chainStepText, setChainStepText] = useState('')
   const [isLoadingChains, setIsLoadingChains] = useState(false)
+  const [isCreatingRitual, setIsCreatingRitual] = useState(false)
   
   // Reframe modal state
   const [showReframeModal, setShowReframeModal] = useState(false)
@@ -230,7 +231,8 @@ export function NotesScreen() {
 
   // Create ritual from note
   const handleCreateRitual = async () => {
-    if (!selectedNote || !user?.id) return
+    if (!selectedNote || !user?.id || isCreatingRitual) return
+    setIsCreatingRitual(true)
     try {
       // Shorten title: first sentence or max 50 chars
       const text = selectedNote.text
@@ -259,6 +261,8 @@ export function NotesScreen() {
       }
     } catch (error) {
       showErrorToast(error, 'create ritual')
+    } finally {
+      setIsCreatingRitual(false)
     }
   }
 
@@ -1092,9 +1096,10 @@ export function NotesScreen() {
                       size="sm"
                       className="flex-1 gap-1"
                       onClick={handleCreateRitual}
+                      disabled={isCreatingRitual}
                     >
                       <Sparkles className="w-4 h-4" />
-                      Ритуал
+                      {isCreatingRitual ? 'Создание...' : 'Ритуал'}
                     </Button>
                   </div>
                 </div>

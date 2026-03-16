@@ -21,6 +21,7 @@ import {
   Plus,
   ArrowUpRight,
   ArrowDownRight,
+  ArrowLeftRight,
   CreditCard,
   Banknote,
   Sparkles,
@@ -33,6 +34,7 @@ import {
 } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
 import { showErrorToast, showSuccessToast, isOnline, getOfflineMessage } from '@/lib/network-utils'
+import { getTodayKey } from '@/lib/date-utils'
 
 // Account types
 const ACCOUNT_TYPES = [
@@ -166,7 +168,20 @@ export function FinanceScreen() {
     categoryId: '',
     amount: '',
     description: '',
-    date: new Date().toISOString().split('T')[0]
+    date: getTodayKey()
+  })
+
+  // Transfer form
+  const [showTransfer, setShowTransfer] = useState(false)
+  const [isCreatingTransfer, setIsCreatingTransfer] = useState(false)
+  const [transferForm, setTransferForm] = useState({
+    fromAccountId: '',
+    toAccountId: '',
+    fromAmount: '',
+    toAmount: '', // only for currency exchange
+    isCurrencyExchange: false,
+    date: getTodayKey(),
+    description: ''
   })
   
   // New account form
@@ -413,11 +428,83 @@ export function FinanceScreen() {
         categoryId: '',
         amount: '',
         description: '',
-        date: new Date().toISOString().split('T')[0]
+        date: getTodayKey()
       })
       showSuccessToast('Транзакция добавлена')
     } catch (err) {
       showErrorToast(err, 'создание транзакции')
+    }
+  }
+
+  // Transfer between accounts
+  const handleCreateTransfer = async () => {
+    if (!user?.id || !transferForm.fromAccountId || !transferForm.toAccountId || !transferForm.fromAmount) return
+    if (transferForm.fromAccountId === transferForm.toAccountId) return
+
+    if (!isOnline()) {
+      showErrorToast(new Error('Network error'), 'перевод')
+      return
+    }
+
+    setIsCreatingTransfer(true)
+    try {
+      const fromAmt = parseFloat(transferForm.fromAmount)
+      const toAmt = transferForm.isCurrencyExchange && transferForm.toAmount
+        ? parseFloat(transferForm.toAmount)
+        : fromAmt
+
+      const fromAccount = summary?.accounts.find(a => a.id === transferForm.fromAccountId)
+      const toAccount = summary?.accounts.find(a => a.id === transferForm.toAccountId)
+      const desc = transferForm.description || `Перевод: ${fromAccount?.name} → ${toAccount?.name}`
+
+      // Create debit on source account
+      await fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          accountId: transferForm.fromAccountId,
+          amount: -fromAmt,
+          description: desc,
+          date: transferForm.date,
+          zone: 'transfer'
+        })
+      })
+
+      // Create credit on destination account
+      await fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          accountId: transferForm.toAccountId,
+          amount: toAmt,
+          description: desc,
+          date: transferForm.date,
+          zone: 'transfer'
+        })
+      })
+
+      // Reload finance data
+      const financeRes = await fetch(`/api/finance?userId=${user.id}`)
+      const data = await financeRes.json()
+      if (data.success) setSummary(data.summary)
+
+      setShowTransfer(false)
+      setTransferForm({
+        fromAccountId: '',
+        toAccountId: '',
+        fromAmount: '',
+        toAmount: '',
+        isCurrencyExchange: false,
+        date: getTodayKey(),
+        description: ''
+      })
+      showSuccessToast('Перевод выполнен')
+    } catch (err) {
+      showErrorToast(err, 'перевод')
+    } finally {
+      setIsCreatingTransfer(false)
     }
   }
 
@@ -554,9 +641,13 @@ export function FinanceScreen() {
             <Plus className="w-4 h-4 mr-1" />
             Счёт
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowTransfer(true)}>
+            <ArrowLeftRight className="w-4 h-4 mr-1" />
+            Перевод
+          </Button>
           <Button size="sm" className="bg-primary" onClick={() => setShowAddTransaction(true)}>
             <Plus className="w-4 h-4 mr-1" />
-            Транзакция
+            Доход/Расход
           </Button>
         </div>
       </div>
@@ -1302,6 +1393,120 @@ export function FinanceScreen() {
                   <p className="text-sm text-muted-foreground">Нет транзакций за период</p>
                 </div>
               )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer Dialog */}
+      <Dialog open={showTransfer} onOpenChange={setShowTransfer}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowLeftRight className="w-4 h-4" />
+              Перевод между счетами
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label>Откуда</Label>
+              <Select value={transferForm.fromAccountId} onValueChange={v => setTransferForm(prev => ({ ...prev, fromAccountId: v }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Счёт списания" />
+                </SelectTrigger>
+                <SelectContent>
+                  {summary?.accounts.map(account => (
+                    <SelectItem key={account.id} value={account.id}>
+                      <div className="flex items-center gap-2">
+                        <span>{account.icon}</span>
+                        {account.name} ({account.currency || 'RUB'})
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Куда</Label>
+              <Select value={transferForm.toAccountId} onValueChange={v => setTransferForm(prev => ({ ...prev, toAccountId: v }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Счёт зачисления" />
+                </SelectTrigger>
+                <SelectContent>
+                  {summary?.accounts.filter(a => a.id !== transferForm.fromAccountId).map(account => (
+                    <SelectItem key={account.id} value={account.id}>
+                      <div className="flex items-center gap-2">
+                        <span>{account.icon}</span>
+                        {account.name} ({account.currency || 'RUB'})
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Сумма списания</Label>
+              <Input
+                type="number"
+                placeholder="1000"
+                value={transferForm.fromAmount}
+                onChange={e => setTransferForm(prev => ({ ...prev, fromAmount: e.target.value }))}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="currencyExchange"
+                checked={transferForm.isCurrencyExchange}
+                onChange={e => setTransferForm(prev => ({ ...prev, isCurrencyExchange: e.target.checked }))}
+                className="rounded"
+              />
+              <Label htmlFor="currencyExchange" className="cursor-pointer">Обмен валюты (разные суммы)</Label>
+            </div>
+            {transferForm.isCurrencyExchange && (
+              <div className="space-y-2">
+                <Label>Сумма зачисления</Label>
+                <Input
+                  type="number"
+                  placeholder="12.5"
+                  value={transferForm.toAmount}
+                  onChange={e => setTransferForm(prev => ({ ...prev, toAmount: e.target.value }))}
+                />
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Дата</Label>
+              <Input
+                type="date"
+                value={transferForm.date}
+                onChange={e => setTransferForm(prev => ({ ...prev, date: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Комментарий (опц.)</Label>
+              <Input
+                placeholder="Пополнение карты..."
+                value={transferForm.description}
+                onChange={e => setTransferForm(prev => ({ ...prev, description: e.target.value }))}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setShowTransfer(false)}>
+                Отмена
+              </Button>
+              <Button
+                className="flex-1 bg-primary"
+                onClick={handleCreateTransfer}
+                disabled={
+                  !transferForm.fromAccountId ||
+                  !transferForm.toAccountId ||
+                  !transferForm.fromAmount ||
+                  transferForm.fromAccountId === transferForm.toAccountId ||
+                  isCreatingTransfer
+                }
+              >
+                {isCreatingTransfer ? 'Переводим...' : 'Перевести'}
+              </Button>
             </div>
           </div>
         </DialogContent>

@@ -265,7 +265,7 @@ export function HealthScreen() {
       : newFood.mealType
     
     try {
-      await fetch('/api/food', {
+      const postRes = await fetch('/api/food', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -279,7 +279,8 @@ export function HealthScreen() {
           amount: newFood.amount || null
         })
       })
-      
+      if (!postRes.ok) throw new Error('Failed to save food entry')
+
       // Reload food
       const res = await fetch(`/api/food?userId=${user.id}&date=${selectedDate}`)
       const json = await res.json()

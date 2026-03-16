@@ -32,10 +32,12 @@ import { JourneyScreen } from '@/components/screens/JourneyScreen'
 import { OnboardingScreen } from '@/components/screens/OnboardingScreen'
 import { ZonesScreen } from '@/components/screens/ZonesScreen'
 import { AllRitualsScreen } from '@/components/screens/AllRitualsScreen'
+import { SettingsScreen } from '@/components/screens/SettingsScreen'
 import { DatePicker, DateBadge } from '@/components/DatePicker'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { TopNav } from '@/components/TopNav'
+import { QuickEntryFAB } from '@/components/QuickEntryFAB'
 
 // Screens that show bottom nav
 const MAIN_SCREENS: Screen[] = ['home', 'fitness', 'rituals', 'gym', 'profile', 'tasks', 'notes', 'development', 'finance', 'challenges', 'health', 'daily-summary', 'goals', 'skills', 'traits', 'export', 'journey']
@@ -104,6 +106,8 @@ function ScreenRouter({ screen, contentId }: { screen: Screen; contentId?: strin
       return <ZonesScreen />
     case 'all-rituals':
       return <AllRitualsScreen />
+    case 'settings':
+      return <SettingsScreen />
     default:
       return <HomeScreen />
   }
@@ -252,6 +256,9 @@ export default function Home() {
       
       {/* Fixed Bottom Navigation */}
       {showBottomNav && <BottomNav />}
+
+      {/* Quick Entry FAB */}
+      {showBottomNav && <QuickEntryFAB />}
     </main>
   )
 }

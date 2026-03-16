@@ -88,8 +88,7 @@ export async function authenticateTelegramUser(telegramUser: {
         type: 'magiclink',
         email: existingUser.email!
       })
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const session = (sessionData as any)?.session ?? null
+      const session = (sessionData as { session?: unknown })?.session ?? null
       
       return { 
         user: existingUser, 
