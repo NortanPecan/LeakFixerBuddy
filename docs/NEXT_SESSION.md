@@ -32,25 +32,26 @@
 
 ---
 
-# Текущее состояние (2026-03-16 — рефакторинг)
+# Текущее состояние (2026-03-16 — мажорный релиз)
 
-## Последняя выполненная задача — ПОЛНЫЙ РЕФАКТОРИНГ (2026-03-16)
+## Последняя выполненная задача — БАГФИКСЫ + НОВЫЕ ФИЧИ (2026-03-16)
 
 ### ✅ Выполнено за сессию:
 
 | # | Задача | Файлы |
 |---|--------|-------|
-| 1 | Lessons API — контент для дней 11–30 | `src/app/api/lessons/route.ts` |
-| 2 | AllRitualsScreen — полная реализация вместо заглушки | `src/components/screens/AllRitualsScreen.tsx` |
-| 3 | Habits — Edit UI + PATCH API | `src/components/screens/HabitsScreen.tsx`, `src/app/api/habits/route.ts` |
-| 4 | Rituals — Edit UI (PATCH API уже был) | `src/components/screens/RitualsScreen.tsx` |
-| 5 | GymScreen — вынести типы в features/gym | `src/features/gym/types.ts`, `src/features/gym/index.ts` |
-| 6 | Удалены неиспользуемые Supabase клиенты | `supabase-browser.ts`, `supabase-server.ts` удалены |
-| 7 | TopNav — добавлены отсутствующие Screen titles | `src/components/TopNav.tsx` |
-| 8 | Zod валидация — habits + tasks API | `src/app/api/habits/route.ts`, `src/app/api/tasks/route.ts` |
-| 9 | Обновлена документация | `docs/CURRENT_STATE.md`, `docs/NEXT_SESSION.md` |
+| 1 | **КРИТИЧЕСКИЙ**: Исправлен timezone баг `parseDateKey` (UTC vs local) — еда/задачи на неверной дате | `src/lib/date-utils.ts` |
+| 2 | Ритуалы — постоянное удаление (permanent delete) в UI | `src/components/screens/RitualsScreen.tsx`, `src/app/api/rituals/route.ts` |
+| 3 | Notes — фикс двойного сабмита при создании ритуала | `src/components/screens/NotesScreen.tsx` |
+| 4 | Finance — перевод между счетами + обмен валюты | `src/components/screens/FinanceScreen.tsx` |
+| 5 | Кастомная нижняя навигация (1–6 модулей, 14 вариантов) | `src/components/BottomNav.tsx`, `src/lib/store.ts` |
+| 6 | Settings экран (Profile → Навигация) | `src/components/screens/SettingsScreen.tsx` |
+| 7 | QuickEntryFAB — плавающая кнопка быстрого ввода (вес, еда, заметка) | `src/components/QuickEntryFAB.tsx` |
+| 8 | Buddy — полный дашборд партнёра + рекомендации | `src/components/screens/BuddyScreen.tsx`, `src/app/api/buddies/dashboard/route.ts` |
+| 9 | Удалены мёртвые SQL-файлы (migration-supabase.sql, fix-missing-columns.sql, supabase/migrations/*.sql) | - |
+| 10 | 0 TypeScript ошибок, 0 lint ошибок | - |
 
-### Ветка: `claude/code-review-cV4rg` (все изменения запушены)
+### Ветка: `claude/code-review-cV4rg` (все изменения запушены, commit `f514be2`)
 
 ## Новая концепция (обсуждено в сессии 2026-03-16)
 
@@ -75,20 +76,21 @@
 
 ## Следующие задачи
 
-**Приоритет 1:** Проработать алгоритм Leak Engine
-- Какие метрики анализируем (привычки, ритуалы, здоровье, финансы, тренировки)
-- Как определяем "лик" (порог, частота, тренд)
-- Формат отчёта
+**Приоритет 1:** Leak Engine — анализ слабых мест
+- Алгоритм анализа всех метрик за неделю/месяц
+- Выявление "ликов" из данных: ритуалы, привычки, здоровье, финансы, тренировки
+- Weekly/Monthly Report экран с ликами и советами
 
-**Приоритет 2:** Weekly/Monthly Report экран
-- Новый экран с ликами и советами
+**Приоритет 2:** Дополнительные баги из исходного списка (не сделаны):
+- Challenges: баг ввода числа (поле не очищается) — проверить
+- Zones: полноценный add/edit/delete UI
 
-**Приоритет 3:** Buddy Matching алгоритм и обновление BuddyScreen
+**Приоритет 3:** Buddy Matching алгоритм по похожим ликам
 
 **Технический долг (оставшийся):**
-- GymScreen (4054 строк) — всё ещё монолит, безопасный сплит требует Context/Hook
-- Pre-existing TypeScript ошибки в journey/route.ts и gym/exercises routes (не критично)
-- Skeleton loading в ProfileScreen (данные загружаются с дефолтами, работает)
+- GymScreen (4000+ строк) — монолит, требует Context/Hook для безопасного сплита
+- Добавить Privacy Settings в Buddy — настроить что именно видит бадди
+- Finance: добавить категории в форму транзакции (частично — select уже есть)
 
 ---
 
