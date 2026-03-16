@@ -210,17 +210,26 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-// DELETE - Archive ritual
+// DELETE - Archive or permanently delete ritual
+// ?ritualId=xxx — archive (soft delete)
+// ?ritualId=xxx&permanent=true — permanent delete
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const ritualId = searchParams.get('ritualId')
+    const permanent = searchParams.get('permanent') === 'true'
 
     if (!ritualId) {
       return NextResponse.json({ error: 'ritualId required' }, { status: 400 })
     }
 
-    // Archive instead of delete
+    if (permanent) {
+      // Permanently delete ritual and all its completions (cascade in schema)
+      await db.ritual.delete({ where: { id: ritualId } })
+      return NextResponse.json({ success: true, deleted: true })
+    }
+
+    // Archive instead of delete (default)
     const ritual = await db.ritual.update({
       where: { id: ritualId },
       data: { status: 'archived' }
@@ -228,7 +237,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true, ritual })
   } catch (error) {
-    console.error('Archive ritual error:', error)
-    return NextResponse.json({ error: 'Failed to archive ritual' }, { status: 500 })
+    console.error('Archive/delete ritual error:', error)
+    return NextResponse.json({ error: 'Failed to delete ritual' }, { status: 500 })
   }
 }

@@ -2,29 +2,45 @@
 
 import { useAppStore, Screen } from '@/lib/store'
 import { cn } from '@/lib/utils'
-import { Home, User, Dumbbell, Target, Flame } from 'lucide-react'
+import {
+  Home, User, Dumbbell, Target, Flame, Heart, Wallet, ListTodo,
+  BookOpen, Zap, Trophy, MapPin, TrendingUp, Users
+} from 'lucide-react'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 
-const NAV_ITEMS: { screen: Screen; icon: typeof Home; label: string; emoji?: string }[] = [
+export const ALL_NAV_OPTIONS: { screen: Screen; icon: typeof Home; label: string; emoji: string }[] = [
   { screen: 'home', icon: Home, label: 'Главная', emoji: '🏠' },
   { screen: 'gym', icon: Dumbbell, label: 'GYM', emoji: '💪' },
   { screen: 'rituals', icon: Flame, label: 'Ритуалы', emoji: '🔥' },
   { screen: 'goals', icon: Target, label: 'Цели', emoji: '🎯' },
   { screen: 'profile', icon: User, label: 'Профиль', emoji: '👤' },
+  { screen: 'fitness', icon: Heart, label: 'Здоровье', emoji: '❤️' },
+  { screen: 'finance', icon: Wallet, label: 'Финансы', emoji: '💰' },
+  { screen: 'tasks', icon: ListTodo, label: 'Задачи', emoji: '📋' },
+  { screen: 'notes', icon: BookOpen, label: 'Заметки', emoji: '📝' },
+  { screen: 'health', icon: Zap, label: 'Питание', emoji: '⚡' },
+  { screen: 'challenges', icon: Trophy, label: 'Вызовы', emoji: '🏆' },
+  { screen: 'zones', icon: MapPin, label: 'Зоны', emoji: '🗺️' },
+  { screen: 'development', icon: TrendingUp, label: 'Развитие', emoji: '📈' },
+  { screen: 'buddies', icon: Users, label: 'Бадди', emoji: '👥' },
 ]
 
 export function BottomNav() {
-  const { currentScreen, setScreen } = useAppStore()
+  const { currentScreen, setScreen, navItems } = useAppStore()
   const [pressedItem, setPressedItem] = useState<Screen | null>(null)
 
+  const activeItems = navItems.length > 0
+    ? ALL_NAV_OPTIONS.filter(opt => navItems.includes(opt.screen))
+    : ALL_NAV_OPTIONS.slice(0, 5)
+
   return (
-    <motion.nav 
+    <motion.nav
       initial={{ y: 100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      transition={{ 
-        type: 'spring', 
-        stiffness: 300, 
+      transition={{
+        type: 'spring',
+        stiffness: 300,
         damping: 30,
         delay: 0.15
       }}
@@ -34,7 +50,7 @@ export function BottomNav() {
       }}
     >
       {/* Rounded container */}
-      <div 
+      <div
         className="mx-3 mb-2"
         style={{
           background: 'rgba(0, 0, 0, 0.6)',
@@ -46,10 +62,10 @@ export function BottomNav() {
         }}
       >
         <div className="flex items-center justify-around gap-2 px-2 py-3">
-          {NAV_ITEMS.map(({ screen, icon: Icon, label, emoji }) => {
+          {activeItems.map(({ screen, icon: Icon, label, emoji }) => {
             const isActive = currentScreen === screen
             const isPressed = pressedItem === screen
-            
+
             return (
               <button
                 key={screen}
@@ -69,38 +85,36 @@ export function BottomNav() {
                   isActive && 'scale-105'
                 )}
               >
-                {/* Icon container - clean rounded */}
-                <div 
+                {/* Icon container */}
+                <div
                   className={cn(
                     'relative flex items-center justify-center',
                     'w-12 h-12 rounded-full',
                     'transition-all duration-200'
                   )}
                   style={{
-                    background: isActive 
+                    background: isActive
                       ? 'linear-gradient(135deg, rgba(99,102,241,0.4) 0%, rgba(139,92,246,0.3) 100%)'
                       : 'rgba(255,255,255,0.08)',
-                    boxShadow: isActive 
-                      ? '0 0 20px rgba(99,102,241,0.4)' 
+                    boxShadow: isActive
+                      ? '0 0 20px rgba(99,102,241,0.4)'
                       : 'none',
                   }}
                 >
-                  {isActive && emoji ? (
-                    <span className="text-xl">
-                      {emoji}
-                    </span>
+                  {isActive ? (
+                    <span className="text-xl">{emoji}</span>
                   ) : (
-                    <Icon 
+                    <Icon
                       className={cn(
                         'w-5 h-5 transition-all duration-200',
-                        isActive ? 'text-white' : 'text-white/50'
+                        'text-white/50'
                       )}
                     />
                   )}
                 </div>
-                
+
                 {/* Label */}
-                <span 
+                <span
                   className={cn(
                     'text-[10px] font-medium mt-0.5',
                     'transition-colors duration-200',

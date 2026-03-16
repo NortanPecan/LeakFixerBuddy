@@ -514,6 +514,22 @@ export function ProfileScreen() {
         </CardContent>
       </Card>
 
+      {/* Navigation settings */}
+      <Card className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors" onClick={() => setScreen('settings')}>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Settings className="w-5 h-5" />
+              Навигация и интерфейс
+            </CardTitle>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">Настройте нижнее меню и разделы</p>
+        </CardContent>
+      </Card>
+
       {/* Buddies */}
       <Card className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors" onClick={() => setScreen('buddies')}>
         <CardHeader className="pb-2">

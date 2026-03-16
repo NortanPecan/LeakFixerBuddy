@@ -1,10 +1,10 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import { formatDateKey, normalizeToDate, getToday } from '@/lib/date-utils'
+import { formatDateKey, normalizeToDate, getToday, getTodayKey } from '@/lib/date-utils'
 import { getMoodStatus } from '@/lib/mood-utils'
 
 // Navigation state
-export type Screen = 'home' | 'fitness' | 'rituals' | 'gym' | 'profile' | 'create-ritual' | 'catalog' | 'all-rituals' | 'tasks' | 'chain' | 'create-task' | 'create-chain' | 'notes' | 'note-detail' | 'development' | 'content-detail' | 'finance' | 'challenges' | 'challenge-detail' | 'health' | 'daily-summary' | 'goals' | 'skills' | 'traits' | 'export' | 'stats' | 'buddies' | 'journey' | 'onboarding' | 'zones'
+export type Screen = 'home' | 'fitness' | 'rituals' | 'gym' | 'profile' | 'create-ritual' | 'catalog' | 'all-rituals' | 'tasks' | 'chain' | 'create-task' | 'create-chain' | 'notes' | 'note-detail' | 'development' | 'content-detail' | 'finance' | 'challenges' | 'challenge-detail' | 'health' | 'daily-summary' | 'goals' | 'skills' | 'traits' | 'export' | 'stats' | 'buddies' | 'journey' | 'onboarding' | 'zones' | 'settings'
 
 interface User {
   id: string
@@ -112,6 +112,10 @@ interface AppState {
   activeGymPeriod: GymPeriod | null
   setActiveGymPeriod: (period: GymPeriod | null) => void
 
+  // Custom nav
+  navItems: Screen[]
+  setNavItems: (items: Screen[]) => void
+
   // Demo mode
   isDemoMode: boolean
   setDemoMode: (demo: boolean) => void
@@ -208,6 +212,10 @@ export const useAppStore = create<AppState>()(
       setActiveGymPeriod: (period) => set({ activeGymPeriod: period }),
 
       // Demo mode
+      // Custom nav
+      navItems: ['home', 'gym', 'rituals', 'goals', 'profile'] as Screen[],
+      setNavItems: (items) => set({ navItems: items }),
+
       isDemoMode: false,
       setDemoMode: (demo) => set({ isDemoMode: demo }),
       isOwnerMode: false,
@@ -366,7 +374,7 @@ export const useAppStore = create<AppState>()(
         set({ globalState: newState })
 
         try {
-          const today = new Date().toISOString().split('T')[0]
+          const today = getTodayKey()
           await fetch('/api/state', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -440,7 +448,8 @@ export const useAppStore = create<AppState>()(
         activeGymPeriod: state.activeGymPeriod,
         selectedContentId: state.selectedContentId,
         selectedChainId: state.selectedChainId,
-        selectedDate: state.selectedDate
+        selectedDate: state.selectedDate,
+        navItems: state.navItems
       }) as AppState
     }
   )

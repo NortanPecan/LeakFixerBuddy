@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ArrowLeft, Calendar, Clock, Link2 } from 'lucide-react'
+import { getTodayKey, getTomorrowKey } from '@/lib/date-utils'
 
 const ZONES = [
   { id: 'LeakFixer', label: 'LeakFixer', icon: '🔧' },
@@ -21,26 +22,18 @@ export function CreateTaskScreen() {
   const [isSaving, setIsSaving] = useState(false)
 
   const [text, setText] = useState('')
-  const [date, setDate] = useState(() => selectedDate || new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(() => selectedDate || getTodayKey())
   const [time, setTime] = useState('')
   const [zone, setZone] = useState('')
   const [notes, setNotes] = useState('')
   const [noDate, setNoDate] = useState(false)
   const [quickDate, setQuickDate] = useState<'today' | 'tomorrow' | 'custom'>('today')
 
-  // Quick date helpers
-  const getToday = () => new Date().toISOString().split('T')[0]
-  const getTomorrow = () => {
-    const d = new Date()
-    d.setDate(d.getDate() + 1)
-    return d.toISOString().split('T')[0]
-  }
-
   const handleQuickDate = (mode: 'today' | 'tomorrow' | 'custom') => {
     setQuickDate(mode)
     setNoDate(false)
-    if (mode === 'today') setDate(getToday())
-    else if (mode === 'tomorrow') setDate(getTomorrow())
+    if (mode === 'today') setDate(getTodayKey())
+    else if (mode === 'tomorrow') setDate(getTomorrowKey())
   }
 
   const handleSave = async () => {
@@ -154,7 +147,7 @@ export function CreateTaskScreen() {
             )}
             {!noDate && quickDate !== 'custom' && (
               <div className="flex-1 text-sm text-muted-foreground flex items-center">
-                {quickDate === 'today' ? getToday() : getTomorrow()}
+                {quickDate === 'today' ? getTodayKey() : getTomorrowKey()}
               </div>
             )}
           </div>

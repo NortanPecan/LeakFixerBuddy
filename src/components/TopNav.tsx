@@ -43,6 +43,7 @@ const SCREEN_TITLES: Record<Screen, string> = {
   'onboarding': 'Начало',
   'zones': 'Зоны',
   'note-detail': 'Заметка',
+  'settings': 'Настройки',
 }
 
 // Screens that show "back" button instead of "menu"

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '@/lib/store'
+import { getTodayKey } from '@/lib/date-utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -79,7 +80,7 @@ export function ChainDetailScreen() {
   // Complete a task
   const handleCompleteTask = async (task: Task) => {
     try {
-      const today = new Date().toISOString().split('T')[0]
+      const today = getTodayKey()
       await fetch('/api/tasks', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
