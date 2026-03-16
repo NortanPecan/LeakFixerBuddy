@@ -14,7 +14,8 @@ import {
   Flame,
   Sparkles,
   X,
-  Trash2
+  Trash2,
+  Pencil
 } from 'lucide-react'
 import {
   Dialog,
@@ -56,6 +57,9 @@ export function HabitsScreen() {
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [deletingHabit, setDeletingHabit] = useState<Habit | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [editingHabit, setEditingHabit] = useState<Habit | null>(null)
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
+  const [editForm, setEditForm] = useState({ name: '', icon: '✨', color: '#10b981', target: 1 })
   const [newHabit, setNewHabit] = useState({
     name: '',
     icon: '✨',
@@ -154,6 +158,46 @@ export function HabitsScreen() {
       }
     } catch (error) {
       showErrorToast(error, 'creating habit')
+    }
+  }
+
+  // Open edit dialog
+  const openEditDialog = (habit: Habit) => {
+    setEditForm({ name: habit.name, icon: habit.icon, color: habit.color, target: habit.target })
+    setEditingHabit(habit)
+  }
+
+  // Save habit edit
+  const handleSaveEdit = async () => {
+    if (!editingHabit || !editForm.name.trim()) return
+    setIsSavingEdit(true)
+    try {
+      const res = await fetch('/api/habits', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          habitId: editingHabit.id,
+          name: editForm.name.trim(),
+          icon: editForm.icon,
+          color: editForm.color,
+          target: editForm.target,
+        })
+      })
+      const data = await res.json()
+      if (data.success) {
+        setHabits(prev => prev.map(h => h.id === editingHabit.id
+          ? { ...h, name: data.habit.name, icon: data.habit.icon, color: data.habit.color, target: data.habit.target }
+          : h
+        ))
+        setEditingHabit(null)
+        showSuccessToast('Привычка обновлена')
+      } else {
+        throw new Error('Failed to update')
+      }
+    } catch (error) {
+      showErrorToast(error, 'updating habit')
+    } finally {
+      setIsSavingEdit(false)
     }
   }
 
@@ -368,7 +412,7 @@ export function HabitsScreen() {
                       )}
                     </div>
 
-                    {/* Action button */}
+                    {/* Action buttons */}
                     <div className="flex items-center gap-1">
                       <Button
                         variant={habit.isCompleted ? 'outline' : 'default'}
@@ -381,6 +425,14 @@ export function HabitsScreen() {
                         ) : (
                           <Plus className="w-4 h-4" />
                         )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0 h-8 w-8 p-0 text-muted-foreground hover:text-primary"
+                        onClick={() => openEditDialog(habit)}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
                       </Button>
                       <Button
                         variant="ghost"
@@ -444,6 +496,79 @@ export function HabitsScreen() {
           </CardContent>
         </Card>
       )}
+
+      {/* Edit habit dialog */}
+      <Dialog open={!!editingHabit} onOpenChange={() => setEditingHabit(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Редактировать привычку</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Название</Label>
+              <Input
+                id="edit-name"
+                value={editForm.name}
+                onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="Название привычки"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Иконка</Label>
+              <div className="flex flex-wrap gap-2">
+                {HABIT_ICONS.map((icon) => (
+                  <Button
+                    key={icon}
+                    type="button"
+                    variant={editForm.icon === icon ? 'default' : 'outline'}
+                    size="sm"
+                    className="text-lg h-10 w-10 p-0"
+                    onClick={() => setEditForm(prev => ({ ...prev, icon }))}
+                  >
+                    {icon}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Цвет</Label>
+              <div className="flex flex-wrap gap-2">
+                {HABIT_COLORS.map((color) => (
+                  <Button
+                    key={color}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    style={{ outline: editForm.color === color ? `2px solid ${color}` : undefined }}
+                    onClick={() => setEditForm(prev => ({ ...prev, color }))}
+                  >
+                    <span className="w-5 h-5 rounded-full block" style={{ backgroundColor: color }} />
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-target">Цель (раз в день)</Label>
+              <Input
+                id="edit-target"
+                type="number"
+                min={1}
+                value={editForm.target}
+                onChange={(e) => setEditForm(prev => ({ ...prev, target: parseInt(e.target.value) || 1 }))}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setEditingHabit(null)} disabled={isSavingEdit}>
+                Отмена
+              </Button>
+              <Button className="flex-1 bg-primary" onClick={handleSaveEdit} disabled={isSavingEdit}>
+                {isSavingEdit ? 'Сохранение...' : 'Сохранить'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete confirmation dialog */}
       <Dialog open={!!deletingHabit} onOpenChange={() => setDeletingHabit(null)}>

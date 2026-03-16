@@ -175,6 +175,51 @@ export async function POST(request: NextRequest) {
 }
 
 /**
+ * Update a habit
+ * PATCH /api/habits
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { habitId, name, icon, color, target } = body
+
+    if (!habitId) {
+      return NextResponse.json(
+        { error: 'Habit ID required' },
+        { status: 400 }
+      )
+    }
+
+    const habit = await db.habit.update({
+      where: { id: habitId },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(icon !== undefined && { icon }),
+        ...(color !== undefined && { color }),
+        ...(target !== undefined && { target }),
+      }
+    })
+
+    return NextResponse.json({
+      success: true,
+      habit: {
+        id: habit.id,
+        name: habit.name,
+        icon: habit.icon,
+        color: habit.color,
+        target: habit.target,
+      }
+    })
+  } catch (error) {
+    console.error('Update habit error:', error)
+    return NextResponse.json(
+      { error: 'Failed to update habit' },
+      { status: 500 }
+    )
+  }
+}
+
+/**
  * Delete a habit
  * DELETE /api/habits?habitId=<id>
  */
