@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
     const toGoal = currentWeight && targetWeight ? targetWeight - currentWeight : null
 
     // Calculate progress
-    let progress = null
+    let progress: number | null = null
     if (weightStart && targetWeight && currentWeight) {
       const totalToLose = weightStart - targetWeight
       const lost = weightStart - currentWeight

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import type { Prisma } from '@prisma/client'
 
 // GET - Fetch today's workout plan (v1.3 enhanced)
 export async function GET(request: NextRequest) {
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
     })
 
     // If no workout today, find next upcoming workout
-    let nextWorkout = null
+    let nextWorkout: Prisma.GymWorkoutGetPayload<{ include: { workoutTemplate: true } }> | null = null
     if (!todayWorkout) {
       nextWorkout = await db.gymWorkout.findFirst({
         where: {

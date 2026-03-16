@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getPresetById, SWAMP_ESCAPE_PRESET } from '@/lib/rituals/presets'
+import type { Prisma } from '@prisma/client'
 
 // GET - Get available presets
 export async function GET() {
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create rituals from preset
-    const createdRituals = []
+    const createdRituals: Prisma.RitualGetPayload<Record<string, never>>[] = []
     for (let i = 0; i < preset.rituals.length; i++) {
       const presetRitual = preset.rituals[i]
       

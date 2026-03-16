@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import { formatDateKey, normalizeToDate, getToday } from '@/lib/date-utils'
 import { getMoodStatus } from '@/lib/mood-utils'
 
@@ -26,6 +26,7 @@ interface UserProfile {
   targetWeight?: number
   workProfile?: string
   waterBaseline?: number
+  bio?: string
   // Body measurements
   waist?: number
   hips?: number
@@ -427,7 +428,7 @@ export const useAppStore = create<AppState>()(
     {
       name: 'leakfixer-storage',
       // Only use localStorage on client side to avoid SSR errors
-      storage: typeof window !== 'undefined' ? localStorage : undefined,
+      storage: typeof window !== 'undefined' ? createJSONStorage(() => localStorage) : undefined,
       partialize: (state) => ({
         user: state.user,
         profile: state.profile,
@@ -440,7 +441,7 @@ export const useAppStore = create<AppState>()(
         selectedContentId: state.selectedContentId,
         selectedChainId: state.selectedChainId,
         selectedDate: state.selectedDate
-      })
+      }) as AppState
     }
   )
 )
