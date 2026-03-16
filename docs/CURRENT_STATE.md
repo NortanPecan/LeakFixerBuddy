@@ -39,6 +39,7 @@ DIRECT_DATABASE_URL="postgresql://...supabase.co:5432/postgres?sslmode=require"
 src/features/gym/
 ├── index.ts                    # Экспорты
 ├── constants.ts                # Константы (TRAINING_TYPES, MUSCLE_GROUPS, etc.)
+├── types.ts                    # Интерфейсы (GymWorkout, GymExercise, GymPeriod, etc.)
 └── components/
     ├── AddWorkoutDialog.tsx    # Диалог добавления тренировки
     └── CompletionPreviewDialog.tsx # Превью завершения
@@ -73,10 +74,16 @@ const text = getMoodStatusText(7)
 
 | Файл | До | После | Изменение |
 |------|-----|-------|-----------|
-| GymScreen.tsx | 4216 строк | ~4000 строк | -5% |
+| GymScreen.tsx | 4216 строк | ~4054 строк | -202 строки |
 | ProfileScreen.tsx | 1096 строк | 895 строк | **-18%** |
 | Дубликаты схем Prisma | 3 файла | 1 файл | -2 файла |
 | getMoodStatus дубли | 3 копии | 1 копия | -2 копии |
+| Supabase клиенты | 5 файлов | 3 файла | -2 файла (удалены неиспользуемые) |
+| AllRitualsScreen | заглушка | полный компонент | ✅ реализован |
+| Lessons API | дни 1-10 | дни 1-30 | +20 уроков |
+| Habits PATCH | нет | есть | ✅ добавлен |
+| HabitsScreen edit | нет | есть | ✅ добавлен |
+| RitualsScreen edit | нет | есть | ✅ добавлен |
 
 ---
 
@@ -90,11 +97,11 @@ const text = getMoodStatusText(7)
 |------|------------|
 | `supabaseClient.ts` | Центральные функции для получения env (URL, ключи) |
 | `supabase.ts` | Основной клиент (anon + admin), ленивая инициализация |
-| `supabase-server.ts` | SSR клиент для Server Components |
-| `supabase-browser.ts` | Клиент для Client Components |
 | `auth-telegram.ts` | Auth клиент для Telegram аутентификации |
 | `supabase-rest.ts` | PostgREST query builder |
 | `db.ts` | Prisma client для Supabase PostgreSQL |
+
+> **Удалены:** `supabase-server.ts` и `supabase-browser.ts` — не использовались ни в одном импорте.
 
 ### Использование:
 
@@ -107,12 +114,6 @@ import { getSupabase, supabase } from '@/lib/supabase'
 
 // Admin клиент (service role key) - только для server-side
 import { getSupabaseAdmin, supabaseAdmin } from '@/lib/supabase'
-
-// SSR для Server Components
-import { createSupabaseServerClient } from '@/lib/supabase-server'
-
-// Клиент для браузера
-import { createSupabaseBrowserClient } from '@/lib/supabase-browser'
 
 // Prisma client
 import { db } from '@/lib/db'
