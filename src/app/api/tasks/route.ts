@@ -1,5 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { z } from 'zod'
+
+const CreateTaskSchema = z.object({
+  userId: z.string().min(1),
+  text: z.string().min(1).max(500),
+  chainId: z.string().optional().nullable(),
+  date: z.string().optional().nullable(),
+  time: z.string().optional().nullable(),
+  zone: z.string().optional().nullable(),
+  ritualId: z.string().optional().nullable(),
+  notes: z.string().max(1000).optional().nullable(),
+  order: z.number().int().optional(),
+})
+
+const UpdateTaskSchema = z.object({
+  taskId: z.string().min(1),
+  text: z.string().min(1).max(500).optional(),
+  status: z.enum(['todo', 'done', 'skipped']).optional(),
+  date: z.string().optional().nullable(),
+  time: z.string().optional().nullable(),
+  zone: z.string().optional().nullable(),
+  notes: z.string().max(1000).optional().nullable(),
+  order: z.number().int().optional(),
+  chainId: z.string().optional().nullable(),
+})
 
 // GET /api/tasks - Get tasks for a user
 export async function GET(request: NextRequest) {
@@ -62,11 +87,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, chainId, text, date, time, zone, ritualId, notes, order } = body
-
-    if (!userId || !text) {
-      return NextResponse.json({ error: 'userId and text are required' }, { status: 400 })
+    const parsed = CreateTaskSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid request', details: parsed.error.flatten() }, { status: 400 })
     }
+    const { userId, chainId, text, date, time, zone, ritualId, notes, order } = parsed.data
 
     // If adding to a chain, get the next order number
     let taskOrder = order ?? 0
@@ -107,11 +132,11 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { taskId, text, status, date, time, zone, notes, order, chainId } = body
-
-    if (!taskId) {
-      return NextResponse.json({ error: 'taskId is required' }, { status: 400 })
+    const parsed = UpdateTaskSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid request', details: parsed.error.flatten() }, { status: 400 })
     }
+    const { taskId, text, status, date, time, zone, notes, order, chainId } = parsed.data
 
     const task = await db.task.update({
       where: { id: taskId },

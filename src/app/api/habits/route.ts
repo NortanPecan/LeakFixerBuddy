@@ -1,6 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { calculateHabitStreak, type CompletionEntry } from '@/lib/streak-utils'
+import { z } from 'zod'
+
+const CreateHabitSchema = z.object({
+  userId: z.string().min(1),
+  name: z.string().min(1).max(100),
+  icon: z.string().optional(),
+  color: z.string().optional(),
+  frequency: z.enum(['daily', 'weekly']).optional(),
+  target: z.number().int().min(1).max(100).optional(),
+})
+
+const UpdateHabitSchema = z.object({
+  habitId: z.string().min(1),
+  name: z.string().min(1).max(100).optional(),
+  icon: z.string().optional(),
+  color: z.string().optional(),
+  target: z.number().int().min(1).max(100).optional(),
+})
 
 /**
  * Get user's habits with today's logs and weekly stats
@@ -131,14 +149,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, name, icon, color, frequency, target } = body
-
-    if (!userId || !name) {
+    const parsed = CreateHabitSchema.safeParse(body)
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: 'User ID and name required' },
+        { error: 'Invalid request', details: parsed.error.flatten() },
         { status: 400 }
       )
     }
+    const { userId, name, icon, color, frequency, target } = parsed.data
 
     const habit = await db.habit.create({
       data: {
@@ -169,6 +187,51 @@ export async function POST(request: NextRequest) {
     console.error('Create habit error:', error)
     return NextResponse.json(
       { error: 'Failed to create habit' },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * Update a habit
+ * PATCH /api/habits
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const parsed = UpdateHabitSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid request', details: parsed.error.flatten() },
+        { status: 400 }
+      )
+    }
+    const { habitId, name, icon, color, target } = parsed.data
+
+    const habit = await db.habit.update({
+      where: { id: habitId },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(icon !== undefined && { icon }),
+        ...(color !== undefined && { color }),
+        ...(target !== undefined && { target }),
+      }
+    })
+
+    return NextResponse.json({
+      success: true,
+      habit: {
+        id: habit.id,
+        name: habit.name,
+        icon: habit.icon,
+        color: habit.color,
+        target: habit.target,
+      }
+    })
+  } catch (error) {
+    console.error('Update habit error:', error)
+    return NextResponse.json(
+      { error: 'Failed to update habit' },
       { status: 500 }
     )
   }

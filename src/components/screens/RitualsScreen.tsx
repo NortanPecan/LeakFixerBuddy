@@ -24,8 +24,12 @@ import {
   Flame,
   Clock,
   X,
-  Trash2
+  Trash2,
+  Pencil
 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -58,6 +62,14 @@ export function RitualsScreen() {
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [deletingRitual, setDeletingRitual] = useState<Ritual | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [editingRitual, setEditingRitual] = useState<Ritual | null>(null)
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
+  const [editForm, setEditForm] = useState({
+    title: '',
+    timeWindow: 'any' as Ritual['timeWindow'],
+    days: [] as number[],
+    goalShort: '',
+  })
 
   // Stats from API
   const [stats, setStats] = useState({
@@ -178,6 +190,52 @@ export function RitualsScreen() {
   const handleSkipPreset = () => {
     setShowPresetModal(false)
     localStorage.setItem('ritual_preset_offered', 'true')
+  }
+
+  // Open edit dialog for ritual
+  const openEditRitual = (ritual: Ritual) => {
+    setEditForm({
+      title: ritual.title,
+      timeWindow: ritual.timeWindow,
+      days: ritual.days,
+      goalShort: ritual.goalShort || '',
+    })
+    setEditingRitual(ritual)
+    setShowDetail(false)
+  }
+
+  // Save ritual edits
+  const handleSaveEditRitual = async () => {
+    if (!editingRitual || !editForm.title.trim()) return
+    setIsSavingEdit(true)
+    try {
+      const res = await fetch('/api/rituals', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ritualId: editingRitual.id,
+          title: editForm.title.trim(),
+          timeWindow: editForm.timeWindow,
+          days: editForm.days,
+          goalShort: editForm.goalShort,
+        })
+      })
+      const data = await res.json()
+      if (data.success) {
+        setRituals(prev => prev.map(r => r.id === editingRitual.id
+          ? { ...r, title: editForm.title.trim(), timeWindow: editForm.timeWindow, days: editForm.days, goalShort: editForm.goalShort }
+          : r
+        ))
+        setEditingRitual(null)
+        showSuccessToast('Ритуал обновлён')
+      } else {
+        throw new Error('Failed to update')
+      }
+    } catch (error) {
+      showErrorToast(error, 'update ritual')
+    } finally {
+      setIsSavingEdit(false)
+    }
   }
 
   // Delete/archive ritual
@@ -521,8 +579,8 @@ export function RitualsScreen() {
             <DialogTitle>{selectedRitual?.title}</DialogTitle>
           </DialogHeader>
           {selectedRitual && (
-            <RitualDetailContent 
-              ritual={selectedRitual} 
+            <RitualDetailContent
+              ritual={selectedRitual}
               onComplete={(completed) => {
                 handleToggleComplete(selectedRitual, completed)
                 setSelectedRitual(prev => prev ? { ...prev, completedToday: completed } : null)
@@ -530,8 +588,85 @@ export function RitualsScreen() {
               onDelete={() => {
                 setDeletingRitual(selectedRitual)
               }}
+              onEdit={() => openEditRitual(selectedRitual)}
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit ritual dialog */}
+      <Dialog open={!!editingRitual} onOpenChange={() => setEditingRitual(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Редактировать ритуал</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label>Название</Label>
+              <Input
+                value={editForm.title}
+                onChange={(e) => setEditForm(p => ({ ...p, title: e.target.value }))}
+                placeholder="Название ритуала"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Время дня</Label>
+              <Select
+                value={editForm.timeWindow}
+                onValueChange={(v) => setEditForm(p => ({ ...p, timeWindow: v as Ritual['timeWindow'] }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="morning">🌅 Утро</SelectItem>
+                  <SelectItem value="day">☀️ День</SelectItem>
+                  <SelectItem value="evening">🌙 Вечер</SelectItem>
+                  <SelectItem value="any">⏰ Любое время</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Дни недели</Label>
+              <div className="flex gap-1 flex-wrap">
+                {['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map((day, idx) => {
+                  const dayNum = idx + 1
+                  const active = editForm.days.includes(dayNum)
+                  return (
+                    <Button
+                      key={dayNum}
+                      type="button"
+                      size="sm"
+                      variant={active ? 'default' : 'outline'}
+                      className="h-8 w-8 p-0 text-xs"
+                      onClick={() => setEditForm(p => ({
+                        ...p,
+                        days: active ? p.days.filter(d => d !== dayNum) : [...p.days, dayNum].sort()
+                      }))}
+                    >
+                      {day}
+                    </Button>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Цель (коротко)</Label>
+              <Input
+                value={editForm.goalShort}
+                onChange={(e) => setEditForm(p => ({ ...p, goalShort: e.target.value }))}
+                placeholder="Зачем этот ритуал?"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setEditingRitual(null)} disabled={isSavingEdit}>
+                Отмена
+              </Button>
+              <Button className="flex-1 bg-primary" onClick={handleSaveEditRitual} disabled={isSavingEdit}>
+                {isSavingEdit ? 'Сохранение...' : 'Сохранить'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -572,14 +707,16 @@ export function RitualsScreen() {
 }
 
 // Ritual Detail Content Component
-function RitualDetailContent({ 
-  ritual, 
+function RitualDetailContent({
+  ritual,
   onComplete,
-  onDelete
-}: { 
-  ritual: Ritual; 
+  onDelete,
+  onEdit
+}: {
+  ritual: Ritual;
   onComplete: (completed: boolean) => void;
   onDelete: () => void;
+  onEdit: () => void;
 }) {
   const [completions, setCompletions] = useState<Array<{ date: Date; completed: boolean; note?: string }>>([])
   const [stats, setStats] = useState({ streak: 0, completionRate: 0 })
@@ -716,6 +853,16 @@ function RitualDetailContent({
             Отметить выполненным
           </>
         )}
+      </Button>
+
+      {/* Edit button */}
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={onEdit}
+      >
+        <Pencil className="w-4 h-4 mr-2" />
+        Редактировать ритуал
       </Button>
 
       {/* Delete button */}

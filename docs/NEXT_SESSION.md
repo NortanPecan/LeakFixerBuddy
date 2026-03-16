@@ -9,78 +9,86 @@
 ```
 Работаем над проектом LeakFixerBuddy.
 
-ПУТЬ К ПРОЕКТУ: /home/z/my-project
+ПУТЬ К ПРОЕКТУ: /home/user/LeakFixerBuddy
 
 ОБЯЗАТЕЛЬНО прочитай перед работой:
 1. docs/NEXT_SESSION.md — текущее состояние
-2. docs/BUG_ANALYSIS.md — детальный анализ 23 багов
-3. docs/AGENT_INSTRUCTIONS.md — правила
+2. docs/AGENT_INSTRUCTIONS.md — правила
+3. worklog.md — последние шаги
 
 КРИТИЧЕСКИ:
-- ВЕТКА: только main
+- ВЕТКА: только main (не master!)
 - БД: ТОЛЬКО Supabase PostgreSQL (локальной БД нет!)
 - Git: Не делаю команды сам
 - Push: разрешён без force
 
-ИСПРАВЛЕНО 24 из 24 багов:
-✅ F-1: Duplicate accounts
-✅ F-2: Can't delete account
-✅ F-3: Currency selection (RUB/USD/EUR + custom)
-✅ F-4: Categories not visible
-✅ F-5: Can't edit transactions
-✅ F-6: Can't edit accounts
-✅ F-7: Initial balance in edit
-✅ F-8: Account history + period filter
-✅ T-1: Date initialization
-✅ T-2: Creates on previous date
-✅ T-3: Checkbox not working
-✅ C-1: Can't clear number field
-✅ C-2: Add ritual connection hint
-✅ ST-1: Remove Steam references
-✅ R-1: Rituals duplicate from note
-✅ R-2: Rituals can't delete (already had archive)
-✅ R-3: Rituals tags cause duplicates
-✅ FD-1: Food can't edit
-✅ FD-2: Food time tracking
-✅ Z-1: Zones CRUD
-✅ Z-2: Hide inactive zones (Steam removed)
-✅ #11: Notes edit links + shorten ritual title
-✅ #16: Custom account types
-✅ #19: Custom meal types
+ВСЕ 24 БАГА ИСПРАВЛЕНЫ ✅ — новых багов нет.
 
-🎉 ВСЕ БАГИ ИСПРАВЛЕНЫ!
+ТЕКУЩИЙ ФОКУС: Новая концепция — социальная сеть для саморазвития.
+Читай раздел "Следующие задачи" ниже.
 
-SCHEMA UP TO DATE:
-- Account.currency — ✅ уже в схеме (default RUB)
-- FoodEntry.time — ✅ уже в схеме (optional)
-- Zone model — ✅ добавлена (Z-1)
-
-Начинай с Z-1 (Zones CRUD). Подтверди, что прочитал файлы.
+Подтверди, что прочитал файлы.
 ```
 
 ---
 
-# Текущее состояние (2025-01-XX)
+# Текущее состояние (2026-03-16 — рефакторинг)
 
-## Последняя выполненная задача
-- ✅ Исправлено **21 из 21 бага**
-- ✅ Finance: F-1..F-8 (Account CRUD + History)
-- ✅ Tasks: T-1..T-3 (Date + Checkbox)
-- ✅ Challenges: C-1..C-2 (Number field + Hint)
-- ✅ Steam: ST-1 (References removed)
-- ✅ Rituals: R-1..R-3 (Duplicate + Delete + Tags)
-- ✅ Food: FD-1..FD-2 (Edit + Time)
-- ✅ Zones: Z-1..Z-2 (CRUD + Hide inactive)
-- ✅ Закоммичено и запушено в main
+## Последняя выполненная задача — ПОЛНЫЙ РЕФАКТОРИНГ (2026-03-16)
 
-## Незавершённые задачи
+### ✅ Выполнено за сессию:
 
-**НЕТ!** Все 21 баг из BUG_ANALYSIS.md исправлены! 🎉
+| # | Задача | Файлы |
+|---|--------|-------|
+| 1 | Lessons API — контент для дней 11–30 | `src/app/api/lessons/route.ts` |
+| 2 | AllRitualsScreen — полная реализация вместо заглушки | `src/components/screens/AllRitualsScreen.tsx` |
+| 3 | Habits — Edit UI + PATCH API | `src/components/screens/HabitsScreen.tsx`, `src/app/api/habits/route.ts` |
+| 4 | Rituals — Edit UI (PATCH API уже был) | `src/components/screens/RitualsScreen.tsx` |
+| 5 | GymScreen — вынести типы в features/gym | `src/features/gym/types.ts`, `src/features/gym/index.ts` |
+| 6 | Удалены неиспользуемые Supabase клиенты | `supabase-browser.ts`, `supabase-server.ts` удалены |
+| 7 | TopNav — добавлены отсутствующие Screen titles | `src/components/TopNav.tsx` |
+| 8 | Zod валидация — habits + tasks API | `src/app/api/habits/route.ts`, `src/app/api/tasks/route.ts` |
+| 9 | Обновлена документация | `docs/CURRENT_STATE.md`, `docs/NEXT_SESSION.md` |
 
-### ✅ SCHEMA UP TO DATE
-- Account.currency — уже в схеме (default RUB)
-- FoodEntry.time — уже в схеме (optional)
-- Zone model — добавлена в этой сессии
+### Ветка: `claude/code-review-cV4rg` (все изменения запушены)
+
+## Новая концепция (обсуждено в сессии 2026-03-16)
+
+Пользователь хочет развить приложение в **социальную сеть для саморазвития** с фокусом на:
+
+### 1. Leak Engine (система ликов)
+- Алгоритм анализа всех метрик за неделю/месяц
+- Выявление слабых мест ("ликов") из данных пользователя
+- Рекомендации "как исправить" каждый лик
+- Еженедельный и ежемесячный отчёт с ликами
+
+### 2. Smart Buddy Matching
+- Сейчас: базовая модель `Buddy` в БД есть, экран `BuddyScreen` есть
+- Нужно: матчинг по похожим ликам (алгоритм сходства)
+- Закрепление за ОДНИМ бадди (не несколько)
+- Совместный прогресс в исправлении ликов
+
+### 3. Социальная часть
+- Сравнение метрик с бадди
+- Совместный дашборд двух пользователей
+- Простой интерфейс (не перегружать)
+
+## Следующие задачи
+
+**Приоритет 1:** Проработать алгоритм Leak Engine
+- Какие метрики анализируем (привычки, ритуалы, здоровье, финансы, тренировки)
+- Как определяем "лик" (порог, частота, тренд)
+- Формат отчёта
+
+**Приоритет 2:** Weekly/Monthly Report экран
+- Новый экран с ликами и советами
+
+**Приоритет 3:** Buddy Matching алгоритм и обновление BuddyScreen
+
+**Технический долг (оставшийся):**
+- GymScreen (4054 строк) — всё ещё монолит, безопасный сплит требует Context/Hook
+- Pre-existing TypeScript ошибки в journey/route.ts и gym/exercises routes (не критично)
+- Skeleton loading в ProfileScreen (данные загружаются с дефолтами, работает)
 
 ---
 
@@ -106,7 +114,7 @@ src/
 ├── lib/
 │   ├── db.ts         # Prisma client
 │   ├── store.ts      # Zustand store
-│   └── supabase*.ts  # Supabase clients
+│   └── supabase*.ts  # supabase.ts, supabaseClient.ts, supabase-rest.ts, auth-telegram.ts, db.ts
 └── prisma/
     └── schema.prisma # PostgreSQL only
 ```

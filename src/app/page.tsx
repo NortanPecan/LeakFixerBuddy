@@ -31,6 +31,7 @@ import { BuddyScreen } from '@/components/screens/BuddyScreen'
 import { JourneyScreen } from '@/components/screens/JourneyScreen'
 import { OnboardingScreen } from '@/components/screens/OnboardingScreen'
 import { ZonesScreen } from '@/components/screens/ZonesScreen'
+import { AllRitualsScreen } from '@/components/screens/AllRitualsScreen'
 import { DatePicker, DateBadge } from '@/components/DatePicker'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -108,19 +109,6 @@ function ScreenRouter({ screen, contentId }: { screen: Screen; contentId?: strin
   }
 }
 
-// Simple All Rituals screen
-function AllRitualsScreen() {
-  const { setScreen } = useAppStore()
-  return (
-    <div className="flex flex-col gap-4 pb-20">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Все ритуалы</h1>
-        <Button variant="outline" onClick={() => setScreen('rituals')}>Назад</Button>
-      </div>
-      <p className="text-muted-foreground">Список всех ритуалов...</p>
-    </div>
-  )
-}
 
 export default function Home() {
   const {
