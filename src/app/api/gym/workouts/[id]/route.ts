@@ -50,7 +50,7 @@ export async function GET(
           exercise.template?.currentWeight
 
         // Create sets
-        const setsData = []
+        const setsData: { exerciseId: string; setNum: number; weight: number | null | undefined; reps: number | null | undefined; completed: boolean; isWarmup: boolean }[] = []
         for (let i = 1; i <= targetSets; i++) {
           setsData.push({
             exerciseId: exercise.id,

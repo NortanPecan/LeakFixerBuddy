@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
 
     // v1.5: Auto-create working sets
     if (createSets && finalTargetSets > 0) {
-      const setsData = []
+      const setsData: { exerciseId: string; setNum: number; weight: number | null; reps: number | null; completed: boolean; isWarmup: boolean }[] = []
       for (let i = 1; i <= finalTargetSets; i++) {
         setsData.push({
           exerciseId: exercise.id,
@@ -118,7 +118,7 @@ export async function PATCH(request: NextRequest) {
       
       if (targetSets > currentCount) {
         // Add more sets
-        const newSets = []
+        const newSets: { exerciseId: string; setNum: number; weight: number | null; reps: number | null; completed: boolean; isWarmup: boolean }[] = []
         for (let i = currentCount + 1; i <= targetSets; i++) {
           newSets.push({
             exerciseId,

@@ -84,10 +84,12 @@ export async function authenticateTelegramUser(telegramUser: {
       })
       
       // Generate new session token
-      const { data: { session }, error: sessionError } = await client.auth.admin.generateLink({
+      const { data: sessionData, error: _sessionError } = await client.auth.admin.generateLink({
         type: 'magiclink',
         email: existingUser.email!
       })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const session = (sessionData as any)?.session ?? null
       
       return { 
         user: existingUser, 
@@ -176,15 +178,23 @@ export function verifyTelegramInitData(initData: string): {
  */
 export async function generateSessionToken(userId: string) {
   const client = getSupabaseAuth()
+
+  // Look up user email first (required by Supabase v2 generateLink)
+  const { data: userRecord, error: userError } = await client.auth.admin.getUserById(userId)
+  if (userError || !userRecord?.user?.email) {
+    console.error('Error fetching user for token generation:', userError)
+    return null
+  }
+
   const { data, error } = await client.auth.admin.generateLink({
     type: 'magiclink',
-    userId
+    email: userRecord.user.email
   })
-  
+
   if (error) {
     console.error('Error generating session:', error)
     return null
   }
-  
+
   return data
 }

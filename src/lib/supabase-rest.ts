@@ -242,19 +242,19 @@ export class SupabaseQueryBuilder<T> {
   /**
    * Execute GET request and return single item
    */
-  async getSingle(): Promise<SupabaseRestResponse<T>> {
+  async getSingle<U = T>(): Promise<SupabaseRestResponse<U>> {
     this._single = true
     const result = await this.get()
-    
+
     if (result.error) {
       return { data: null, error: result.error }
     }
-    
+
     if (!result.data || result.data.length === 0) {
       return { data: null, error: { code: 'NOT_FOUND', message: 'No results found', details: null, hint: null } }
     }
-    
-    return { data: result.data[0], error: null }
+
+    return { data: result.data[0] as unknown as U, error: null }
   }
 
   /**

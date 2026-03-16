@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    let firstLesson = null
+    let firstLesson: { day: number; title: string } | null = null
     if (lessonsResponse.ok) {
       const lessons = await lessonsResponse.json()
       firstLesson = lessons[0] || null

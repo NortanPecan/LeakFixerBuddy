@@ -69,6 +69,7 @@ import {
   type Buddy,
   type UserSettings,
   type ActivityStats,
+  type UserAttribute,
 } from '@/features/profile'
 import { QuickAccess, DonateCard } from '@/features/profile'
 

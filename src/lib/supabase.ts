@@ -71,7 +71,7 @@ export const supabase = new Proxy({} as SupabaseClient<Database>, {
   }
 })
 
-export const supabaseAdmin = new Proxy({} as SupabaseClient<Database> | null, {
+export const supabaseAdmin = new Proxy({} as SupabaseClient<Database>, {
   get(_, prop) {
     const admin = getSupabaseAdmin()
     return admin ? admin[prop as keyof SupabaseClient<Database>] : null

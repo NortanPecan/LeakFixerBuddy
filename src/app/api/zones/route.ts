@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
 
     // If no zones exist, create default ones
     if (zones.length === 0) {
-      zones = await db.zone.createMany({
+      await db.zone.createMany({
         data: DEFAULT_ZONES.map(zone => ({
           userId,
           ...zone,
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
           isActive: true
         }))
       })
-      
+
       // Fetch the created zones
       zones = await db.zone.findMany({
         where: { userId },

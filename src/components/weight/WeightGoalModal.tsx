@@ -100,7 +100,7 @@ export function WeightGoalModal({ open, onOpenChange, currentWeight, onUpdate }:
     const progress = current ? (currentLost / totalToLose) * 100 : 0
 
     // If deadline set, calculate required rate
-    let requiredRate = null
+    let requiredRate: number | null = null
     if (weightDeadline && current) {
       const deadline = new Date(weightDeadline)
       const today = new Date()

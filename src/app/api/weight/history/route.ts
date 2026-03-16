@@ -76,8 +76,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Calculate progress
-    let progress = null
-    let progressPercent = null
+    let progress: { startWeight: number; currentWeight: number; targetWeight: number; lost: number; toLose: number; totalToLose: number } | null = null
+    let progressPercent: number | null = null
     if (weightStart && targetWeight && currentWeight) {
       progress = {
         startWeight: weightStart,
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Calculate rate and forecast
-    let forecast = null
+    let forecast: { ratePerWeek: number; direction: string; predictedDate: Date | null; daysToGoal: number | null; deadlineStatus: { willMakeIt: boolean; daysDifference: number; message: string } | null } | null = null
     if (history.length >= 2 && weightStartAt) {
       const firstDate = new Date(history[0].date)
       const lastDate = new Date(history[history.length - 1].date)
@@ -104,8 +104,8 @@ export async function GET(request: NextRequest) {
         const ratePerWeek = weightLost / weeksPassed // positive = losing weight
 
         // Predicted date to reach goal
-        let predictedDate = null
-        let daysToGoal = null
+        let predictedDate: Date | null = null
+        let daysToGoal: number | null = null
         if (targetWeight && currentWeight && ratePerWeek !== 0) {
           const weightToLose = currentWeight - targetWeight
           const weeksToGoal = weightToLose / ratePerWeek
@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Compare with deadline
-        let deadlineStatus = null
+        let deadlineStatus: { willMakeIt: boolean; daysDifference: number; message: string } | null = null
         if (weightDeadline && predictedDate) {
           const deadlineDate = new Date(weightDeadline)
           const daysDiff = Math.round((deadlineDate.getTime() - predictedDate.getTime()) / (1000 * 60 * 60 * 24))

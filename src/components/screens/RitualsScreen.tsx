@@ -469,7 +469,10 @@ export function RitualsScreen() {
                                 <div className="flex gap-1 mt-1">
                                   {(() => {
                                     try {
-                                      const attrs = JSON.parse(ritual.attributes as string) as AttributeKey[]
+                                      const rawAttrs = ritual.attributes
+                                      const attrs: AttributeKey[] = Array.isArray(rawAttrs)
+                                        ? rawAttrs
+                                        : JSON.parse(rawAttrs as unknown as string)
                                       return attrs.map(attr => (
                                         <Badge 
                                           key={attr} 
@@ -746,7 +749,7 @@ function RitualDetailContent({
 
   // Generate heatmap for last 30 days
   const generateHeatmap = useCallback(() => {
-    const days = []
+    const days: { date: Date; completed: boolean; note: string | undefined | null }[] = []
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
