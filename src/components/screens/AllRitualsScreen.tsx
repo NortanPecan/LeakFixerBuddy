@@ -53,7 +53,7 @@ export function AllRitualsScreen() {
   }, { morning: [], day: [], evening: [], any: [] })
 
   const categories = Array.from(new Set(rituals.map(r => r.category))) as RitualCategory[]
-  const completedCount = rituals.filter(r => r.isCompleted).length
+  const completedCount = rituals.filter(r => r.completedToday).length
 
   if (isLoading) {
     return (
@@ -151,7 +151,7 @@ export function AllRitualsScreen() {
                 {TIME_WINDOW_LABELS[tw]}
               </span>
               <span className="text-xs text-muted-foreground">
-                ({group.filter(r => r.isCompleted).length}/{group.length})
+                ({group.filter(r => r.completedToday).length}/{group.length})
               </span>
             </div>
             {group.map(ritual => (
@@ -171,14 +171,14 @@ function RitualRow({ ritual }: { ritual: Ritual }) {
   const isEveryDay = days.length === 7
 
   return (
-    <Card className={`border transition-colors ${ritual.isCompleted ? 'border-emerald-500/30 bg-emerald-500/5' : ''}`}>
+    <Card className={`border transition-colors ${ritual.completedToday ? 'border-emerald-500/30 bg-emerald-500/5' : ''}`}>
       <CardContent className="p-3 flex items-center gap-3">
-        {ritual.isCompleted
+        {ritual.completedToday
           ? <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
           : <Circle className="w-5 h-5 text-muted-foreground shrink-0" />
         }
         <div className="flex-1 min-w-0">
-          <p className={`text-sm font-medium truncate ${ritual.isCompleted ? 'line-through text-muted-foreground' : ''}`}>
+          <p className={`text-sm font-medium truncate ${ritual.completedToday ? 'line-through text-muted-foreground' : ''}`}>
             {ritual.title}
           </p>
           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -195,7 +195,7 @@ function RitualRow({ ritual }: { ritual: Ritual }) {
             )}
           </div>
         </div>
-        {ritual.streak > 0 && (
+        {(ritual.streak ?? 0) > 0 && (
           <div className="text-right shrink-0">
             <span className="text-xs font-semibold text-orange-400">🔥 {ritual.streak}</span>
           </div>

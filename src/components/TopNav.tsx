@@ -36,7 +36,13 @@ const SCREEN_TITLES: Record<Screen, string> = {
   'skills': 'Навыки',
   'traits': 'Черты',
   'export': 'Экспорт',
-  'all-rituals': 'Все ритуалы'
+  'all-rituals': 'Все ритуалы',
+  'stats': 'Статистика',
+  'buddies': 'Бадди',
+  'journey': 'Путь',
+  'onboarding': 'Начало',
+  'zones': 'Зоны',
+  'note-detail': 'Заметка',
 }
 
 // Screens that show "back" button instead of "menu"
