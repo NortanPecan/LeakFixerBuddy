@@ -2,14 +2,16 @@
 
 import { useAppStore, Screen } from '@/lib/store'
 import { cn } from '@/lib/utils'
-import { 
-  ChevronLeft, 
-  Menu, 
-  X, 
+import {
+  ChevronLeft,
+  Menu,
+  X,
+  Search,
 } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
+import { QuickSearch } from '@/components/QuickSearch'
 
 // Screen titles mapping
 const SCREEN_TITLES: Record<Screen, string> = {
@@ -44,6 +46,8 @@ const SCREEN_TITLES: Record<Screen, string> = {
   'zones': 'Зоны',
   'note-detail': 'Заметка',
   'settings': 'Настройки',
+  'weekly-report': 'Лики недели',
+  'habits': 'Привычки',
 }
 
 // Screens that show "back" button instead of "menu"
@@ -58,6 +62,7 @@ const SCREEN_HISTORY: Screen[] = []
 export function TopNav() {
   const { currentScreen, setScreen, isDemoMode } = useAppStore()
   const [showMenu, setShowMenu] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
 
   // Track screen history
   useEffect(() => {
@@ -163,7 +168,7 @@ export function TopNav() {
           right: 0,
         }}
       >
-        <div className="flex items-center px-4 py-2">
+        <div className="flex items-center justify-between px-4 py-2">
           {isDetailScreen ? (
             <button
               onClick={handleBack}
@@ -187,6 +192,20 @@ export function TopNav() {
               <Menu className="w-5 h-5 text-white" />
             </button>
           )}
+
+          {/* Quick Search button — always visible */}
+          <button
+            onClick={() => setShowSearch(true)}
+            className={cn(
+              'flex items-center gap-2 h-10 px-3 rounded-full',
+              'bg-white/8 hover:bg-white/15 active:bg-white/20',
+              'border border-white/10',
+              'transition-all duration-200 active:scale-95',
+            )}
+          >
+            <Search className="w-4 h-4 text-white/50" />
+            <span className="text-xs text-white/30 pr-1 hidden sm:block">Поиск...</span>
+          </button>
         </div>
       </motion.div>
 
@@ -244,6 +263,7 @@ export function TopNav() {
                   { screen: 'skills' as Screen, icon: '📈', label: 'Навыки' },
                   { screen: 'traits' as Screen, icon: '✨', label: 'Черты' },
                   { screen: 'daily-summary' as Screen, icon: '📊', label: 'Сводка' },
+                  { screen: 'weekly-report' as Screen, icon: '🔍', label: 'Лики' },
                   { screen: 'export' as Screen, icon: '📤', label: 'Экспорт' },
                   { screen: 'notes' as Screen, icon: '📝', label: 'Заметки' },
                   { screen: 'development' as Screen, icon: '📚', label: 'Развитие' },
@@ -312,12 +332,15 @@ export function TopNav() {
       )}
 
       {/* Spacer to push content below header + menu row */}
-      <div 
+      <div
         className="w-full shrink-0"
         style={{
-          height: 'calc(84px + 48px + env(safe-area-inset-top, 0px))',
+          height: 'calc(84px + 56px + env(safe-area-inset-top, 0px))',
         }}
       />
+
+      {/* Quick Search Modal */}
+      <QuickSearch open={showSearch} onClose={() => setShowSearch(false)} />
     </>
   )
 }

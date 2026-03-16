@@ -4,7 +4,7 @@ import { formatDateKey, normalizeToDate, getToday, getTodayKey } from '@/lib/dat
 import { getMoodStatus } from '@/lib/mood-utils'
 
 // Navigation state
-export type Screen = 'home' | 'fitness' | 'rituals' | 'gym' | 'profile' | 'create-ritual' | 'catalog' | 'all-rituals' | 'tasks' | 'chain' | 'create-task' | 'create-chain' | 'notes' | 'note-detail' | 'development' | 'content-detail' | 'finance' | 'challenges' | 'challenge-detail' | 'health' | 'daily-summary' | 'goals' | 'skills' | 'traits' | 'export' | 'stats' | 'buddies' | 'journey' | 'onboarding' | 'zones' | 'settings'
+export type Screen = 'home' | 'fitness' | 'rituals' | 'gym' | 'profile' | 'create-ritual' | 'catalog' | 'all-rituals' | 'tasks' | 'chain' | 'create-task' | 'create-chain' | 'notes' | 'note-detail' | 'development' | 'content-detail' | 'finance' | 'challenges' | 'challenge-detail' | 'health' | 'daily-summary' | 'goals' | 'skills' | 'traits' | 'export' | 'stats' | 'buddies' | 'journey' | 'onboarding' | 'zones' | 'settings' | 'weekly-report' | 'habits'
 
 interface User {
   id: string
@@ -130,6 +130,7 @@ interface AppState {
 
   // Actions
   login: (isDemo?: boolean, isOwner?: boolean) => Promise<boolean>
+  loginWithEmail: (email: string, password: string, action: 'signin' | 'signup', name?: string) => Promise<{ ok: boolean; error?: string }>
   logout: () => void
   updateProgress: (day?: number, streak?: number, points?: number) => Promise<void>
   updateGlobalState: (mood: number, energy: number) => Promise<void>
@@ -317,6 +318,55 @@ export const useAppStore = create<AppState>()(
           }
           set({ isLoading: false })
           return false
+        }
+      },
+
+      // Email login
+      loginWithEmail: async (email, password, action, name) => {
+        set({ isLoading: true })
+        try {
+          const response = await fetch('/api/auth/email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password, action, name }),
+          })
+          const data = await response.json()
+
+          if (!response.ok) {
+            return { ok: false, error: data.error || 'Auth failed' }
+          }
+
+          const { getMoodStatus } = await import('@/lib/mood-utils')
+          let globalState: GlobalState | null = null
+          if (data.globalState) {
+            const moodStatus = getMoodStatus(data.globalState.mood)
+            globalState = {
+              mood: data.globalState.mood,
+              energy: data.globalState.energy || 5,
+              trend: data.globalState.trend || 0,
+              status: moodStatus.status,
+            }
+          }
+
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('leakfixer-auth-mode', 'email')
+          }
+
+          set({
+            user: data.user,
+            profile: data.profile,
+            globalState,
+            isDemoMode: false,
+            isOwnerMode: false,
+            isInitialized: true,
+            isLoading: false,
+          })
+
+          return { ok: true }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Auth failed'
+          set({ isLoading: false })
+          return { ok: false, error: message }
         }
       },
 

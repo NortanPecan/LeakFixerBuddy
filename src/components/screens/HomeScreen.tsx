@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useAppStore } from '@/lib/store'
+import { useAppStore, Screen } from '@/lib/store'
 import { showErrorToast, showSuccessToast } from '@/lib/network-utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -78,7 +78,17 @@ export function HomeScreen() {
   const [energyValue, setEnergyValue] = useState(globalState?.energy || 5)
   const [dailySummary, setDailySummary] = useState<DailySummary | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(true)
-  
+
+  // Check-in status for today
+  const [checkinStatus, setCheckinStatus] = useState<{
+    morningDone: boolean
+    eveningDone: boolean
+    morningEnergy?: number
+    morningFocus?: string
+    eveningRating?: number
+    eveningWin?: string
+  }>({ morningDone: false, eveningDone: false })
+
   // Weight tracking state
   const [weightValue, setWeightValue] = useState('')
   const [weightLoading, setWeightLoading] = useState(false)
@@ -96,6 +106,9 @@ export function HomeScreen() {
 
   const currentDay = user?.day || 1
   const progress = ((currentDay - 1) / 30) * 100
+
+  // Days with app (since account creation — approximated by streak + day)
+  const daysWithApp = user?.day || 1
 
   // Load lesson
   useEffect(() => {
@@ -115,6 +128,31 @@ export function HomeScreen() {
     }
     loadLesson()
   }, [user?.id, currentDay])
+
+  // Load today's check-in status
+  useEffect(() => {
+    const loadCheckin = async () => {
+      if (!user?.id) return
+      try {
+        const today = selectedDate
+        const res = await fetch(`/api/checkin?userId=${user.id}&date=${today}`)
+        const data = await res.json()
+        if (data.success) {
+          setCheckinStatus({
+            morningDone: !!data.morning,
+            eveningDone: !!data.evening,
+            morningEnergy: data.morning?.energy,
+            morningFocus: data.morning?.focusWord,
+            eveningRating: data.evening?.dayRating,
+            eveningWin: data.evening?.win,
+          })
+        }
+      } catch {
+        // Silent fail
+      }
+    }
+    loadCheckin()
+  }, [user?.id, selectedDate])
 
   // Load daily summary
   useEffect(() => {
@@ -222,14 +260,20 @@ export function HomeScreen() {
     return colors[level - 1] || 'bg-gray-500'
   }, [])
 
+  const hour = new Date().getHours()
+  const isMorningTime = hour >= 5 && hour < 13
+  const isEveningTime = hour >= 18
+
   return (
     <div className="flex flex-col gap-4 pb-20">
       {/* Header with streak */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">День {currentDay}</h1>
+          <h1 className="text-2xl font-bold text-foreground">
+            {isMorningTime ? 'Доброе утро 🌅' : isEveningTime ? 'Добрый вечер 🌙' : 'Привет 👋'}
+          </h1>
           <p className="text-muted-foreground text-sm">
-            {isLoading ? 'Загрузка...' : lesson?.title || 'Урок не найден'}
+            {user?.firstName || 'Друг'} · {daysWithApp} {pluralDays(daysWithApp)} с приложением
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -244,15 +288,27 @@ export function HomeScreen() {
         </div>
       </div>
 
+      {/* Morning / Evening Check-in block */}
+      <CheckinStatusBlock
+        morningDone={checkinStatus.morningDone}
+        eveningDone={checkinStatus.eveningDone}
+        morningEnergy={checkinStatus.morningEnergy}
+        morningFocus={checkinStatus.morningFocus}
+        eveningRating={checkinStatus.eveningRating}
+        eveningWin={checkinStatus.eveningWin}
+        isMorningTime={isMorningTime}
+        isEveningTime={isEveningTime}
+      />
+
       {/* Progress bar */}
       <div className="space-y-2">
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">Прогресс курса</span>
           <div className="flex items-center gap-2">
             <span className="font-medium text-primary">{Math.round(progress)}%</span>
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               className="h-6 px-2 text-xs bg-primary/10 hover:bg-primary/20"
               onClick={() => setScreen('journey')}
             >
@@ -512,6 +568,25 @@ export function HomeScreen() {
         </Card>
       )}
 
+      {/* Weekly report shortcut */}
+      <Card
+        className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors"
+        onClick={() => setScreen('weekly-report' as Screen)}
+      >
+        <CardContent className="pt-4 pb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🔍</span>
+              <div>
+                <div className="text-sm font-medium text-white">Лики недели</div>
+                <div className="text-xs text-white/40">Паттерны и корреляции</div>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Quick stats */}
       <div className="grid grid-cols-2 gap-3">
         <Card className="bg-card/50 backdrop-blur">
@@ -715,4 +790,128 @@ export function HomeScreen() {
       />
     </div>
   )
+}
+
+// ─── Helper: plural days ─────────────────────────────────────────────────────
+
+function pluralDays(n: number): string {
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return 'день'
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'дня'
+  return 'дней'
+}
+
+// ─── Check-in status block ───────────────────────────────────────────────────
+
+function CheckinStatusBlock({
+  morningDone,
+  eveningDone,
+  morningEnergy,
+  morningFocus,
+  eveningRating,
+  eveningWin,
+  isMorningTime,
+  isEveningTime,
+}: {
+  morningDone: boolean
+  eveningDone: boolean
+  morningEnergy?: number
+  morningFocus?: string
+  eveningRating?: number
+  eveningWin?: string
+  isMorningTime: boolean
+  isEveningTime: boolean
+}) {
+  // If both done — show combined summary
+  if (morningDone && eveningDone) {
+    return (
+      <div
+        className="rounded-2xl p-4"
+        style={{
+          background: 'linear-gradient(135deg, rgba(34,197,94,0.12) 0%, rgba(16,185,129,0.08) 100%)',
+          border: '1px solid rgba(34,197,94,0.2)',
+        }}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-green-400 text-sm font-semibold">✓ Оба чекапа выполнены</span>
+        </div>
+        <div className="flex gap-4 text-xs text-white/50">
+          {morningEnergy && <span>⚡ Утро: {morningEnergy}/10{morningFocus ? ` · ${morningFocus}` : ''}</span>}
+          {eveningRating && <span>🌙 Вечер: {eveningRating}/10</span>}
+        </div>
+        {eveningWin && (
+          <div className="mt-2 text-xs text-white/60 italic">🏆 {eveningWin}</div>
+        )}
+      </div>
+    )
+  }
+
+  // Morning pending in morning time
+  if (!morningDone && isMorningTime) {
+    return (
+      <div
+        className="rounded-2xl p-4 cursor-default"
+        style={{
+          background: 'linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(139,92,246,0.10) 100%)',
+          border: '1px solid rgba(99,102,241,0.25)',
+        }}
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-semibold text-white">Утренний чекап</div>
+            <div className="text-xs text-white/40 mt-0.5">Появится автоматически · займёт 1 мин</div>
+          </div>
+          <div className="text-2xl">🌅</div>
+        </div>
+      </div>
+    )
+  }
+
+  // Evening pending in evening time, morning done
+  if (!eveningDone && isEveningTime && morningDone) {
+    return (
+      <div
+        className="rounded-2xl p-4"
+        style={{
+          background: 'linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(234,88,12,0.10) 100%)',
+          border: '1px solid rgba(245,158,11,0.25)',
+        }}
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-semibold text-white">Вечерний чекап</div>
+            <div className="text-xs text-white/40 mt-0.5">Появится автоматически · закрой день</div>
+          </div>
+          <div className="text-2xl">🌙</div>
+        </div>
+        {morningEnergy && (
+          <div className="mt-2 text-xs text-white/40">
+            Утро: ⚡{morningEnergy}/10{morningFocus ? ` · ${morningFocus}` : ''}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Morning done, not evening time yet
+  if (morningDone && !isEveningTime) {
+    return (
+      <div
+        className="rounded-2xl p-3"
+        style={{
+          background: 'rgba(34,197,94,0.08)',
+          border: '1px solid rgba(34,197,94,0.15)',
+        }}
+      >
+        <div className="flex items-center gap-2 text-xs text-white/50">
+          <span className="text-green-400">✓</span>
+          <span>Утро: ⚡{morningEnergy}/10{morningFocus ? ` · ${morningFocus}` : ''}</span>
+          <span className="ml-auto text-white/30">Вечерний чекап после 18:00</span>
+        </div>
+      </div>
+    )
+  }
+
+  return null
 }

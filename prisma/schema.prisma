@@ -43,11 +43,13 @@ model AppUser {
   photoUrl  String?  @map("photo_url")
   language  String   @default("ru")
   
-  // Future auth methods (phone/email) - currently unused
+  // Email / phone authentication
   email          String?   @unique
   phone          String?   @unique
   emailVerified  DateTime? @map("email_verified")
   phoneVerified  DateTime? @map("phone_verified")
+  passwordHash   String?   @map("password_hash")
+  emailSalt      String?   @map("email_salt")
   
   // User progress & gamification
   day    Int @default(1)
@@ -101,6 +103,8 @@ model AppUser {
   journeyProgress       JourneyProgress?
   // Zones
   zones                 Zone[]
+  // Daily check-ins (morning / evening)
+  dailyCheckins         DailyCheckin[]
 
   @@index([telegramId])
   @@index([email])
@@ -1262,4 +1266,44 @@ model Zone {
 
   @@unique([userId, key])
   @@map("zones")
+}
+
+// ============================================
+// DAILY CHECK-INS - Morning & Evening rituals
+// ============================================
+
+/// Daily check-in — morning or evening ritual
+/// Morning: set energy, focus, top-3 tasks, intention
+/// Evening: rate day, mark wins, reframe if needed
+model DailyCheckin {
+  id     String   @id @default(uuid()) @db.Uuid
+  userId String   @map("user_id") @db.Uuid
+  date   DateTime @db.Date
+  type   String   // 'morning' | 'evening'
+
+  // Morning fields
+  energy    Int?    // 1-10 — predicted energy for the day
+  focusWord String? @map("focus_word")  // one word for the day: "продуктивность", "спокойствие"
+  task1     String? // top task 1
+  task2     String? // top task 2
+  task3     String? // top task 3
+  intention String? // main thought / reframe for the day
+
+  // Evening fields
+  dayRating    Int?    @map("day_rating")    // 1-10 — how the day went
+  task1Done    Boolean @default(false) @map("task1_done")
+  task2Done    Boolean @default(false) @map("task2_done")
+  task3Done    Boolean @default(false) @map("task3_done")
+  win          String? // one win of the day (even small)
+  reframe      String? // if day was bad — reframe thought
+  eveningNote  String? @map("evening_note") // free-form note
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date, type])
+  @@index([userId, date])
+  @@map("daily_checkins")
 }
