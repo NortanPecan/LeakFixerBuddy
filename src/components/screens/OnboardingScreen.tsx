@@ -56,6 +56,11 @@ const STEPS = [
     ],
   },
   {
+    id: 'buddy-privacy',
+    title: 'Приватность с Бадди',
+    subtitle: 'Что видит твой партнёр по саморазвитию',
+  },
+  {
     id: 'goal',
     title: 'Выбери свою цель',
     subtitle: 'Курс адаптируется под твой фокус',
@@ -70,18 +75,48 @@ const GOALS = [
   { id: 'all', label: '🔄 Всё сразу', description: 'Полный курс по всем направлениям' },
 ]
 
+const PRIVACY_OPTIONS = [
+  {
+    id: 'full',
+    emoji: '🔓',
+    label: 'Полный доступ',
+    desc: 'Бадди видит твои ритуалы, привычки, стрики и прогресс по ликам',
+  },
+  {
+    id: 'partial',
+    emoji: '🔒',
+    label: 'Частичный доступ',
+    desc: 'Бадди видит стрики и общий прогресс, но не детали ритуалов и ликов',
+  },
+  {
+    id: 'streak',
+    emoji: '🙈',
+    label: 'Только стрики',
+    desc: 'Бадди видит только твои стрики — ничего личного',
+  },
+]
+
 export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const [currentStep, setCurrentStep] = useState(0)
   const [selectedGoal, setSelectedGoal] = useState<string | null>(null)
-  const { setScreen } = useAppStore()
+  const [selectedPrivacy, setSelectedPrivacy] = useState<string>('full')
+  const { setScreen, user } = useAppStore()
 
   const step = STEPS[currentStep]
   const progress = ((currentStep + 1) / STEPS.length) * 100
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentStep < STEPS.length - 1) {
       setCurrentStep(currentStep + 1)
     } else if (selectedGoal) {
+      // Save buddy privacy setting before completing onboarding
+      if (user?.id) {
+        fetch('/api/settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id, buddyPrivacy: selectedPrivacy }),
+        }).catch(() => {})
+      }
       onComplete(selectedGoal)
       setScreen('journey')
     }
@@ -184,7 +219,47 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           </div>
         )}
 
-        {/* Step 4: Goal Selection */}
+        {/* Step 4: Buddy Privacy */}
+        {step.id === 'buddy-privacy' && (
+          <div className="space-y-6">
+            <div className="text-center">
+              <div className="text-5xl mb-3">🤝</div>
+              <h1 className="text-2xl font-bold">{step.title}</h1>
+              <p className="text-muted-foreground text-sm mt-1">{step.subtitle}</p>
+            </div>
+
+            <div className="space-y-3">
+              {PRIVACY_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
+                    selectedPrivacy === opt.id
+                      ? 'border-primary bg-primary/10'
+                      : 'border-border hover:border-primary/40'
+                  }`}
+                  onClick={() => setSelectedPrivacy(opt.id)}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{opt.emoji}</span>
+                    <div>
+                      <div className="font-medium text-sm">{opt.label}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">{opt.desc}</div>
+                    </div>
+                    {selectedPrivacy === opt.id && (
+                      <CheckCircle2 className="w-5 h-5 text-primary ml-auto flex-shrink-0" />
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <p className="text-[11px] text-muted-foreground text-center">
+              Настройку можно изменить в любое время в разделе Настройки
+            </p>
+          </div>
+        )}
+
+        {/* Step 5: Goal Selection */}
         {step.id === 'goal' && (
           <div className="space-y-6">
             <div className="text-center">
