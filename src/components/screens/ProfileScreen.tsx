@@ -143,6 +143,13 @@ export function ProfileScreen() {
   })
   const [feedback, setFeedback] = useState({ type: 'idea', message: '' })
   const [feedbackSent, setFeedbackSent] = useState(false)
+  const [adminFeedbacks, setAdminFeedbacks] = useState<Array<{
+    id: string; type: string; message: string; status: string; createdAt: string;
+    user: { firstName: string | null; username: string | null; day: number; streak: number }
+  }>>([])
+  const [adminFeedbackCounts, setAdminFeedbackCounts] = useState<Record<string, number>>({})
+  const [adminFeedbackFilter, setAdminFeedbackFilter] = useState<string>('new')
+  const [isLoadingAdminFeedbacks, setIsLoadingAdminFeedbacks] = useState(false)
 
   // Load all data
   useEffect(() => {
@@ -289,9 +296,9 @@ export function ProfileScreen() {
   // Send feedback
   const handleSendFeedback = async () => {
     if (!user?.id || !feedback.message.trim()) return
-    
+
     try {
-      await fetch('/api/feedback', {
+      const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -300,12 +307,49 @@ export function ProfileScreen() {
           message: feedback.message
         })
       })
+      if (!res.ok) throw new Error('send failed')
       setFeedback({ type: 'idea', message: '' })
       setFeedbackSent(true)
       setTimeout(() => setFeedbackSent(false), 3000)
     } catch (error) {
       showErrorToast(error, 'send feedback')
     }
+  }
+
+  const loadAdminFeedbacks = async (filter = adminFeedbackFilter) => {
+    if (!user?.id) return
+    setIsLoadingAdminFeedbacks(true)
+    try {
+      const url = `/api/admin/feedback?userId=${user.id}${filter !== 'all' ? `&status=${filter}` : ''}`
+      const res = await fetch(url)
+      if (!res.ok) return
+      const data = await res.json()
+      setAdminFeedbacks(data.feedbacks || [])
+      setAdminFeedbackCounts(data.counts || {})
+    } catch { /* silent */ } finally {
+      setIsLoadingAdminFeedbacks(false)
+    }
+  }
+
+  const handleMarkFeedback = async (feedbackId: string, status: string) => {
+    if (!user?.id) return
+    try {
+      await fetch('/api/admin/feedback', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, feedbackId, status })
+      })
+      setAdminFeedbacks(prev => prev.map(f => f.id === feedbackId ? { ...f, status } : f))
+      setAdminFeedbackCounts(prev => {
+        const old = adminFeedbacks.find(f => f.id === feedbackId)
+        if (!old) return prev
+        return {
+          ...prev,
+          [old.status]: Math.max(0, (prev[old.status] || 0) - 1),
+          [status]: (prev[status] || 0) + 1
+        }
+      })
+    } catch { /* silent */ }
   }
 
   const handleAddMeasurement = async () => {
@@ -950,31 +994,156 @@ export function ProfileScreen() {
         </Card>
       )}
 
-      {/* Owner notice */}
+      {/* Owner notice + Admin Feedbacks */}
       {isOwnerMode && (
-        <Card className="bg-emerald-500/10 border-emerald-500/30">
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-emerald-400">
-                👤 Owner-режим (тестовый профиль)
-              </p>
-              <Button 
-                variant="outline" 
-                size="sm"
-                className="text-xs"
-                onClick={() => {
-                  if (confirm('Переключиться на Демо-режим?')) {
-                    localStorage.removeItem('leakfixer-auth-mode')
-                    localStorage.setItem('leakfixer-auth-mode', 'demo')
-                    window.location.reload()
-                  }
-                }}
-              >
-                Demo
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <>
+          <Card className="bg-emerald-500/10 border-emerald-500/30">
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-emerald-400">
+                  👤 Owner-режим (тестовый профиль)
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => {
+                    if (confirm('Переключиться на Демо-режим?')) {
+                      localStorage.removeItem('leakfixer-auth-mode')
+                      localStorage.setItem('leakfixer-auth-mode', 'demo')
+                      window.location.reload()
+                    }
+                  }}
+                >
+                  Demo
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Admin: Feedbacks from users */}
+          <Card className="bg-card/50 backdrop-blur border-emerald-500/20">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-emerald-400" />
+                  Фидбеки пользователей
+                  {adminFeedbackCounts['new'] > 0 && (
+                    <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">
+                      {adminFeedbackCounts['new']} новых
+                    </Badge>
+                  )}
+                </CardTitle>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs"
+                  onClick={() => loadAdminFeedbacks(adminFeedbackFilter)}
+                >
+                  Обновить
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {/* Filter tabs */}
+              <div className="flex gap-1 flex-wrap">
+                {(['new', 'read', 'resolved', 'all'] as const).map(f => (
+                  <Button
+                    key={f}
+                    size="sm"
+                    variant={adminFeedbackFilter === f ? 'default' : 'outline'}
+                    className={`text-xs h-7 ${adminFeedbackFilter === f ? 'bg-primary' : ''}`}
+                    onClick={() => {
+                      setAdminFeedbackFilter(f)
+                      loadAdminFeedbacks(f)
+                    }}
+                  >
+                    {f === 'new' ? `Новые${adminFeedbackCounts['new'] ? ` (${adminFeedbackCounts['new']})` : ''}` :
+                     f === 'read' ? 'Прочитано' :
+                     f === 'resolved' ? 'Решено' : 'Все'}
+                  </Button>
+                ))}
+              </div>
+
+              {/* Load button (lazy) */}
+              {adminFeedbacks.length === 0 && !isLoadingAdminFeedbacks && (
+                <Button
+                  variant="outline"
+                  className="w-full text-sm"
+                  onClick={() => loadAdminFeedbacks(adminFeedbackFilter)}
+                >
+                  Загрузить фидбеки
+                </Button>
+              )}
+
+              {isLoadingAdminFeedbacks && (
+                <p className="text-center text-sm text-muted-foreground py-2">Загрузка...</p>
+              )}
+
+              {/* Feedback list */}
+              <div className="space-y-2">
+                {adminFeedbacks.map(fb => (
+                  <div
+                    key={fb.id}
+                    className={`p-3 rounded-xl border text-sm space-y-1.5 ${
+                      fb.status === 'new' ? 'border-yellow-500/30 bg-yellow-500/5' :
+                      fb.status === 'resolved' ? 'border-emerald-500/20 bg-emerald-500/5' :
+                      'border-white/10 bg-white/3'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Badge className={`text-xs ${
+                          fb.type === 'bug' ? 'bg-red-500/20 text-red-400' :
+                          fb.type === 'idea' ? 'bg-blue-500/20 text-blue-400' :
+                          fb.type === 'review' ? 'bg-yellow-500/20 text-yellow-400' :
+                          'bg-white/10 text-white/60'
+                        }`}>
+                          {fb.type === 'bug' ? '🐛 Баг' :
+                           fb.type === 'idea' ? '💡 Идея' :
+                           fb.type === 'review' ? '⭐ Отзыв' : '❓ Вопрос'}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {fb.user?.firstName || fb.user?.username || 'Аноним'}
+                          {' · '}день {fb.user?.day} · стрик {fb.user?.streak}
+                        </span>
+                      </div>
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {new Date(fb.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+                      </span>
+                    </div>
+                    <p className="text-sm text-white/80 leading-relaxed">{fb.message}</p>
+                    {fb.status !== 'resolved' && (
+                      <div className="flex gap-1.5 pt-1">
+                        {fb.status === 'new' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-xs px-2"
+                            onClick={() => handleMarkFeedback(fb.id, 'read')}
+                          >
+                            Прочитано
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-xs px-2 border-emerald-500/30 text-emerald-400"
+                          onClick={() => handleMarkFeedback(fb.id, 'resolved')}
+                        >
+                          Решено ✓
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {adminFeedbacks.length === 0 && !isLoadingAdminFeedbacks && adminFeedbackCounts['new'] !== undefined && (
+                  <p className="text-center text-sm text-muted-foreground py-3">Нет фидбеков в этой категории</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </>
       )}
 
       {/* Version */}
