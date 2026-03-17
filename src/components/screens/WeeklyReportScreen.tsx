@@ -16,6 +16,9 @@ interface DayData {
   eveningRating: number | null
   totalCalories: number
   foodCount: number
+  foodGood: number
+  foodNeutral: number
+  foodBad: number
   hadGym: boolean
   morningCheckinDone: boolean
   eveningCheckinDone: boolean
@@ -781,6 +784,24 @@ function DayRow({ day }: { day: DayData }) {
           <div className="h-1.5 rounded-full bg-white/5 w-full" />
         )}
       </div>
+
+      {/* Food quality mini-bar */}
+      {day.foodCount > 0 && (
+        <div
+          className="flex h-2 rounded-full overflow-hidden w-12 flex-shrink-0"
+          title={`Еда: ${day.foodGood}✅ ${day.foodNeutral}🟡 ${day.foodBad}❌ (${day.totalCalories} ккал)`}
+        >
+          {day.foodGood > 0 && (
+            <div style={{ flex: day.foodGood, background: '#22c55e' }} />
+          )}
+          {day.foodNeutral > 0 && (
+            <div style={{ flex: day.foodNeutral, background: '#f59e0b' }} />
+          )}
+          {day.foodBad > 0 && (
+            <div style={{ flex: day.foodBad, background: '#ef4444' }} />
+          )}
+        </div>
+      )}
 
       {/* Day rating */}
       <div className="w-8 text-right">

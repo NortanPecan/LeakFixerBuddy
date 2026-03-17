@@ -107,6 +107,9 @@ export async function GET(request: NextRequest) {
         eveningRating: eveningCheckin?.dayRating ?? null,
         totalCalories: foods.reduce((s, f) => s + (f.calories || 0), 0),
         foodCount: foods.length,
+        foodGood: foods.filter(f => f.quality === 'good').length,
+        foodNeutral: foods.filter(f => f.quality === 'neutral').length,
+        foodBad: foods.filter(f => f.quality === 'bad').length,
         hadGym,
         morningCheckinDone: !!morningCheckin,
         eveningCheckinDone: !!eveningCheckin,
@@ -175,6 +178,9 @@ interface DayData {
   eveningRating: number | null
   totalCalories: number
   foodCount: number
+  foodGood: number
+  foodNeutral: number
+  foodBad: number
   hadGym: boolean
   morningCheckinDone: boolean
   eveningCheckinDone: boolean
