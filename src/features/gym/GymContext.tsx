@@ -129,6 +129,7 @@ export interface GymContextValue {
   daySchedule: DayScheduleItem[]
   setDaySchedule: React.Dispatch<React.SetStateAction<DayScheduleItem[]>>
   selectedTemplate: string | null
+  setSelectedTemplate: React.Dispatch<React.SetStateAction<string | null>>
   draggedIndex: number | null
   dragOverIndex: number | null
   wizardExercises: Record<number, Array<{ templateId?: string; name: string; muscleGroup?: string; order: number }>>
@@ -1174,7 +1175,7 @@ export function GymProvider({ children }: { children: ReactNode }) {
     currentMonth, setCurrentMonth, isLoading, showPeriodList, setShowPeriodList,
     todayData, isLoadingToday,
     showWizard, setShowWizard, wizardStep, setWizardStep, wizardConfig, setWizardConfig,
-    workoutDays, setWorkoutDays, daySchedule, setDaySchedule, selectedTemplate,
+    workoutDays, setWorkoutDays, daySchedule, setDaySchedule, selectedTemplate, setSelectedTemplate,
     draggedIndex, dragOverIndex,
     wizardExercises, setWizardExercises, showWizardExercisePicker, setShowWizardExercisePicker,
     selectedWorkoutNumForExercise, setSelectedWorkoutNumForExercise,

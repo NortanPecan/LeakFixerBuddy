@@ -1,0 +1,133 @@
+'use client'
+
+import { useGymContext } from '@/features/gym/GymContext'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Edit3, CheckCircle2 } from 'lucide-react'
+
+export function GymPostWorkoutDialog() {
+  const {
+    selectedWorkout,
+    showPostWorkoutDialog, setShowPostWorkoutDialog,
+    exerciseRatings, setExerciseRatings,
+    editingActivities,
+    workoutNote, setWorkoutNote,
+    finalizeWorkout,
+  } = useGymContext()
+
+  return (
+    <Dialog open={showPostWorkoutDialog} onOpenChange={(open) => {
+      setShowPostWorkoutDialog(open)
+      if (!open) {
+        setExerciseRatings({})
+      }
+    }}>
+      <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Edit3 className="w-5 h-5 text-primary" />
+            Заметки по тренировке
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 pt-4">
+          {/* Workout note */}
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">
+              Заметка по тренировке (покажется в следующем цикле)
+            </Label>
+            <textarea
+              className="w-full p-2 rounded-md border border-input bg-background text-sm resize-none"
+              rows={2}
+              placeholder="Например: было тяжеловато, снизить вес"
+              value={workoutNote}
+              onChange={e => setWorkoutNote(e.target.value)}
+            />
+          </div>
+
+          {/* Exercise ratings */}
+          <div className="space-y-3">
+            <Label className="text-xs text-muted-foreground">
+              Оцени сложность каждого упражнения
+            </Label>
+            {selectedWorkout?.exercises?.map(exercise => {
+              const currentWeight = exercise.sets?.[0]?.weight || exercise.template?.currentWeight
+              const step = exercise.template?.progressionStep || 2.5
+              const rating = exerciseRatings[exercise.id] || 'normal'
+              let nextWeightPreview = currentWeight
+              if (currentWeight) {
+                if (rating === 'easy') nextWeightPreview = currentWeight + step
+                else if (rating === 'hard') nextWeightPreview = Math.max(0, currentWeight - step)
+                else nextWeightPreview = currentWeight
+              }
+
+              return (
+                <div key={exercise.id} className="p-3 rounded-xl bg-muted/30 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-sm">{exercise.name}</span>
+                    {currentWeight && (
+                      <span className="text-xs text-muted-foreground">{currentWeight} кг</span>
+                    )}
+                  </div>
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      variant={rating === 'easy' ? 'default' : 'outline'}
+                      className={`flex-1 text-xs ${rating === 'easy' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`}
+                      onClick={() => setExerciseRatings(prev => ({ ...prev, [exercise.id]: 'easy' }))}
+                    >
+                      😊 Легко
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={rating === 'normal' ? 'default' : 'outline'}
+                      className={`flex-1 text-xs ${rating === 'normal' ? 'bg-yellow-600 hover:bg-yellow-700' : ''}`}
+                      onClick={() => setExerciseRatings(prev => ({ ...prev, [exercise.id]: 'normal' }))}
+                    >
+                      😐 Норм
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={rating === 'hard' ? 'default' : 'outline'}
+                      className={`flex-1 text-xs ${rating === 'hard' ? 'bg-red-600 hover:bg-red-700' : ''}`}
+                      onClick={() => setExerciseRatings(prev => ({ ...prev, [exercise.id]: 'hard' }))}
+                    >
+                      😫 Тяжело
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowPostWorkoutDialog(false)}
+            >
+              Отмена
+            </Button>
+            <Button
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+              onClick={() => {
+                if (selectedWorkout) {
+                  finalizeWorkout(selectedWorkout.id, exerciseRatings, editingActivities, workoutNote)
+                }
+              }}
+            >
+              <CheckCircle2 className="w-4 h-4 mr-2" />
+              Сохранить
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}

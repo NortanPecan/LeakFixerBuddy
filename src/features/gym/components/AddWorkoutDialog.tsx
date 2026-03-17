@@ -1,67 +1,37 @@
 'use client'
 
-import { useState } from 'react'
+import { useGymContext } from '@/features/gym/GymContext'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Dumbbell } from 'lucide-react'
-import { MUSCLE_GROUPS, DayScheduleItem } from '../constants'
+import { MUSCLE_GROUPS } from '@/features/gym'
 
-interface AddWorkoutDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  selectedDate: Date | null
-  parsedDaySchedule: DayScheduleItem[]
-  onAddWorkout: (name: string, muscles: string[]) => Promise<void>
-}
-
-export function AddWorkoutDialog({
-  open,
-  onOpenChange,
-  selectedDate,
-  parsedDaySchedule,
-  onAddWorkout,
-}: AddWorkoutDialogProps) {
-  const [workoutName, setWorkoutName] = useState('')
-  const [workoutMuscles, setWorkoutMuscles] = useState<string[]>([])
-  const [isAdding, setIsAdding] = useState(false)
-
-  const handleClose = (open: boolean) => {
-    if (!open) {
-      setWorkoutName('')
-      setWorkoutMuscles([])
-    }
-    onOpenChange(open)
-  }
-
-  const handleAdd = async () => {
-    if (!workoutName) return
-    
-    setIsAdding(true)
-    try {
-      await onAddWorkout(workoutName, workoutMuscles)
-      handleClose(false)
-    } finally {
-      setIsAdding(false)
-    }
-  }
-
-  const toggleMuscle = (muscleValue: string) => {
-    setWorkoutMuscles(prev =>
-      prev.includes(muscleValue)
-        ? prev.filter(m => m !== muscleValue)
-        : [...prev, muscleValue]
-    )
-  }
+export function AddWorkoutDialog() {
+  const {
+    showAddWorkoutDialog, setShowAddWorkoutDialog,
+    selectedDate, setSelectedDate,
+    newWorkoutName, setNewWorkoutName,
+    newWorkoutMuscles, setNewWorkoutMuscles,
+    parsedDaySchedule,
+    handleAddWorkoutToDate,
+  } = useGymContext()
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={showAddWorkoutDialog} onOpenChange={(open) => {
+      setShowAddWorkoutDialog(open)
+      if (!open) {
+        setSelectedDate(null)
+        setNewWorkoutName('')
+        setNewWorkoutMuscles([])
+      }
+    }}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>Добавить тренировку</DialogTitle>
@@ -79,9 +49,7 @@ export function AddWorkoutDialog({
           {/* Select from existing workout types */}
           {parsedDaySchedule.filter(d => d.type === 'workout').length > 0 && (
             <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">
-                Выбрать из текущего периода
-              </Label>
+              <Label className="text-xs text-muted-foreground">Выбрать из текущего периода</Label>
               <div className="grid grid-cols-2 gap-2">
                 {parsedDaySchedule
                   .filter(d => d.type === 'workout')
@@ -92,8 +60,8 @@ export function AddWorkoutDialog({
                       size="sm"
                       className="justify-start"
                       onClick={() => {
-                        setWorkoutName(day.name || `Тренировка ${day.workoutNum}`)
-                        setWorkoutMuscles(day.muscleGroups || [])
+                        setNewWorkoutName(day.name || `Тренировка ${day.workoutNum}`)
+                        setNewWorkoutMuscles(day.muscleGroups || [])
                       }}
                     >
                       <Dumbbell className="w-3 h-3 mr-2" />
@@ -109,9 +77,7 @@ export function AddWorkoutDialog({
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">
-                или создать свою
-              </span>
+              <span className="bg-background px-2 text-muted-foreground">или создать свою</span>
             </div>
           </div>
 
@@ -120,8 +86,8 @@ export function AddWorkoutDialog({
             <div className="space-y-1">
               <Label className="text-xs">Название</Label>
               <Input
-                value={workoutName}
-                onChange={e => setWorkoutName(e.target.value)}
+                value={newWorkoutName}
+                onChange={e => setNewWorkoutName(e.target.value)}
                 placeholder="Например: Грудь + Трицепс"
               />
             </div>
@@ -133,11 +99,17 @@ export function AddWorkoutDialog({
                   <button
                     key={muscle.value}
                     className={`px-2 py-1 rounded-full text-xs transition-colors ${
-                      workoutMuscles.includes(muscle.value)
+                      newWorkoutMuscles.includes(muscle.value)
                         ? muscle.color
                         : 'bg-muted text-muted-foreground hover:bg-muted/70'
                     }`}
-                    onClick={() => toggleMuscle(muscle.value)}
+                    onClick={() => {
+                      setNewWorkoutMuscles(prev =>
+                        prev.includes(muscle.value)
+                          ? prev.filter(m => m !== muscle.value)
+                          : [...prev, muscle.value]
+                      )
+                    }}
                   >
                     {muscle.label}
                   </button>
@@ -150,17 +122,16 @@ export function AddWorkoutDialog({
             <Button
               variant="outline"
               className="flex-1"
-              onClick={() => handleClose(false)}
-              disabled={isAdding}
+              onClick={() => setShowAddWorkoutDialog(false)}
             >
               Отмена
             </Button>
             <Button
               className="flex-1 bg-primary"
-              onClick={handleAdd}
-              disabled={!workoutName || isAdding}
+              onClick={handleAddWorkoutToDate}
+              disabled={!newWorkoutName}
             >
-              {isAdding ? 'Добавление...' : 'Добавить'}
+              Добавить
             </Button>
           </div>
         </div>

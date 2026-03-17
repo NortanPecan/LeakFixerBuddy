@@ -1,39 +1,24 @@
 'use client'
 
+import { useGymContext } from '@/features/gym/GymContext'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
 import { CheckCircle2 } from 'lucide-react'
 
-export interface CompletionData {
-  exercises: Array<{
-    name: string
-    weight?: number
-    reps?: number
-    sets?: number
-    nextWeight?: number
-  }>
-  note?: string
-}
+export function CompletionPreviewDialog() {
+  const {
+    showCompletionPreview, setShowCompletionPreview,
+    completionData,
+  } = useGymContext()
 
-interface CompletionPreviewDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  completionData: CompletionData
-}
-
-export function CompletionPreviewDialog({
-  open,
-  onOpenChange,
-  completionData,
-}: CompletionPreviewDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={showCompletionPreview} onOpenChange={setShowCompletionPreview}>
       <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-emerald-400">
@@ -43,7 +28,7 @@ export function CompletionPreviewDialog({
         </DialogHeader>
 
         <div className="space-y-4 pt-4">
-          {/* Exercises summary - compact format */}
+          {/* Exercises summary */}
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Итоги тренировки:</Label>
             <div className="space-y-1">
@@ -81,8 +66,7 @@ export function CompletionPreviewDialog({
             </div>
           )}
 
-          {/* Close button */}
-          <Button className="w-full bg-primary" onClick={() => onOpenChange(false)}>
+          <Button className="w-full bg-primary" onClick={() => setShowCompletionPreview(false)}>
             Закрыть
           </Button>
         </div>
