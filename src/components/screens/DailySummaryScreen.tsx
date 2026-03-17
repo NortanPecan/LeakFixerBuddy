@@ -196,6 +196,55 @@ export function DailySummaryScreen() {
     ([key, value]) => key !== 'hasNoData' && value
   )
 
+  // Day score (0–100)
+  const dayScore = (() => {
+    let score = 0
+    let weight = 0
+
+    // Rituals (25 pts)
+    if (summary.rituals.total > 0) {
+      score += (summary.rituals.completed / summary.rituals.total) * 25
+      weight += 25
+    }
+
+    // Water (20 pts)
+    if (summary.water.target > 0) {
+      score += Math.min(summary.water.percentage / 100, 1) * 20
+      weight += 20
+    }
+
+    // Mood (20 pts)
+    const mood = summary.state.mood ?? summary.checkin.evening.dayRating
+    if (mood !== null) {
+      score += (mood / 10) * 20
+      weight += 20
+    }
+
+    // Energy (15 pts)
+    const energy = summary.state.energy ?? summary.checkin.morning.energy
+    if (energy !== null) {
+      score += (energy / 10) * 15
+      weight += 15
+    }
+
+    // Checkins (10 pts each)
+    if (summary.checkin.morning.done) { score += 10; weight += 10 }
+    if (summary.checkin.evening.done) { score += 10; weight += 10 }
+
+    return weight > 0 ? Math.round((score / weight) * 100) : null
+  })()
+
+  const scoreColor = dayScore === null ? 'text-muted-foreground'
+    : dayScore >= 75 ? 'text-emerald-400'
+    : dayScore >= 50 ? 'text-yellow-400'
+    : 'text-red-400'
+
+  const scoreLabel = dayScore === null ? 'Нет данных'
+    : dayScore >= 80 ? 'Отличный день!'
+    : dayScore >= 60 ? 'Хороший день'
+    : dayScore >= 40 ? 'Средний день'
+    : 'Сложный день'
+
   return (
     <div className="flex flex-col gap-4 pb-20">
       {/* Header with back button */}
@@ -204,7 +253,18 @@ export function DailySummaryScreen() {
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <h1 className="text-xl font-bold">Дневная сводка</h1>
+        {dayScore !== null && (
+          <div className="ml-auto flex items-baseline gap-1">
+            <span className={`text-2xl font-bold ${scoreColor}`}>{dayScore}</span>
+            <span className="text-xs text-muted-foreground">/100</span>
+          </div>
+        )}
       </div>
+
+      {/* Day score label */}
+      {dayScore !== null && (
+        <div className={`text-center text-sm font-medium ${scoreColor}`}>{scoreLabel}</div>
+      )}
 
       {/* Date Picker */}
       <DatePicker />
