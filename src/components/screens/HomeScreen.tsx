@@ -103,6 +103,7 @@ export function HomeScreen() {
   const [showWeightHistory, setShowWeightHistory] = useState(false)
   const [showWeightRecords, setShowWeightRecords] = useState(false)
   const [showWeightGoal, setShowWeightGoal] = useState(false)
+  const [weeklyLeaksCount, setWeeklyLeaksCount] = useState<number | null>(null)
 
   const currentDay = user?.day || 1
   const progress = ((currentDay - 1) / 30) * 100
@@ -173,6 +174,30 @@ export function HomeScreen() {
     }
     loadSummary()
   }, [user?.id, selectedDate])
+
+  // Load weekly leaks count (background fetch)
+  useEffect(() => {
+    const loadLeaksCount = async () => {
+      if (!user?.id) return
+      try {
+        // Get Monday of current week
+        const d = new Date()
+        const day = d.getDay()
+        const diff = day === 0 ? -6 : 1 - day
+        d.setDate(d.getDate() + diff)
+        d.setHours(0, 0, 0, 0)
+        const weekStart = d.toISOString().split('T')[0]
+        const res = await fetch(`/api/weekly-report?userId=${user.id}&weekStart=${weekStart}`)
+        const data = await res.json()
+        if (data.success && data.leakHints) {
+          setWeeklyLeaksCount(data.leakHints.length)
+        }
+      } catch {
+        // silent — not critical
+      }
+    }
+    loadLeaksCount()
+  }, [user?.id])
 
   // Load weight data
   useEffect(() => {
@@ -578,7 +603,20 @@ export function HomeScreen() {
             <div className="flex items-center gap-2">
               <span className="text-lg">🔍</span>
               <div>
-                <div className="text-sm font-medium text-white">Лики недели</div>
+                <div className="text-sm font-medium text-white flex items-center gap-2">
+                  Лики недели
+                  {weeklyLeaksCount !== null && weeklyLeaksCount > 0 && (
+                    <span
+                      className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                      style={{
+                        background: weeklyLeaksCount >= 3 ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)',
+                        color: weeklyLeaksCount >= 3 ? '#ef4444' : '#f59e0b',
+                      }}
+                    >
+                      {weeklyLeaksCount}
+                    </span>
+                  )}
+                </div>
                 <div className="text-xs text-white/40">Паттерны и корреляции</div>
               </div>
             </div>
