@@ -91,6 +91,7 @@ export function DailySummaryScreen() {
   const { user, profile, selectedDate, setScreen } = useAppStore()
   const [summary, setSummary] = useState<DailySummaryData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [markingAte, setMarkingAte] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -499,8 +500,37 @@ export function DailySummaryScreen() {
               })()}
             </>
           ) : (
-            <div className="text-center py-2">
+            <div className="flex flex-col items-center gap-3 py-2">
               <p className="text-sm text-muted-foreground">Нет записей о еде</p>
+              <button
+                disabled={markingAte}
+                onClick={async () => {
+                  if (!user?.id) return
+                  setMarkingAte(true)
+                  try {
+                    await fetch('/api/food', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        userId: user.id,
+                        name: 'Ел сегодня',
+                        mealType: 'snack',
+                        quality: 'neutral',
+                        date: selectedDate,
+                      }),
+                    })
+                    setSummary(prev => prev ? {
+                      ...prev,
+                      food: { ...prev.food, entriesCount: 1 }
+                    } : prev)
+                  } finally {
+                    setMarkingAte(false)
+                  }
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 text-sm font-medium hover:bg-green-500/15 transition-colors disabled:opacity-50"
+              >
+                🍽️ {markingAte ? 'Записываю...' : 'Я ел сегодня'}
+              </button>
             </div>
           )}
         </CardContent>
