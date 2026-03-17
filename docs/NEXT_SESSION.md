@@ -32,26 +32,34 @@
 
 ---
 
-# Текущее состояние (2026-03-16 — мажорный релиз)
+# Текущее состояние (2026-03-17 — Leak Engine + аналитика)
 
-## Последняя выполненная задача — БАГФИКСЫ + НОВЫЕ ФИЧИ (2026-03-16)
+## Последняя выполненная задача — LEAK ENGINE + АНАЛИТИКА (2026-03-17)
 
-### ✅ Выполнено за сессию:
+### ✅ Выполнено за сессию (автономная работа 2 часа):
 
 | # | Задача | Файлы |
 |---|--------|-------|
-| 1 | **КРИТИЧЕСКИЙ**: Исправлен timezone баг `parseDateKey` (UTC vs local) — еда/задачи на неверной дате | `src/lib/date-utils.ts` |
-| 2 | Ритуалы — постоянное удаление (permanent delete) в UI | `src/components/screens/RitualsScreen.tsx`, `src/app/api/rituals/route.ts` |
-| 3 | Notes — фикс двойного сабмита при создании ритуала | `src/components/screens/NotesScreen.tsx` |
-| 4 | Finance — перевод между счетами + обмен валюты | `src/components/screens/FinanceScreen.tsx` |
-| 5 | Кастомная нижняя навигация (1–6 модулей, 14 вариантов) | `src/components/BottomNav.tsx`, `src/lib/store.ts` |
-| 6 | Settings экран (Profile → Навигация) | `src/components/screens/SettingsScreen.tsx` |
-| 7 | QuickEntryFAB — плавающая кнопка быстрого ввода (вес, еда, заметка) | `src/components/QuickEntryFAB.tsx` |
-| 8 | Buddy — полный дашборд партнёра + рекомендации | `src/components/screens/BuddyScreen.tsx`, `src/app/api/buddies/dashboard/route.ts` |
-| 9 | Удалены мёртвые SQL-файлы (migration-supabase.sql, fix-missing-columns.sql, supabase/migrations/*.sql) | - |
-| 10 | 0 TypeScript ошибок, 0 lint ошибок | - |
+| 1 | Checkin data (morning energy, evening rating) в stats/history API и графики | `src/app/api/stats/history/route.ts`, `StatsScreen.tsx` |
+| 2 | **Monthly Report** — API + экран + HomeScreen shortcut + QuickSearch | `src/app/api/monthly-report/route.ts`, `MonthlyReportScreen.tsx` |
+| 3 | Monthly/weekly отчёты в ProfileScreen QuickAccess | `src/features/profile/constants.ts`, `QuickAccess.tsx` |
+| 4 | Buddy comparison — side-by-side метрики в dashboard | `BuddyScreen.tsx`, `src/app/api/buddies/dashboard/route.ts` |
+| 5 | Badge на HomeScreen weekly report card (кол-во ликов) | `HomeScreen.tsx` |
+| 6 | Level-up toast в SkillsScreen при получении XP | `SkillsScreen.tsx` |
+| 7 | Leak Engine section в Export для AI-анализа | `src/app/api/export/route.ts`, `ExportScreen.tsx` |
+| 8 | `monthly-report` добавлен в Screen type, убраны `as Screen` касты | `src/lib/store.ts` |
+| 9 | 7-day heatmap на каждой карточке привычки | `HabitsScreen.tsx`, `src/app/api/habits/route.ts` |
+| 10 | Прогноз трат (daily avg + projection) в Finance | `FinanceScreen.tsx`, `src/app/api/finance/route.ts` |
+| 11 | Оптимизация Buddy Dashboard: 14 запросов → 4 параллельных | `src/app/api/buddies/dashboard/route.ts` |
+| 12 | **Buddy Matching** — категориальное пересечение ритуалов (+1/+2 pts) | `src/app/api/buddies/suggest/route.ts` |
+| 13 | **Today's Focus** widget — топовый лик как карточка на HomeScreen | `HomeScreen.tsx` |
+| 14 | **Week-over-week** comparison в WeeklyReportScreen | `WeeklyReportScreen.tsx` |
+| 15 | **Settings** — toggles для notification/zone settings из API | `SettingsScreen.tsx` |
+| 16 | QuickSearch — добавлены 8 отсутствующих экранов | `QuickSearch.tsx` |
+| 17 | ProfileScreen QuickAccess — buddies, challenges, settings | `constants.ts`, `QuickAccess.tsx` |
+| 18 | 2 новых паттерна в Leak Engine: weekend drop + high spend days | `src/app/api/weekly-report/route.ts` |
 
-### Ветка: `claude/code-review-cV4rg` (все изменения запушены, commit `f514be2`)
+### Ветка: `claude/code-review-cV4rg` (commit `cd9ebd7`)
 
 ## Новая концепция (обсуждено в сессии 2026-03-16)
 
@@ -76,21 +84,23 @@
 
 ## Следующие задачи
 
-**Приоритет 1:** Leak Engine — анализ слабых мест
-- Алгоритм анализа всех метрик за неделю/месяц
-- Выявление "ликов" из данных: ритуалы, привычки, здоровье, финансы, тренировки
-- Weekly/Monthly Report экран с ликами и советами
+**Приоритет 1:** ✅ DONE — Leak Engine (weekly + monthly reports с 11 паттернами)
 
-**Приоритет 2:** Дополнительные баги из исходного списка (не сделаны):
-- Challenges: баг ввода числа (поле не очищается) — проверить
-- Zones: полноценный add/edit/delete UI
+**Приоритет 2:** ✅ DONE — Challenges bug (форма сбрасывается через `onOpenChange`), Zones (ZonesScreen)
 
-**Приоритет 3:** Buddy Matching алгоритм по похожим ликам
+**Приоритет 3:** ✅ DONE — Buddy Matching с категориями ритуалов (частичная реализация)
+
+**Следующие задачи (новые):**
+
+1. **Push-notifications** через Telegram Bot API — отправлять напоминания о ритуалах/привычках когда пользователь не открывает приложение
+2. **Streak protection** — защита стрика 1 раз в неделю (требует `streakShield` поле в БД + миграция)
+3. **GymScreen split** — разбить на 8 компонентов (Context/Hook паттерн)
+4. **Privacy Settings для Buddy** — настроить что видит бадди (требует миграция: новые поля в UserSettings)
+5. **Buddy Matching v2** — найти пользователей с похожими ЛИКАМИ (не только категориями), требует вычисление leak-profile per user
 
 **Технический долг (оставшийся):**
 - GymScreen (4000+ строк) — монолит, требует Context/Hook для безопасного сплита
-- Добавить Privacy Settings в Buddy — настроить что именно видит бадди
-- Finance: добавить категории в форму транзакции (частично — select уже есть)
+- Finance: monthly budget goals (цели по каждой категории на месяц)
 
 ---
 
