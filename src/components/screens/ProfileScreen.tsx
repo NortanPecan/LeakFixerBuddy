@@ -366,6 +366,32 @@ export function ProfileScreen() {
         </Card>
       </div>
 
+      {/* Progress since day 1 (2.4) */}
+      {user && user.day > 1 && (
+        <Card className="bg-gradient-to-r from-primary/5 to-card/50 border border-primary/20">
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center gap-2 mb-3">
+              <TrendingUp className="w-4 h-4 text-primary" />
+              <span className="text-sm font-semibold">За {user.day} дней в приложении</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="p-2 rounded-lg bg-background/50">
+                <div className="text-lg font-bold text-yellow-400">{user.points}</div>
+                <div className="text-[10px] text-muted-foreground">очков</div>
+              </div>
+              <div className="p-2 rounded-lg bg-background/50">
+                <div className="text-lg font-bold text-orange-400">🔥 {user.streak}</div>
+                <div className="text-[10px] text-muted-foreground">серия</div>
+              </div>
+              <div className="p-2 rounded-lg bg-background/50">
+                <div className="text-lg font-bold text-cyan-400">{stats.totalWorkouts}</div>
+                <div className="text-[10px] text-muted-foreground">тренировок</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Activity Summary */}
       <Card className="bg-card/50 backdrop-blur">
         <CardHeader className="pb-2">
