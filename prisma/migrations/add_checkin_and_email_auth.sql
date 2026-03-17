@@ -54,7 +54,14 @@ ALTER TABLE daily_checkins ENABLE ROW LEVEL SECURITY;
 -- Policy: users can read/write only their own rows
 -- (Adjust based on your Supabase auth setup)
 -- If you use Prisma with service role key, RLS policies won't block server-side queries
-CREATE POLICY IF NOT EXISTS "users_own_checkins"
-  ON daily_checkins
-  FOR ALL
-  USING (user_id = auth.uid()::uuid);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT FROM pg_policies WHERE tablename = 'daily_checkins' AND policyname = 'users_own_checkins'
+  ) THEN
+    CREATE POLICY "users_own_checkins"
+      ON daily_checkins
+      FOR ALL
+      USING (user_id = auth.uid()::uuid);
+  END IF;
+END $$;
