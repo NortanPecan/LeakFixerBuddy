@@ -1247,6 +1247,7 @@ function CheckinStatusBlock({
   isMorningTime,
   isEveningTime,
   onOpenDailySummary,
+  earlyBird,
 }: {
   morningDone: boolean
   eveningDone: boolean
