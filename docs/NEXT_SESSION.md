@@ -1,87 +1,75 @@
 # Next Session — Текущее состояние и задачи
 
-> Обновлено: 2026-03-17 (сессия 2)
-> Ветка: `claude/telegram-push-notifications-uag21`
+> Обновлено: 2026-03-17 (сессия 3)
+> Ветка: `claude/buddy-matching-v2-jyJbK`
 
 ---
 
-## Последняя сессия (2026-03-17, сессия 2)
+## Последняя сессия (2026-03-17, сессия 3)
 
 ### ✅ Сделано
 
 | # | Задача | Детали |
 |---|--------|--------|
-| 1 | **Telegram push-уведомления** | `/api/telegram/notify` — утром (06:00 UTC) и вечером (17:00 UTC), пропускает тех кто уже сделал checkin |
-| 2 | **Streak Protection (щит)** | `/api/streak/shield` GET+POST, баннер в RitualsScreen, кулдаун 7 дней |
-| 3 | **Finance: Monthly Budget Goals** | Кнопка ✏️ на каждой категории, диалог ввода лимита, цветная прогресс-полоска |
-| 4 | **Buddy Privacy Settings** | `buddyPrivacy` в UserSettings, фильтрация в dashboard, раздел в SettingsScreen |
-| 5 | **worklog.md архив** | 1322 → 381 строк, Task IDs 1–39 → `worklog.archive.md` |
+| 1 | **Buddy Matching v2** | `leak_profile jsonb` в `user_profiles`, Jaccard-сходство +5/+3/+1 в `/api/buddies/suggest`, сохранение top-3 паттернов из weekly-report |
+| 2 | **HabitsScreen: 7-day dots** | Кружки `rounded-full`, подписи дней (Пн/Вт/..), стрик `🔥 N` inline |
+| 3 | **WeeklyReport: mood/energy chart** | SVG-график, две линии (настр./энергия), цветные точки по шкале |
+| 4 | **HomeScreen: checkin badges** | `☀️ Утро ✅` / `🌙 Вечер ⏳` — всегда видны, тап → DailySummary |
+| 5 | **Onboarding: Buddy Privacy** | Шаг 4 из 5, три варианта, PATCH `/api/settings` при завершении |
+| 6 | **WeeklyReport: AI промпт (3.7)** | Кнопка "Скопировать для ИИ" — структурированный промпт со всеми данными |
+| 7 | **IF-трекер (5.3)** | Окно еды из `FoodEntry.time` в `daily-summary`, показывается ⏱ N ч под калориями |
 
 ### Архитектурные решения сессии
 
-- **`/api/telegram/notify`** — отдельный endpoint для checkin-напоминаний (vs `/api/notifications/send-reminder` для ритуалов). GET+POST, `?type=morning|evening`
-- **Streak shield** — хранится в `AppUser.streakShieldUsedAt`, не в UserSettings. 7-дневный кулдаун. Активация ручная + авто при логине (уже было в auth).
-- **Budget goals** — через `Category.monthlyTarget` (уже был в схеме), без новой таблицы `budget_goals`. PATCH `/api/categories` уже поддерживал это поле.
-- **Buddy privacy** — три уровня: `full` / `partial` / `streak`. Фильтрация в dashboard route — `null` вместо скрытых полей.
+- **Leak profile** — хранится в `user_profiles.leak_profile jsonb`, обновляется fire-and-forget при каждом GET `/api/weekly-report`
+- **Buddy suggest v2** — загружает `profile { leakProfile }` через relation в одном запросе
+- **IF-трекер** — zero DB migration, использует `FoodEntry.time` (String "HH:MM")
+- **AI промпт** — чистый фронтенд, `navigator.clipboard.writeText`, никакого бэкенда
 
-### Миграции этой сессии (применить в Supabase SQL Editor)
+### Миграции этой сессии
 
 | Файл | Таблица | Статус |
 |------|---------|--------|
-| `prisma/migrations/20260317_checkin_reminders.sql` | `user_settings.checkin_reminders` | ✅ применена |
-| `prisma/migrations/20260317_streak_shield.sql` | `app_users.streak_shield_used_at` | ✅ применена |
-| `prisma/migrations/20260317_buddy_privacy.sql` | `user_settings.buddy_privacy` | ⚠️ применить! |
+| `prisma/migrations/20260317_leak_profile.sql` | `user_profiles.leak_profile` | ✅ применена |
+| `prisma/migrations/20260317_buddy_privacy.sql` | `user_settings.buddy_privacy` | ✅ применена |
 
 ---
 
 ## Задачи — следующая сессия (по приоритету)
 
-### 1. Buddy Matching v2 (по ЛИКУ-профилю) 🔴 ВЫСОКИЙ
-**Что нужно**: Матчинг по похожим паттернам поведения из Leak Engine, а не только по категориям ритуалов.
-
+### 1. Telegram-бот: быстрый ввод через ИИ (6.1) 🔴 ВЫСОКИЙ
+**Что нужно**: пишешь боту "зал 45 минут" или "съел пиццу 800 ккал" → ИИ парсит и записывает.
 **Шаги:**
-- Из weekly report — извлекать `leakProfile` (топ-3 паттерна пользователя)
-- Хранить в `UserProfile.leakProfile Json?` (или считать on-demand)
-- В `/api/buddies/suggest` — сортировать по схожести leak-профилей
-- Миграция: `ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS "leak_profile" jsonb;`
+- Webhook `/api/telegram/bot` — получает сообщения от бота
+- Claude API / simple NLP — определяет тип (еда / тренировка / вес / настроение)
+- Сохраняет через существующие API
+- Ответ: "✅ Записал: пицца 800 ккал в обед"
 
----
-
-### 2. HabitsScreen: статистика + streak на карточке привычки 🟡 СРЕДНИЙ
-**Что нужно**: На карточке каждой привычки видна полоска прогресса за 7 дней и текущий стрик.
-
+### 2. Шкала прогресса от первого дня (2.4) 🟡 СРЕДНИЙ
+**Что нужно**: сравнение текущих показателей с показателями на старте (день 1).
 **Шаги:**
-- `/api/habits` — добавить `last7Days` (массив boolean) в ответ каждой привычки
-- HabitsScreen — маленькая dot-визуализация 7 дней + `🔥 N` стрик
+- Сохранять снапшот метрик при регистрации или в первую неделю
+- На ProfileScreen или HomeScreen — блок "за N дней: вес −3 кг, стрик +45 дней"
 
----
-
-### 3. Wellbeing: еженедельный отчёт настроения 🟡 СРЕДНИЙ
-**Что нужно**: В WeeklyReport — раздел с графиком настроения/энергии за неделю.
-
+### 3. Трекер эмоций (5.30) 🟡 СРЕДНИЙ
+**Что нужно**: быстрая отметка эмоции в течение дня (не только утро/вечер).
 **Шаги:**
-- `/api/wellbeing/weekly` уже есть — проверить что возвращает
-- WeeklyReportScreen — добавить секцию с мини-графиком (7 точек mood + energy)
-- Цветовая кодировка: зелёный ≥7, жёлтый 4-6, красный ≤3
+- Модель `EmotionLog` — userId, emotion, intensity, note, createdAt
+- API `/api/emotions` POST + GET
+- Виджет на HomeScreen или в DailySummary: tap на эмодзи → сохраняет
 
----
-
-### 4. Daily Summary: утренний и вечерний checkin на HomeScreen 🟢 НИЗКИЙ
-**Что нужно**: На HomeScreen показывать статус утреннего/вечернего чек-ина с быстрым доступом.
-
+### 4. Мимолётные мысли (5.31) 🟡 СРЕДНИЙ
+**Что нужно**: записать мысль быстро, она исчезает через N дней.
 **Шаги:**
-- Загружать `GET /api/checkin?userId=...&date=today` при загрузке HomeScreen
-- Показывать два бейджа: `☀️ Утро ✅` / `🌙 Вечер ⏳`
-- Тап → открывает DailySummaryScreen
+- `FleetingThought` модель с `expiresAt`
+- Cron `/api/cron/cleanup-thoughts` — удаляет просроченные
+- Виджет на HomeScreen или отдельный экран
 
----
-
-### 5. Onboarding: шаг с выбором Buddy Privacy 🟢 НИЗКИЙ
-**Что нужно**: При первом запуске — объяснить и настроить приватность бадди.
-
+### 5. Поисковая строка (7.4) 🟢 НИЗКИЙ
+**Что нужно**: пишешь "вода" → сразу добавляет, "настроение 8" → сохраняет.
 **Шаги:**
-- В OnboardingScreen добавить шаг с выбором `buddyPrivacy`
-- Сохранять через PATCH `/api/settings`
+- Floating search input на HomeScreen
+- NLP/паттерны: "вода N мл", "вес N кг", "зал", "настроение N"
 
 ---
 
@@ -90,11 +78,10 @@
 | Тема | Правило |
 |------|---------|
 | **БД** | Только Supabase PostgreSQL, Prisma ORM |
-| **Ветка** | `claude/telegram-push-notifications-uag21` |
-| **Git** | Claude Code делает git самостоятельно |
+| **Ветка** | `claude/buddy-matching-v2-jyJbK` |
 | **Lint** | `bun run lint` перед коммитом (0 ошибок) |
 | **Миграции** | Вручную в Supabase SQL Editor |
-| **API** | ~75 endpoints в `src/app/api/` |
+| **API** | ~80 endpoints в `src/app/api/` |
 
 ## Vercel Cron (актуальное расписание)
 
@@ -110,4 +97,7 @@
 GET/POST /api/telegram/notify?type=morning|evening  — checkin напоминания
 GET      /api/streak/shield?userId=xxx              — статус щита
 POST     /api/streak/shield { userId }              — активировать щит
+GET      /api/weekly-report                         — теперь сохраняет leak_profile
+GET      /api/buddies/suggest                       — v2: Jaccard по leak_profile
+GET      /api/daily-summary                         — теперь возвращает IF window
 ```
