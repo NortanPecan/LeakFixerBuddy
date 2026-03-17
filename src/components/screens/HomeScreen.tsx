@@ -128,6 +128,12 @@ export function HomeScreen() {
   const [weeklyLeaksCount, setWeeklyLeaksCount] = useState<number | null>(null)
   const [topWeeklyLeak, setTopWeeklyLeak] = useState<{ message: string; emoji: string; severity: string } | null>(null)
   const [hiddenWidgets, setHiddenWidgets] = useState<string[]>([])
+  const [aiRecommendation, setAiRecommendation] = useState<{
+    leakType: string
+    analysis: { cause: string; solutions: { text: string; deadline: string; priority: string }[]; urgency: string }
+    provider: string | null
+    updatedAt: string
+  } | null>(null)
 
   const currentDay = user?.day || 1
   const progress = ((currentDay - 1) / 30) * 100
@@ -248,6 +254,31 @@ export function HomeScreen() {
       }
     }
     loadLeaksCount()
+  }, [user?.id])
+
+  // Load AI recommendation (background, non-critical)
+  useEffect(() => {
+    const loadAiRec = async () => {
+      if (!user?.id) return
+      try {
+        const res = await fetch(`/api/ai/recommendations?userId=${user.id}`)
+        const data = await res.json() as {
+          success: boolean
+          recommendation?: {
+            leakType: string
+            analysis: { cause: string; solutions: { text: string; deadline: string; priority: string }[]; urgency: string }
+            provider: string | null
+            updatedAt: string
+          }
+        }
+        if (data.success && data.recommendation) {
+          setAiRecommendation(data.recommendation)
+        }
+      } catch {
+        // silent — not critical
+      }
+    }
+    loadAiRec()
   }, [user?.id])
 
   // Load weight data
@@ -1007,6 +1038,62 @@ export function HomeScreen() {
           </CardContent>
         </Card>
       )}
+
+      {/* AI Recommendations widget — unlocks day 8, скрывается через hiddenWidgets */}
+      {aiRecommendation && isUnlocked('weekly_report', user?.day ?? 1) && !hiddenWidgets.includes('ai_recommendations') && (() => {
+        const rec = aiRecommendation
+        const topSolution = rec.analysis.solutions?.[0]
+        const urgencyColor: Record<string, string> = {
+          now:       'rgba(239,68,68,0.08)',
+          thisWeek:  'rgba(99,102,241,0.08)',
+          thisMonth: 'rgba(99,102,241,0.06)',
+        }
+        const urgencyBorder: Record<string, string> = {
+          now:       'rgba(239,68,68,0.2)',
+          thisWeek:  'rgba(99,102,241,0.2)',
+          thisMonth: 'rgba(99,102,241,0.15)',
+        }
+        const leakLabels: Record<string, string> = {
+          low_energy: 'низкая энергия', chronic_low_energy: 'хронически низкая энергия',
+          no_gym: 'нет тренировок', gym_dropout: 'прекратил ходить в зал',
+          ritual_consistency: 'непоследовательность в ритуалах', ritual_erosion: 'угасание ритуалов',
+          sleep_deficit: 'недосып', high_stress: 'высокий стресс',
+          calorie_spikes: 'скачки калорий', expense_spike: 'всплески расходов',
+        }
+        const leakLabel = leakLabels[rec.leakType] ?? rec.leakType.replace(/_/g, ' ')
+        return (
+          <Card
+            style={{
+              background: urgencyColor[rec.analysis.urgency] ?? urgencyColor.thisWeek,
+              border: `1px solid ${urgencyBorder[rec.analysis.urgency] ?? urgencyBorder.thisWeek}`,
+            }}
+          >
+            <CardContent className="pt-3 pb-3">
+              <div className="flex items-start gap-3">
+                <span className="text-xl flex-shrink-0">💡</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[10px] uppercase tracking-wider font-medium mb-0.5 text-indigo-400">
+                    AI Рекомендации · {leakLabel}
+                  </div>
+                  {topSolution && (
+                    <p className="text-sm text-white/80 leading-snug">{topSolution.text}</p>
+                  )}
+                  {!topSolution && (
+                    <p className="text-sm text-white/60 leading-snug">{rec.analysis.cause}</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => setScreen('weekly-report' as Screen)}
+                  className="flex-shrink-0 text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5"
+                >
+                  Все
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+        )
+      })()}
 
       {/* Weekly report shortcut — unlocks day 8 */}
       {isUnlocked('weekly_report', user?.day ?? 1) && <Card

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { showSuccessToast, showErrorToast } from '@/lib/network-utils'
 
 interface LeakSolution {
   text: string
@@ -42,6 +43,29 @@ const PROVIDER_LABEL: Record<string, string> = {
   gemini: 'Gemini',
 }
 
+/** Конвертирует дедлайн-строку AI в дату YYYY-MM-DD */
+function deadlineToDate(deadline: string): string {
+  const d = new Date()
+  const lower = deadline.toLowerCase()
+  if (lower.includes('сегодня')) {
+    // today
+  } else if (lower.includes('завтра')) {
+    d.setDate(d.getDate() + 1)
+  } else {
+    const daysMatch = lower.match(/(\d+)\s*дн/)
+    if (daysMatch) {
+      d.setDate(d.getDate() + parseInt(daysMatch[1]))
+    } else if (lower.includes('недел')) {
+      d.setDate(d.getDate() + 7)
+    } else if (lower.includes('месяц')) {
+      d.setDate(d.getDate() + 30)
+    } else {
+      d.setDate(d.getDate() + 7)
+    }
+  }
+  return d.toISOString().split('T')[0]
+}
+
 export function LeakAiAnalysisCard({
   userId,
   leakType,
@@ -53,6 +77,10 @@ export function LeakAiAnalysisCard({
   const [error, setError]       = useState<string | null>(null)
   const [provider, setProvider] = useState<string | null>(null)
   const [open, setOpen]         = useState(false)
+  const [tasksAdded, setTasksAdded] = useState(false)
+  const [addingTasks, setAddingTasks] = useState(false)
+  // feedbacks: index → true (worked) | false (not worked) | null (no feedback yet)
+  const [feedbacks, setFeedbacks] = useState<Record<number, boolean | null>>({})
 
   const analyze = async () => {
     if (analysis) {
@@ -84,6 +112,54 @@ export function LeakAiAnalysisCard({
       setError('Нет соединения')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const addTasksFromSolutions = async () => {
+    if (!analysis || tasksAdded || addingTasks) return
+    setAddingTasks(true)
+    try {
+      await Promise.all(
+        analysis.solutions.map(s =>
+          fetch('/api/tasks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId,
+              text: s.text,
+              date: deadlineToDate(s.deadline),
+              zone: 'LeakFixer',
+              notes: `Дедлайн: ${s.deadline}`,
+            }),
+          })
+        )
+      )
+      setTasksAdded(true)
+      showSuccessToast(`✅ ${analysis.solutions.length} задачи добавлены`)
+    } catch {
+      showErrorToast('Не удалось добавить задачи')
+    } finally {
+      setAddingTasks(false)
+    }
+  }
+
+  const sendFeedback = async (index: number, worked: boolean) => {
+    if (!analysis || feedbacks[index] !== undefined) return
+    // Оптимистично обновляем UI
+    setFeedbacks(prev => ({ ...prev, [index]: worked }))
+    try {
+      await fetch('/api/ai/analyze-leak', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          leakType,
+          solutionText: analysis.solutions[index].text,
+          worked,
+        }),
+      })
+    } catch {
+      // Фидбек не критичен — не показываем ошибку
     }
   }
 
@@ -153,20 +229,43 @@ export function LeakAiAnalysisCard({
             {analysis.solutions.length > 0 && (
               <div>
                 <p className="text-[11px] text-white/50 uppercase tracking-wide mb-1.5">Что делать</p>
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {analysis.solutions.map((s, i) => (
                     <div key={i} className="flex gap-2 items-start">
                       <span className="flex-shrink-0 text-sm">{PRIORITY_EMOJI[s.priority] ?? '🟡'}</span>
                       <div className="flex-1">
                         <p className="text-sm text-white/80">{s.text}</p>
-                        <div className="flex items-center gap-1 mt-0.5">
-                          <span className="text-xs text-white/30">📅</span>
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] h-4 border-white/20 text-white/40"
-                          >
-                            {s.deadline}
-                          </Badge>
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-white/30">📅</span>
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] h-4 border-white/20 text-white/40"
+                            >
+                              {s.deadline}
+                            </Badge>
+                          </div>
+                          {/* Фидбек кнопки */}
+                          {feedbacks[i] === undefined || feedbacks[i] === null ? (
+                            <div className="flex gap-1 ml-auto">
+                              <button
+                                onClick={() => sendFeedback(i, true)}
+                                className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
+                              >
+                                ✅ Сработало
+                              </button>
+                              <button
+                                onClick={() => sendFeedback(i, false)}
+                                className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                              >
+                                ❌ Не помогло
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-white/30 ml-auto">
+                              {feedbacks[i] ? '✅ Отмечено' : '❌ Отмечено'}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -184,6 +283,21 @@ export function LeakAiAnalysisCard({
                 <p className="text-[11px] text-white/50 uppercase tracking-wide mb-1">🧠 Персональное</p>
                 <p className="text-xs text-white/70">{analysis.personalizedInsight}</p>
               </div>
+            )}
+
+            {/* Кнопка «Добавить в задачи» */}
+            {analysis.solutions.length > 0 && (
+              <button
+                onClick={addTasksFromSolutions}
+                disabled={tasksAdded || addingTasks}
+                className={`w-full text-xs py-1.5 rounded-lg transition-colors font-medium ${
+                  tasksAdded
+                    ? 'bg-green-500/10 text-green-400 cursor-default'
+                    : 'bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 disabled:opacity-50'
+                }`}
+              >
+                {addingTasks ? '⏳ Добавляю...' : tasksAdded ? '✅ Задачи добавлены' : '📋 Добавить в задачи'}
+              </button>
             )}
           </CardContent>
         </Card>

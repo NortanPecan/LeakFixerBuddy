@@ -37,6 +37,60 @@ export async function POST(request: NextRequest) {
 }
 
 /**
+ * PATCH /api/ai/analyze-leak
+ * Body: { userId, leakType, solutionText, worked: boolean }
+ * Записывает фидбек по решению: worked/not worked → улучшает следующий анализ.
+ */
+export async function PATCH(request: NextRequest) {
+  let body: { userId?: string; leakType?: string; solutionText?: string; worked?: boolean }
+  try {
+    body = (await request.json()) as typeof body
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
+
+  const { userId, leakType, solutionText, worked } = body
+  if (!userId || !leakType || !solutionText || worked === undefined) {
+    return NextResponse.json(
+      { error: 'userId, leakType, solutionText and worked are required' },
+      { status: 400 }
+    )
+  }
+
+  const pattern = await db.userAiPattern.findUnique({
+    where: { userId_leakType: { userId, leakType } },
+  })
+
+  if (!pattern) {
+    return NextResponse.json({ error: 'Pattern not found' }, { status: 404 })
+  }
+
+  const tried = ((pattern.triedSolutions ?? []) as { text: string; triedAt?: string; worked: boolean | null }[])
+  const updatedTried = tried.map(s =>
+    s.text === solutionText ? { ...s, worked } : s
+  )
+  // Если решения не было в tried — добавим его
+  if (!tried.some(s => s.text === solutionText)) {
+    updatedTried.push({ text: solutionText, worked })
+  }
+
+  const whatWorked = ((pattern.whatWorked ?? []) as string[])
+  const updatedWhatWorked = worked && !whatWorked.includes(solutionText)
+    ? [...whatWorked, solutionText]
+    : whatWorked
+
+  await db.userAiPattern.update({
+    where: { userId_leakType: { userId, leakType } },
+    data: {
+      triedSolutions: updatedTried,
+      whatWorked:     updatedWhatWorked,
+    },
+  })
+
+  return NextResponse.json({ success: true })
+}
+
+/**
  * GET /api/ai/analyze-leak?userId=...&leakType=...
  * Возвращает последний сохранённый анализ без нового AI-вызова.
  */

@@ -883,6 +883,7 @@ export function ProfileScreen() {
               { id: 'rituals', label: 'Ритуалы (в сводке)' },
               { id: 'supplements', label: 'БАДы (в сводке)' },
               { id: 'quickinput', label: 'Быстрый ввод' },
+              { id: 'ai_recommendations', label: 'AI Рекомендации' },
             ].map(({ id, label }) => {
               const hidden = (settings.hiddenWidgets ?? []).includes(id)
               return (
