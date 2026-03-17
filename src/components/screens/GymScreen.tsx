@@ -35,6 +35,7 @@ import {
 } from 'lucide-react'
 import {
   MUSCLE_GROUPS,
+  WEEKDAYS,
   type DayScheduleItem,
   type GymWorkout,
   type GymPeriod,
