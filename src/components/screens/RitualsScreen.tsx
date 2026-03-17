@@ -25,7 +25,9 @@ import {
   Clock,
   X,
   Trash2,
-  Pencil
+  Pencil,
+  ShieldCheck,
+  ShieldOff
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -78,6 +80,15 @@ export function RitualsScreen() {
     completed: 0,
     percentage: 0
   })
+
+  // Streak shield
+  const [isActivatingShield, setIsActivatingShield] = useState(false)
+  const SHIELD_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000
+  const shieldUsedAt = user?.streakShieldUsedAt ? new Date(user.streakShieldUsedAt) : null
+  const shieldAvailable = !shieldUsedAt || Date.now() - shieldUsedAt.getTime() > SHIELD_COOLDOWN_MS
+  const shieldRechargesAt = shieldUsedAt
+    ? new Date(shieldUsedAt.getTime() + SHIELD_COOLDOWN_MS)
+    : null
 
   // Load rituals
   useEffect(() => {
@@ -191,6 +202,34 @@ export function RitualsScreen() {
   const handleSkipPreset = () => {
     setShowPresetModal(false)
     localStorage.setItem('ritual_preset_offered', 'true')
+  }
+
+  // Activate streak shield
+  const handleActivateShield = async () => {
+    if (!user?.id || !shieldAvailable) return
+    setIsActivatingShield(true)
+    try {
+      const res = await fetch('/api/streak/shield', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        showSuccessToast('Щит активирован — стрик защищён!')
+        // Update user in store so badge updates immediately
+        useAppStore.getState().setUser({
+          ...user,
+          streakShieldUsedAt: data.streakShieldUsedAt,
+        })
+      } else {
+        showErrorToast(new Error(data.error || 'Ошибка'), 'активация щита')
+      }
+    } catch (err) {
+      showErrorToast(err, 'активация щита')
+    } finally {
+      setIsActivatingShield(false)
+    }
   }
 
   // Open edit dialog for ritual
@@ -411,6 +450,44 @@ export function RitualsScreen() {
                 <Plus className="w-4 h-4 mr-2" />
                 Создать свой ритуал
               </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Streak Shield banner */}
+      {!isLoading && (user?.streak ?? 0) > 0 && (
+        <Card className={`border ${shieldAvailable ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-muted/30 bg-muted/5'}`}>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-3">
+              {shieldAvailable ? (
+                <ShieldCheck className="w-8 h-8 text-emerald-400 shrink-0" />
+              ) : (
+                <ShieldOff className="w-8 h-8 text-muted-foreground shrink-0" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">
+                  {shieldAvailable ? 'Щит стрика готов' : 'Щит перезаряжается'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {shieldAvailable
+                    ? 'Активируй, если пропустишь день — стрик не сгорит'
+                    : shieldRechargesAt
+                      ? `Готов ${shieldRechargesAt.toLocaleDateString('ru')}`
+                      : 'Недоступен'}
+                </p>
+              </div>
+              {shieldAvailable && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 shrink-0"
+                  onClick={handleActivateShield}
+                  disabled={isActivatingShield}
+                >
+                  {isActivatingShield ? 'Активация...' : 'Активировать'}
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
