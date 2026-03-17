@@ -326,6 +326,10 @@ export function GymWorkoutDetailDialog() {
               // PR detection: current weight >= stored max weight for this template
               const prevRecord = exercise.templateId ? personalRecords[exercise.templateId] : undefined
               const isPR = !!(weight && prevRecord && weight >= prevRecord)
+              // 1RM estimate via Epley formula: weight * (1 + reps/30)
+              const oneRM = weight && targetReps && targetReps > 1
+                ? Math.round(weight * (1 + targetReps / 30))
+                : null
 
               return (
                 <div key={exercise.id} className="p-3 rounded-xl bg-muted/30 space-y-2">
@@ -345,11 +349,18 @@ export function GymWorkoutDetailDialog() {
                           </span>
                         )}
                       </div>
-                      {exercise.muscleGroup && (
-                        <span className="text-xs text-muted-foreground">
-                          {MUSCLE_GROUPS.find(g => g.value === exercise.muscleGroup)?.label}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {exercise.muscleGroup && (
+                          <span className="text-xs text-muted-foreground">
+                            {MUSCLE_GROUPS.find(g => g.value === exercise.muscleGroup)?.label}
+                          </span>
+                        )}
+                        {oneRM && (
+                          <span className="text-[10px] text-muted-foreground/50">
+                            ~1RM {oneRM} кг
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       {setsCount > 0 && (
