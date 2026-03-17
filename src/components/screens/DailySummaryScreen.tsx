@@ -483,6 +483,24 @@ export function DailySummaryScreen() {
         </CardContent>
       </Card>
 
+      {/* Food slip reframe (5.6) */}
+      {summary.food.qualityBreakdown.bad > 2 && (
+        <Card className="bg-orange-500/5 border border-orange-500/20">
+          <CardContent className="pt-4 pb-3">
+            <div className="flex gap-3 items-start">
+              <span className="text-2xl">🔄</span>
+              <div>
+                <p className="text-sm font-medium text-orange-300 mb-1">Срыв — не катастрофа</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Один плохой день не ломает прогресс. Следующий приём пищи — чистый лист.
+                  Пей воду, подвигайся 10 минут — это перезапустит метаболизм.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Rituals */}
       <Card className="bg-card/50 backdrop-blur">
         <CardHeader className="pb-2">
