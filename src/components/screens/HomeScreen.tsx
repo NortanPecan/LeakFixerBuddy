@@ -284,6 +284,28 @@ export function HomeScreen() {
     setShowMoodDialog(false)
   }
 
+  // Quick water add (5.7)
+  const handleQuickWater = async (addMl: number) => {
+    if (!user?.id || !dailySummary) return
+    const newAmount = dailySummary.water.current + addMl
+    // Optimistic update
+    setDailySummary(prev => prev ? {
+      ...prev,
+      water: {
+        ...prev.water,
+        current: newAmount,
+        percentage: Math.round((newAmount / prev.water.target) * 100)
+      }
+    } : prev)
+    try {
+      await fetch('/api/water', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, amount: newAmount }),
+      })
+    } catch {/* silent */}
+  }
+
   // Get mood color for scale
   const getMoodColor = useCallback((level: number) => {
     const colors = [
@@ -629,6 +651,25 @@ export function HomeScreen() {
                 <Pill className="w-4 h-4 mx-auto mb-1 text-blue-400" />
                 <div className="text-xs text-muted-foreground">БАДы</div>
                 <div className="text-sm font-bold">{dailySummary.supplements.checked}/{dailySummary.supplements.total}</div>
+              </div>
+            </div>
+
+            {/* Quick water add (5.7) */}
+            <div className="mt-3 flex items-center gap-2 pt-2 border-t border-border/20" onClick={e => e.stopPropagation()}>
+              <Droplets className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+              <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                {dailySummary.water.current} / {dailySummary.water.target} мл
+              </span>
+              <div className="flex gap-1 ml-auto">
+                {[200, 350, 500].map(ml => (
+                  <button
+                    key={ml}
+                    onClick={() => handleQuickWater(ml)}
+                    className="px-2 py-1 rounded-md bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 text-[10px] font-medium transition-colors"
+                  >
+                    +{ml}
+                  </button>
+                ))}
               </div>
             </div>
 
