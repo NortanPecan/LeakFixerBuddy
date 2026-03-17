@@ -4,14 +4,17 @@ import { db } from '@/lib/db'
 /**
  * GET /api/buddies/suggest?userId=...
  *
- * Smart buddy matching: finds users with similar activity patterns and progress level.
- * Scoring algorithm:
- * 1. Same day range (± 7 days) → +3 points
- * 2. Similar streak (within 30%) → +2 points
- * 3. Has rituals/habits/gym data → +1 point each
- * 4. Already has no active buddy → preferred
+ * Buddy Matching v2: matching by leak profile similarity (Leak Engine patterns)
+ * + activity patterns + ritual categories.
  *
- * Returns top 5 candidates with match scores.
+ * Scoring algorithm:
+ * 1. Leak profile Jaccard similarity → up to +5 points
+ * 2. Same day range (± 7 days) → +3 points
+ * 3. Similar streak (within 30%) → +2 points
+ * 4. Matching activity types (rituals/habits/gym) → +1 each
+ * 5. Ritual category overlap → +1 or +2 points
+ *
+ * Returns top 5 candidates with match scores and reasons.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -22,11 +25,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Get current user's profile
-    const currentUser = await db.appUser.findUnique({
-      where: { id: userId },
-      select: { id: true, day: true, streak: true },
-    })
+    // Get current user's profile and leak profile
+    const [currentUser, currentProfile] = await Promise.all([
+      db.appUser.findUnique({
+        where: { id: userId },
+        select: { id: true, day: true, streak: true },
+      }),
+      db.userProfile.findUnique({
+        where: { userId },
+        select: { leakProfile: true },
+      }),
+    ])
 
     if (!currentUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
@@ -50,7 +59,7 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Get all other users
+    // Get all other users + their profiles (for leak profile matching)
     const candidates = await db.appUser.findMany({
       where: {
         id: { notIn: Array.from(excludeIds) },
@@ -67,14 +76,15 @@ export async function GET(request: NextRequest) {
         lastName: true,
         username: true,
         photoUrl: true,
+        profile: {
+          select: { leakProfile: true },
+        },
       },
       take: 100,
     })
 
     // Score each candidate
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-
-    // Get activity counts for all candidates in last 7 days
     const candidateIds = candidates.map(c => c.id)
 
     const [ritualActivity, gymActivity, habitActivity, candidateRitualCategories, myActiveCategories] = await Promise.all([
@@ -99,19 +109,16 @@ export async function GET(request: NextRequest) {
         },
         _count: { id: true },
       }),
-      // Ritual categories per candidate (for category-overlap scoring)
       db.ritual.findMany({
         where: { userId: { in: candidateIds }, status: 'active' },
         select: { userId: true, category: true },
       }),
-      // Current user's active ritual categories
       db.ritual.findMany({
         where: { userId, status: 'active' },
         select: { category: true },
       }),
     ])
 
-    // Also check current user's activity to find similar pattern
     const [myRituals, myGym, myHabits] = await Promise.all([
       db.ritualCompletion.count({
         where: { userId, date: { gte: sevenDaysAgo }, completed: true },
@@ -124,7 +131,6 @@ export async function GET(request: NextRequest) {
     const gymMap = new Set(gymActivity.map(g => g.userId))
     const habitMap = new Map(habitActivity.map(h => [h.userId, h._count.id]))
 
-    // Build category-to-userId map for overlap scoring
     const myCategorySet = new Set(myActiveCategories.map(r => r.category))
     const candidateCategoryMap = new Map<string, Set<string>>()
     for (const r of candidateRitualCategories) {
@@ -133,6 +139,10 @@ export async function GET(request: NextRequest) {
       }
       candidateCategoryMap.get(r.userId)!.add(r.category)
     }
+
+    // Parse current user's leak profile
+    const myLeakTypes = parseLeakProfile(currentProfile?.leakProfile)
+    const myLeakSet = new Set(myLeakTypes)
 
     const CATEGORY_LABELS: Record<string, string> = {
       health: 'Здоровье',
@@ -143,13 +153,50 @@ export async function GET(request: NextRequest) {
       productivity: 'Продуктивность',
     }
 
+    const LEAK_LABELS: Record<string, string> = {
+      low_energy: 'Низкая энергия',
+      ritual_consistency: 'Ритуалы',
+      high_spend_days: 'Расходы',
+      gym_mood: 'Зал и настроение',
+      energy_to_day_quality: 'Энергия → день',
+      no_gym: 'Нет тренировок',
+      missed_checkins: 'Пропуск чекинов',
+      calorie_spikes: 'Скачки калорий',
+      no_habits: 'Нет привычек',
+      rituals_quality: 'Ритуалы → день',
+      weekend_drop: 'Выходные',
+    }
+
     // Score and rank
     const scored = candidates
       .map(candidate => {
         let score = 0
         const reasons: string[] = []
 
-        // Day range match (± 7 days)
+        // --- Leak Profile Jaccard Similarity (up to +5 points) ---
+        const theirLeakTypes = parseLeakProfile(candidate.profile?.leakProfile)
+        if (myLeakTypes.length > 0 && theirLeakTypes.length > 0) {
+          const theirLeakSet = new Set(theirLeakTypes)
+          const shared: string[] = []
+          for (const t of myLeakSet) {
+            if (theirLeakSet.has(t)) shared.push(t)
+          }
+          const union = new Set([...myLeakSet, ...theirLeakSet])
+          const jaccard = union.size > 0 ? shared.length / union.size : 0
+
+          if (jaccard >= 0.6) {
+            score += 5
+            reasons.push(`Похожий ЛИК: ${shared.slice(0, 2).map(t => LEAK_LABELS[t] || t).join(', ')}`)
+          } else if (jaccard >= 0.33) {
+            score += 3
+            reasons.push(`Общие паттерны: ${shared.slice(0, 2).map(t => LEAK_LABELS[t] || t).join(', ')}`)
+          } else if (shared.length > 0) {
+            score += 1
+            reasons.push(`Схожий паттерн: ${LEAK_LABELS[shared[0]] || shared[0]}`)
+          }
+        }
+
+        // --- Day range match (± 7 days) → +3 ---
         const dayDiff = Math.abs((candidate.day || 1) - (currentUser.day || 1))
         if (dayDiff <= 7) {
           score += 3
@@ -158,7 +205,7 @@ export async function GET(request: NextRequest) {
           score += 1
         }
 
-        // Streak similarity (within 30%)
+        // --- Streak similarity (within 30%) → +2 ---
         const myStreak = currentUser.streak || 0
         const theirStreak = candidate.streak || 0
         if (myStreak > 0 && theirStreak > 0) {
@@ -171,7 +218,7 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        // Activity pattern similarity
+        // --- Activity pattern similarity → +1 each ---
         const hasRituals = (ritualMap.get(candidate.id) || 0) > 0
         const hasGym = gymMap.has(candidate.id)
         const hasHabits = (habitMap.get(candidate.id) || 0) > 0
@@ -189,7 +236,7 @@ export async function GET(request: NextRequest) {
           reasons.push('Привычки')
         }
 
-        // Ritual category overlap — shared focus areas boost matching
+        // --- Ritual category overlap → +1 or +2 ---
         if (myCategorySet.size > 0) {
           const theirCategories = candidateCategoryMap.get(candidate.id)
           if (theirCategories) {
@@ -224,6 +271,7 @@ export async function GET(request: NextRequest) {
           streak: candidate.streak || 0,
           score,
           reasons: reasons.slice(0, 3),
+          leakOverlap: theirLeakTypes.filter(t => myLeakSet.has(t)),
         }
       })
       .filter(c => c.score > 0)
@@ -233,6 +281,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       suggestions: scored,
       currentUserDay: currentUser.day,
+      myLeakProfile: myLeakTypes,
     })
   } catch (error) {
     console.error('[Buddy Suggest] Error:', error)
@@ -240,3 +289,9 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/** Parse leakProfile JSON field → string[] */
+function parseLeakProfile(raw: unknown): string[] {
+  if (!raw) return []
+  if (Array.isArray(raw)) return raw.filter((x): x is string => typeof x === 'string')
+  return []
+}

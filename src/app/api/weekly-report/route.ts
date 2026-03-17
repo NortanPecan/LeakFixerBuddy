@@ -120,6 +120,18 @@ export async function GET(request: NextRequest) {
     // Basic correlation hints (leaks)
     const leakHints = detectLeaks(days)
 
+    // Persist leak profile (top-3 pattern types) for Buddy Matching v2
+    // Fire-and-forget — don't block the response on this
+    const topLeakTypes = leakHints
+      .filter(h => h.severity !== 'info' || leakHints.length <= 3)
+      .slice(0, 3)
+      .map(h => h.type)
+    db.userProfile.upsert({
+      where: { userId },
+      update: { leakProfile: topLeakTypes },
+      create: { userId, leakProfile: topLeakTypes },
+    }).catch(err => console.error('[Weekly Report] Failed to save leak profile:', err))
+
     // Summary stats
     const summary = {
       avgMood: avg(days.map(d => d.mood).filter((v): v is number => v !== null)),

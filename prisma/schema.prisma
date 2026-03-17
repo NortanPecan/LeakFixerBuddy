@@ -140,7 +140,11 @@ model UserProfile {
   
   // Personal info
   bio String?
-  
+
+  // Buddy Matching v2 — top leak patterns from Leak Engine
+  // Example: ["low_energy", "ritual_consistency", "high_spend_days"]
+  leakProfile Json? @default("[]") @map("leak_profile")
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
