@@ -1,6 +1,6 @@
 # Next Session — Текущее состояние и задачи
 
-> Обновлено: 2026-03-17 (сессия 4)
+> Обновлено: 2026-03-17 (сессия 4, продолжение)
 > Ветка: `claude/buddy-matching-v2-jyJbK`
 
 ---
@@ -11,24 +11,31 @@
 
 | # | Задача | Детали |
 |---|--------|--------|
-| 5.22 | **Растяжка после тренировки** | Кнопка 🧘 в `GymPostWorkoutDialog`, `stretchingDone` в Prisma, migration `20260317_gym_stretching.sql` |
+| 5.22 | **Растяжка после тренировки** | Кнопка 🧘 в `GymPostWorkoutDialog`, `stretchingDone` в Prisma |
 | 5.6 | **Рефрейминг при срыве в еде** | Карточка 🔄 в `DailySummaryScreen` при `qualityBreakdown.bad > 2` |
-| 2.5 | **Личные рекорды PR** | `/api/gym/records` (MAX weight per template), 🏆 PR badge в `GymWorkoutDetailDialog` |
-| 5.7 | **Быстрое добавление воды** | +200/+350/+500 мл кнопки в Daily Summary на HomeScreen, optimistic update |
+| 2.5 | **Личные рекорды PR** | `/api/gym/records` (MAX weight per template), 🏆 PR badge |
+| 5.21 | **1RM расчёт** | Epley formula, показывается под упражнением в GymWorkoutDetailDialog |
+| 5.7 | **Быстрое добавление воды** | +200/+350/+500 мл кнопки в Daily Summary, optimistic update |
 | 5.9 | **Качественный бар еды** | 3-сегментный мини-бар (зелёный/жёлтый/красный) под калориями |
-| 7.4 | **Быстрый ввод** | Строка на HomeScreen: "вода 300", "вес 74.5", "настроение 7", "энергия 8" |
+| 7.4 | **Быстрый ввод** | Строка на HomeScreen: "вода 300", "вес 74.5", "настроение 7", "зал", "ел", "ритуалы" |
+| 5.10 | **"Ел сегодня"** | "ел" в quick input → записывает нейтральный приём пищи |
+| 5.8 | **TDEE рекомендация** | Harris-Benedict BMR × 1.55, с корректировкой на цель, в DailySummaryScreen |
+| 2.4 | **Прогресс от первого дня** | Карточка "За X дней" с очками/стриком/тренировками на ProfileScreen |
+| 2.8 | **Страйк-баннер** | Баннер на HomeScreen при 7/14/21/30/60/90-дневном стрике |
+| 3.2 | **Корреляции** | `CorrelationInsights` в WeeklyReport: зал→настроение, ритуалы→энергия, ккал→энергия |
+| 3.10 | **Процентиль сообщества** | `/api/stats/community`, "топ X%" на ProfileScreen |
+| 2.7 | **Рефрейминг ритуалов** | Подсказка в DailySummaryScreen при провале ритуалов |
+| 5.26 | **Личные рекорды в профиле** | Топ-5 PR упражнений на ProfileScreen |
+| 5.0 | **30-дневный прогресс привычек** | `completionRate30d` в HabitsScreen (цветной %) |
+| Finance | **Остаток бюджета** | "ост. N ₽" под каждой категорией в FinanceScreen |
 
-### Миграции этой сессии
+### ⚠️ Миграции — ПРИМЕНИТЬ в Supabase!
 
-| Файл | Таблица | Статус |
-|------|---------|--------|
-| `prisma/migrations/20260317_gym_stretching.sql` | `gym_workouts.stretching_done` | ⚠️ **Применить в Supabase!** |
-
-### Новые API endpoints
-
-```
-GET /api/gym/records?userId=xxx  — MAX weight per exercise template
-```
+| Файл | Таблица |
+|------|---------|
+| `prisma/migrations/20260317_gym_stretching.sql` | `gym_workouts.stretching_done` |
+| `prisma/migrations/20260317_emotion_logs.sql` | `emotion_logs` |
+| `prisma/migrations/20260317_fleeting_thoughts.sql` | `fleeting_thoughts` |
 
 ---
 
@@ -36,27 +43,14 @@ GET /api/gym/records?userId=xxx  — MAX weight per exercise template
 
 ### 1. Telegram-бот: быстрый ввод через ИИ (6.1) 🔴 ВЫСОКИЙ
 **Что нужно**: пишешь боту "зал 45 минут" или "съел пиццу 800 ккал" → ИИ парсит и записывает.
-**Шаги:**
-- Webhook `/api/telegram/bot` — получает сообщения от бота
-- Claude API / simple NLP — определяет тип (еда / тренировка / вес / настроение)
-- Сохраняет через существующие API
-- Ответ: "✅ Записал: пицца 800 ккал в обед"
+**Обсудить с пользователем** — нужен TELEGRAM_BOT_TOKEN и сценарий использования.
 
-### 2. Шкала прогресса от первого дня (2.4) 🟡 СРЕДНИЙ
-**Что нужно**: сравнение текущих показателей с показателями на старте (день 1).
-**Шаги:**
-- Сохранять снапшот метрик при регистрации или в первую неделю
-- На ProfileScreen или HomeScreen — блок "за N дней: вес −3 кг, стрик +45 дней"
+### 2. Система рекомендаций (6.5) 🟡 СРЕДНИЙ
+**Что нужно**: на основе данных недели — рекомендация одной конкретной привычки для улучшения.
+**Реализация**: анализ weekly-report → самый слабый паттерн → конкретный совет.
 
-### 3. Шаблон замены плохой еды (5.2) 🟡 СРЕДНИЙ
-**Что нужно**: при добавлении "плохого" продукта → подсказать замену.
-**Шаги:**
-- Словарь замен: pizza → гречка, Cola → вода + лимон, etc.
-- Всплывающая подсказка в форме добавления еды
-
-### 4. Рекорды тела (подтягивания, планка) (2.5 расширение) 🟢 НИЗКИЙ
-**Текущее**: PR только по весу в зале.
-**Добавить**: bodyweight records — подтягивания, планка (секунды).
+### 3. Поиск/фильтр в FoodScreen (UX) 🟢 НИЗКИЙ
+**Что нужно**: быстрый поиск по названию еды в истории.
 
 ---
 
@@ -68,7 +62,7 @@ GET /api/gym/records?userId=xxx  — MAX weight per exercise template
 | **Ветка** | `claude/buddy-matching-v2-jyJbK` |
 | **Lint** | `bun run lint` перед коммитом (0 ошибок) |
 | **Миграции** | Вручную в Supabase SQL Editor |
-| **API** | ~85 endpoints в `src/app/api/` |
+| **API** | ~90 endpoints в `src/app/api/` |
 
 ## Vercel Cron (актуальное расписание)
 
@@ -79,16 +73,9 @@ GET /api/gym/records?userId=xxx  — MAX weight per exercise template
 | `0 16 * * *` | 16:00 | 19:00 | Ritual reminder |
 | `0 17 * * *` | 17:00 | 20:00 | Вечерний checkin reminder |
 
-## Новые API endpoints (сессия 3+4)
+## Новые API endpoints (сессия 4)
 
 ```
-GET/POST /api/telegram/notify?type=morning|evening  — checkin напоминания
-GET      /api/streak/shield?userId=xxx              — статус щита
-POST     /api/streak/shield { userId }              — активировать щит
-GET/POST /api/emotions                              — трекер эмоций
-GET/POST/DELETE /api/thoughts                       — мимолётные мысли
-GET      /api/cron/cleanup-thoughts                 — очистка просроченных мыслей
-GET      /api/gym/records?userId=xxx                — личные рекорды PR
-GET      /api/daily-summary                         — IF window + avgCalories7d
-GET      /api/buddies/suggest                       — v2: Jaccard по leak_profile
+GET /api/gym/records?userId=xxx        — личные рекорды PR (topPRs + records map)
+GET /api/stats/community?userId=xxx   — процентиль стрика/очков среди пользователей
 ```
