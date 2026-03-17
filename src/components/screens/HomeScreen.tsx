@@ -370,7 +370,25 @@ export function HomeScreen() {
       } catch { result = '❌ Ошибка' }
     }
 
-    if (!result) result = '🤔 Не понял. Попробуй: "вода 300", "вес 74.5", "настроение 7"'
+    // Ate: "ел", "поел", "покушал" — simple meal record (5.10)
+    if (!result && (raw === 'ел' || raw === 'поел' || raw === 'покушал' || raw === 'поела' || raw === 'ела')) {
+      try {
+        await fetch('/api/food', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id, name: 'Приём пищи', calories: 0, quality: 'neutral' }),
+        })
+        result = '🍽️ Приём пищи отмечен'
+      } catch { result = '❌ Ошибка' }
+    }
+
+    // Supplements: "бад", "бады", "добавки"
+    if (!result && (raw === 'бад' || raw === 'бады' || raw === 'добавки' || raw === 'витамины')) {
+      setScreen('health' as Screen)
+      result = '💊 Открываю раздел БАДов...'
+    }
+
+    if (!result) result = '🤔 Не понял. Попробуй: "вода 300", "вес 74.5", "настроение 7", "ел"'
 
     setQuickResult(result)
     setQuickInput('')
