@@ -241,6 +241,7 @@ export interface GymContextValue {
     techniqueNotes?: string
   }>
   isLoadingTemplates: boolean
+  personalRecords: Record<string, number>
 
   // Quick complete dialog
   showQuickCompleteDialog: boolean
@@ -412,6 +413,9 @@ export function GymProvider({ children }: { children: ReactNode }) {
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const pendingUpdates = useRef<Record<string, { setId: string; updates: Record<string, unknown> }>>({})
 
+  // Personal records (templateId → maxWeight)
+  const [personalRecords, setPersonalRecords] = useState<Record<string, number>>({})
+
   // Template select dialog
   const [showTemplateSelectDialog, setShowTemplateSelectDialog] = useState(false)
   const [templates, setTemplates] = useState<GymContextValue['templates']>([])
@@ -494,6 +498,15 @@ export function GymProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     loadTodayData()
   }, [loadTodayData])
+
+  // Load personal records (max weight per template)
+  useEffect(() => {
+    if (!user?.id) return
+    fetch(`/api/gym/records?userId=${user.id}`)
+      .then(r => r.json())
+      .then(data => { if (data.records) setPersonalRecords(data.records) })
+      .catch(() => {/* silent */})
+  }, [user?.id])
 
   // ─── Load workouts for active period ──────────────────────────────────────
 
@@ -1202,7 +1215,7 @@ export function GymProvider({ children }: { children: ReactNode }) {
     exerciseHistory, isLoadingHistory,
     newActivityType, setNewActivityType, newActivityValue, setNewActivityValue,
     savingSets,
-    showTemplateSelectDialog, setShowTemplateSelectDialog, templates, isLoadingTemplates,
+    showTemplateSelectDialog, setShowTemplateSelectDialog, templates, isLoadingTemplates, personalRecords,
     showQuickCompleteDialog, setShowQuickCompleteDialog,
     quickCompleteNextWeights, setQuickCompleteNextWeights, workoutNote, setWorkoutNote, stretchingDone, setStretchingDone,
     showCompletionPreview, setShowCompletionPreview, completionData,

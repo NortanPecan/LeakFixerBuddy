@@ -53,6 +53,7 @@ export function GymWorkoutDetailDialog() {
     handleUpdateSet, handleDeleteSet,
     handleDeleteExercise, handleToggleIncludeInFutureCycles,
     handleSaveAdditionalActivities,
+    personalRecords,
   } = useGymContext()
 
   return (
@@ -322,13 +323,19 @@ export function GymWorkoutDetailDialog() {
               const setsCount = exercise.sets?.length || 0
               const completedSets = exercise.sets?.filter(s => s.completed).length || 0
               const canDeleteExercise = !exercise.workoutTemplateExerciseId && !selectedWorkout?.completed
+              // PR detection: current weight >= stored max weight for this template
+              const prevRecord = exercise.templateId ? personalRecords[exercise.templateId] : undefined
+              const isPR = !!(weight && prevRecord && weight >= prevRecord)
 
               return (
                 <div key={exercise.id} className="p-3 rounded-xl bg-muted/30 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium">{exercise.name}</span>
+                        {isPR && (
+                          <Badge className="bg-yellow-500/20 text-yellow-400 text-[10px] px-1.5 py-0">🏆 PR</Badge>
+                        )}
                         <span className="text-primary font-mono text-sm">
                           {weight && targetReps && targetSets && `${weight} × ${targetReps} × ${targetSets}`}
                         </span>
