@@ -88,7 +88,7 @@ interface DailySummaryData {
 }
 
 export function DailySummaryScreen() {
-  const { user, selectedDate, setScreen } = useAppStore()
+  const { user, profile, selectedDate, setScreen } = useAppStore()
   const [summary, setSummary] = useState<DailySummaryData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -474,6 +474,29 @@ export function DailySummaryScreen() {
                   </span>
                 </div>
               )}
+              {/* TDEE recommendation (5.8) */}
+              {(() => {
+                const w = profile?.weight
+                const h = profile?.height
+                const age = profile?.age
+                if (!w || !h || !age) return null
+                // Harris-Benedict BMR (male, default) * moderate activity (1.55)
+                const bmr = 10 * w + 6.25 * h - 5 * age + 5
+                const tdee = Math.round(bmr * 1.55)
+                const targetW = profile?.targetWeight
+                const goal = targetW && targetW < w ? tdee - 300 : tdee
+                const diff = summary.food.calories - goal
+                return (
+                  <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+                    <span>🎯 Рекомендовано</span>
+                    <span className={`font-medium ${
+                      diff > 200 ? 'text-red-400' : diff < -300 ? 'text-yellow-400' : 'text-emerald-400'
+                    }`}>
+                      {goal} ккал ({diff > 0 ? '+' : ''}{diff})
+                    </span>
+                  </div>
+                )
+              })()}
             </>
           ) : (
             <div className="text-center py-2">
