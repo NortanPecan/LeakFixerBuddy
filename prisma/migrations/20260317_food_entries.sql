@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS food_entries (
   date       timestamptz NOT NULL DEFAULT now(),
   meal_type  text        NOT NULL DEFAULT 'snack', -- breakfast, lunch, dinner, snack, custom:*
   name       text        NOT NULL,
-  time       text,        -- "08:30", "12:00" (optional)
+  time       text,       -- "08:30", "12:00" (optional)
   calories   int,
   protein    float8,
   fat        float8,
