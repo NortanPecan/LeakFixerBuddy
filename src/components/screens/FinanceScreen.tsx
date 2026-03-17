@@ -131,6 +131,10 @@ interface FinanceSummary {
   expenses: number
   thisMonthIncome: number
   thisMonthExpenses: number
+  dailyAvgExpenses: number
+  projectedMonthExpenses: number
+  daysElapsed: number
+  daysRemaining: number
 }
 
 export function FinanceScreen() {
@@ -684,6 +688,14 @@ export function FinanceScreen() {
               <p className="text-xs text-muted-foreground">этот месяц</p>
             </div>
           </div>
+          {/* Daily rate and projection */}
+          {summary && summary.dailyAvgExpenses > 0 && (
+            <div className="mt-3 p-3 rounded-lg bg-white/5 text-xs text-muted-foreground flex justify-between">
+              <span>📊 В день: {formatMoney(summary.dailyAvgExpenses)}</span>
+              <span>📅 Прогноз: {formatMoney(summary.projectedMonthExpenses)}</span>
+              <span>⏳ Ост.: {summary.daysRemaining} дн.</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 

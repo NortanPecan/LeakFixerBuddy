@@ -131,6 +131,13 @@ export async function GET(request: NextRequest) {
     const thisMonthIncome = thisMonthTransactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0)
     const thisMonthExpenses = Math.abs(thisMonthTransactions.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0))
 
+    // Daily average spending this month and projection
+    const daysElapsed = now.getDate()
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+    const daysRemaining = daysInMonth - daysElapsed
+    const dailyAvgExpenses = daysElapsed > 0 ? thisMonthExpenses / daysElapsed : 0
+    const projectedMonthExpenses = dailyAvgExpenses * daysInMonth
+
     return NextResponse.json({
       success: true,
       summary: {
@@ -142,7 +149,11 @@ export async function GET(request: NextRequest) {
         income,
         expenses,
         thisMonthIncome,
-        thisMonthExpenses
+        thisMonthExpenses,
+        dailyAvgExpenses: Math.round(dailyAvgExpenses),
+        projectedMonthExpenses: Math.round(projectedMonthExpenses),
+        daysElapsed,
+        daysRemaining,
       }
     })
   } catch (error) {
