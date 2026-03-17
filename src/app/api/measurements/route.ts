@@ -22,8 +22,9 @@ export async function GET(request: NextRequest) {
       take: limit
     })
 
-    // Get latest measurements by type
+    // Get latest and first measurements by type
     const latestByType: Record<string, { value: number; date: string; trend: number }> = {}
+    const firstByType: Record<string, { value: number; date: string }> = {}
     const types = ['weight', 'waist', 'hips', 'chest', 'bicep', 'thigh']
 
     for (const t of types) {
@@ -36,6 +37,10 @@ export async function GET(request: NextRequest) {
         orderBy: { date: 'desc' },
         skip: 1
       })
+      const first = await db.measurement.findFirst({
+        where: { userId, type: t },
+        orderBy: { date: 'asc' }
+      })
 
       if (latest) {
         latestByType[t] = {
@@ -44,9 +49,15 @@ export async function GET(request: NextRequest) {
           trend: previous ? latest.value - previous.value : 0
         }
       }
+      if (first) {
+        firstByType[t] = {
+          value: first.value,
+          date: first.date.toISOString()
+        }
+      }
     }
 
-    return NextResponse.json({ measurements, latestByType })
+    return NextResponse.json({ measurements, latestByType, firstByType })
   } catch (error) {
     console.error('Fetch measurements error:', error)
     return NextResponse.json({ error: 'Failed to fetch measurements' }, { status: 500 })

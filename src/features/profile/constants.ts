@@ -97,6 +97,7 @@ export interface UserSettings {
   zonePokerEnabled: boolean
   zoneHealthEnabled: boolean
   theme: string
+  hiddenWidgets?: string[]
 }
 
 export interface ActivityStats {

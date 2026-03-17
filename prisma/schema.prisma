@@ -761,6 +761,7 @@ model UserSettings {
   zonePokerEnabled      Boolean  @default(true) @map("zone_poker_enabled")
   zoneHealthEnabled     Boolean  @default(true) @map("zone_health_enabled")
   theme                 String   @default("system") // "light" | "dark" | "system"
+  hiddenWidgets         Json     @default("[]") @map("hidden_widgets") // string[] of widget IDs to hide on HomeScreen
   createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz
 

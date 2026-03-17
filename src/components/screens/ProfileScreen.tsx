@@ -108,6 +108,7 @@ export function ProfileScreen() {
     totalWaterMl: 0
   })
   const [measurements, setMeasurements] = useState<Record<string, Measurement>>({})
+  const [firstMeasurements, setFirstMeasurements] = useState<Record<string, { value: number; date: string }>>({})
   const [buddies, setBuddies] = useState<Buddy[]>([])
   const [attributes, setAttributes] = useState<UserAttribute[]>([])
   const [showMeasurements, setShowMeasurements] = useState(false)
@@ -152,6 +153,7 @@ export function ProfileScreen() {
         const measurementsRes = await fetch(`/api/measurements?userId=${user.id}`)
         const measurementsData = await measurementsRes.json()
         setMeasurements(measurementsData.latestByType || {})
+        setFirstMeasurements(measurementsData.firstByType || {})
 
         // Load buddies
         const buddiesRes = await fetch(`/api/buddies?userId=${user.id}`)
@@ -241,6 +243,26 @@ export function ProfileScreen() {
   }
 
   // Update setting
+  const handleToggleWidget = async (widgetId: string) => {
+    const current = settings.hiddenWidgets ?? []
+    const updated = current.includes(widgetId)
+      ? current.filter((w) => w !== widgetId)
+      : [...current, widgetId]
+    const newSettings = { ...settings, hiddenWidgets: updated }
+    setSettings(newSettings)
+    if (user?.id) {
+      try {
+        await fetch('/api/settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id, hiddenWidgets: updated }),
+        })
+      } catch (error) {
+        showErrorToast(error, 'save widget setting')
+      }
+    }
+  }
+
   const handleSettingChange = async (key: keyof UserSettings, value: boolean | string) => {
     const newSettings = { ...settings, [key]: value }
     setSettings(newSettings)
@@ -303,6 +325,7 @@ export function ProfileScreen() {
       const res = await fetch(`/api/measurements?userId=${user.id}`)
       const data = await res.json()
       setMeasurements(data.latestByType || {})
+      setFirstMeasurements(data.firstByType || {})
       setShowMeasurements(false)
       setNewMeasurement({ type: 'weight', value: '' })
       showSuccessToast('Замер добавлен')
@@ -442,6 +465,22 @@ export function ProfileScreen() {
                 <div className="text-[10px] text-muted-foreground">тренировок</div>
               </div>
             </div>
+            {/* Weight delta since day 1 (2.4) */}
+            {measurements['weight'] && firstMeasurements['weight'] &&
+              measurements['weight'].value !== firstMeasurements['weight'].value && (
+              <div className="mt-2 pt-2 border-t border-border/40 flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Вес с первого дня</span>
+                <span className={
+                  measurements['weight'].value < firstMeasurements['weight'].value
+                    ? 'text-emerald-400 font-semibold'
+                    : 'text-orange-400 font-semibold'
+                }>
+                  {firstMeasurements['weight'].value} → {measurements['weight'].value} кг
+                  {' '}({measurements['weight'].value - firstMeasurements['weight'].value > 0 ? '+' : ''}
+                  {(measurements['weight'].value - firstMeasurements['weight'].value).toFixed(1)} кг)
+                </span>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -776,6 +815,23 @@ export function ProfileScreen() {
                 </Badge>
               ))}
             </div>
+          </div>
+
+          {/* Home screen widgets (7.2/7.3) */}
+          <div className="space-y-3 pt-3 border-t border-border/50">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Виджеты главного экрана</p>
+            {[
+              { id: 'weight', label: 'Вес' },
+              { id: 'wellbeing', label: 'Велнес' },
+            ].map(({ id, label }) => {
+              const hidden = (settings.hiddenWidgets ?? []).includes(id)
+              return (
+                <div key={id} className="flex items-center justify-between">
+                  <Label className="text-sm">{label}</Label>
+                  <Switch checked={!hidden} onCheckedChange={() => handleToggleWidget(id)} />
+                </div>
+              )
+            })}
           </div>
 
           {/* Theme */}

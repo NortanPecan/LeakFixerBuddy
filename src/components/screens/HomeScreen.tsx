@@ -110,6 +110,7 @@ export function HomeScreen() {
   const [showWeightGoal, setShowWeightGoal] = useState(false)
   const [weeklyLeaksCount, setWeeklyLeaksCount] = useState<number | null>(null)
   const [topWeeklyLeak, setTopWeeklyLeak] = useState<{ message: string; emoji: string; severity: string } | null>(null)
+  const [hiddenWidgets, setHiddenWidgets] = useState<string[]>([])
 
   const currentDay = user?.day || 1
   const progress = ((currentDay - 1) / 30) * 100
@@ -184,6 +185,23 @@ export function HomeScreen() {
     }
     loadSummary()
   }, [user?.id, selectedDate])
+
+  // Load settings (hiddenWidgets)
+  useEffect(() => {
+    const loadSettings = async () => {
+      if (!user?.id) return
+      try {
+        const res = await fetch(`/api/settings?userId=${user.id}`)
+        const data = await res.json()
+        if (data.success && data.settings?.hiddenWidgets) {
+          setHiddenWidgets(data.settings.hiddenWidgets as string[])
+        }
+      } catch {
+        // non-critical
+      }
+    }
+    loadSettings()
+  }, [user?.id])
 
   // Load weekly leaks count (background fetch)
   useEffect(() => {
@@ -601,19 +619,41 @@ export function HomeScreen() {
       </Card>
 
       {/* Wellbeing Widget */}
-      <WellbeingWidget
+      {!hiddenWidgets.includes('wellbeing') && <WellbeingWidget
         mood={globalState?.mood}
         energy={globalState?.energy}
-      />
+      />}
 
-      {/* Emotion Tracker */}
-      {user?.id && <EmotionWidget userId={user.id} />}
+      {/* Emotion Tracker — advanced, unlocks day 8 */}
+      {user?.id && (user.day ?? 1) >= 8 && <EmotionWidget userId={user.id} />}
 
-      {/* Fleeting Thoughts */}
-      {user?.id && <FleetingThoughtsWidget userId={user.id} />}
+      {/* Fleeting Thoughts — advanced, unlocks day 8 */}
+      {user?.id && (user.day ?? 1) >= 8 && <FleetingThoughtsWidget userId={user.id} />}
+
+      {/* Onboarding teaser: show until day 7 */}
+      {user && (user.day ?? 1) < 8 && (
+        <Card className="border border-primary/20 bg-primary/5">
+          <CardContent className="pt-3 pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🔓</span>
+                <div>
+                  <div className="text-sm font-medium">Аналитика откроется на 8-й день</div>
+                  <div className="text-xs text-muted-foreground">
+                    Ещё {8 - (user.day ?? 1)} дн. — следи за привычками каждый день
+                  </div>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-sm font-bold text-primary">{user.day ?? 1}/7</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Weight Tracking Card */}
-      <Card className="bg-card/50 backdrop-blur">
+      {!hiddenWidgets.includes('weight') && <Card className="bg-card/50 backdrop-blur">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
@@ -709,7 +749,7 @@ export function HomeScreen() {
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Quick input bar (7.4) */}
       <div className="relative">
@@ -873,8 +913,8 @@ export function HomeScreen() {
         )
       })()}
 
-      {/* Today's Focus — top weekly leak as actionable hint */}
-      {topWeeklyLeak && (
+      {/* Today's Focus — top weekly leak as actionable hint (unlocks day 8) */}
+      {topWeeklyLeak && (user?.day ?? 1) >= 8 && (
         <Card
           className="cursor-pointer"
           style={{
@@ -908,8 +948,8 @@ export function HomeScreen() {
         </Card>
       )}
 
-      {/* Weekly report shortcut */}
-      <Card
+      {/* Weekly report shortcut — unlocks day 8 */}
+      {(user?.day ?? 1) >= 8 && <Card
         className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors"
         onClick={() => setScreen('weekly-report' as Screen)}
       >
@@ -938,10 +978,10 @@ export function HomeScreen() {
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </div>
         </CardContent>
-      </Card>
+      </Card>}
 
-      {/* Monthly report shortcut */}
-      <Card
+      {/* Monthly report shortcut — unlocks day 8 */}
+      {(user?.day ?? 1) >= 8 && <Card
         className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors"
         onClick={() => setScreen('monthly-report')}
       >
@@ -957,7 +997,7 @@ export function HomeScreen() {
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </div>
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Quick stats */}
       <div className="grid grid-cols-2 gap-3">
