@@ -235,7 +235,88 @@ export function WeeklyReportScreen() {
           </CardContent>
         </Card>
       )}
+
+      {/* AI Prompt export */}
+      <AiPromptButton report={report} />
     </div>
+  )
+}
+
+function AiPromptButton({ report }: { report: WeeklyReport }) {
+  const [copied, setCopied] = useState(false)
+
+  const buildPrompt = (): string => {
+    const s = report.summary
+    const lines: string[] = []
+
+    lines.push(`Ты — эксперт по саморазвитию и поведенческому анализу. Проанализируй мою неделю (${report.weekStart} — ${report.weekEnd}) и найди закономерности, паттерны и рекомендации.`)
+    lines.push('')
+    lines.push('## Статистика недели')
+    lines.push(`- Среднее настроение: ${s.avgMood > 0 ? s.avgMood.toFixed(1) : 'нет данных'}/10`)
+    lines.push(`- Средняя энергия: ${s.avgEnergy > 0 ? s.avgEnergy.toFixed(1) : 'нет данных'}/10`)
+    lines.push(`- Средняя оценка дня: ${s.avgEveningRating > 0 ? s.avgEveningRating.toFixed(1) : 'нет данных'}/10`)
+    lines.push(`- Дней в зале: ${s.gymDays}/7`)
+    lines.push(`- Утренних чекапов: ${s.checkinDays}/7`)
+    lines.push(`- Ритуалов выполнено: ${s.totalRitualsCompleted}`)
+    lines.push(`- Привычек выполнено: ${s.totalHabitsCompleted}`)
+    if (s.totalExpenses > 0) lines.push(`- Расходы: ${s.totalExpenses.toFixed(0)} ₽`)
+    if (s.avgCaloriesPerDay > 0) lines.push(`- Среднее кКал/день: ${s.avgCaloriesPerDay.toFixed(0)}`)
+
+    lines.push('')
+    lines.push('## По дням')
+    report.days.forEach(d => {
+      const parts: string[] = [d.dayOfWeek]
+      if (d.mood !== null) parts.push(`настр.${d.mood}`)
+      if (d.morningEnergy !== null) parts.push(`энерг.${d.morningEnergy}`)
+      if (d.eveningRating !== null) parts.push(`день${d.eveningRating}`)
+      if (d.hadGym) parts.push('зал✓')
+      if (d.morningCheckinDone) parts.push('утро✓')
+      if (d.ritualsTotal > 0) parts.push(`ритуалы ${d.ritualsCompleted}/${d.ritualsTotal}`)
+      if (d.habitsCompleted > 0) parts.push(`привычки ${d.habitsCompleted}`)
+      if (d.expenses > 0) parts.push(`₽${d.expenses.toFixed(0)}`)
+      lines.push(`- ${parts.join(' | ')}`)
+    })
+
+    if (report.leakHints.length > 0) {
+      lines.push('')
+      lines.push('## Найденные паттерны (автоматически)')
+      report.leakHints.forEach(h => {
+        lines.push(`- [${h.severity}] ${h.emoji} ${h.message}`)
+      })
+    }
+
+    lines.push('')
+    lines.push('## Задание')
+    lines.push('1. Выдели 2–3 ключевых лика (утечки энергии/продуктивности) на основе данных')
+    lines.push('2. Объясни связи между показателями (например: низкая энергия → меньше ритуалов → хуже день)')
+    lines.push('3. Дай 2–3 конкретных действия на следующую неделю')
+    lines.push('4. Что из паттернов требует немедленного внимания?')
+
+    return lines.join('\n')
+  }
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(buildPrompt())
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2500)
+    } catch {
+      // Fallback: select text
+    }
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="w-full py-3 rounded-2xl text-sm font-medium transition-all flex items-center justify-center gap-2"
+      style={{
+        background: copied ? 'rgba(34,197,94,0.15)' : 'rgba(99,102,241,0.12)',
+        border: `1px solid ${copied ? 'rgba(34,197,94,0.3)' : 'rgba(99,102,241,0.25)'}`,
+        color: copied ? '#86efac' : '#a5b4fc',
+      }}
+    >
+      {copied ? '✓ Скопировано!' : '🤖 Скопировать промпт для ИИ'}
+    </button>
   )
 }
 
