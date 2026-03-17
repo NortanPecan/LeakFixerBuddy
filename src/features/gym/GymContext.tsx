@@ -249,6 +249,8 @@ export interface GymContextValue {
   setQuickCompleteNextWeights: React.Dispatch<React.SetStateAction<Record<string, { weight: number; reps: number; sets: number }>>>
   workoutNote: string
   setWorkoutNote: React.Dispatch<React.SetStateAction<string>>
+  stretchingDone: boolean
+  setStretchingDone: React.Dispatch<React.SetStateAction<boolean>>
 
   // Completion preview
   showCompletionPreview: boolean
@@ -291,7 +293,7 @@ export interface GymContextValue {
   handleAutoFillSets: () => void
   handleConfirmQuickComplete: () => Promise<void>
   handleUndoComplete: () => Promise<void>
-  finalizeWorkout: (workoutId: string, ratings: Record<string, 'easy' | 'normal' | 'hard'>, activities: AdditionalActivity[], note?: string) => Promise<void>
+  finalizeWorkout: (workoutId: string, ratings: Record<string, 'easy' | 'normal' | 'hard'>, activities: AdditionalActivity[], note?: string, stretchingDone?: boolean) => Promise<void>
   loadWorkoutDetails: (workout: GymWorkout) => Promise<void>
   loadExerciseHistory: (exercise: GymExercise) => Promise<void>
   loadTemplates: () => Promise<void>
@@ -419,6 +421,7 @@ export function GymProvider({ children }: { children: ReactNode }) {
   const [showQuickCompleteDialog, setShowQuickCompleteDialog] = useState(false)
   const [quickCompleteNextWeights, setQuickCompleteNextWeights] = useState<Record<string, { weight: number; reps: number; sets: number }>>({})
   const [workoutNote, setWorkoutNote] = useState('')
+  const [stretchingDone, setStretchingDone] = useState(false)
 
   // Completion preview
   const [showCompletionPreview, setShowCompletionPreview] = useState(false)
@@ -954,7 +957,8 @@ export function GymProvider({ children }: { children: ReactNode }) {
     workoutId: string,
     ratings: Record<string, 'easy' | 'normal' | 'hard'>,
     activities: AdditionalActivity[],
-    note?: string
+    note?: string,
+    stretching?: boolean
   ) => {
     if (!selectedWorkout) return
     try {
@@ -976,12 +980,13 @@ export function GymProvider({ children }: { children: ReactNode }) {
       await fetch('/api/gym/today', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workoutId, completed: true, additionalActivities: activities, exercises: exercisesData, cycleNote: note }),
+        body: JSON.stringify({ workoutId, completed: true, additionalActivities: activities, exercises: exercisesData, cycleNote: note, stretchingDone: stretching ?? false }),
       })
       setWorkouts(prev => prev.map(w => w.id === workoutId ? { ...w, completed: true } : w))
       setShowPostWorkoutDialog(false)
       setShowWorkoutDetail(false)
       setWorkoutNote('')
+      setStretchingDone(false)
       loadTodayData()
     } catch (error) {
       console.error('Failed to finalize workout:', error)
@@ -1199,7 +1204,7 @@ export function GymProvider({ children }: { children: ReactNode }) {
     savingSets,
     showTemplateSelectDialog, setShowTemplateSelectDialog, templates, isLoadingTemplates,
     showQuickCompleteDialog, setShowQuickCompleteDialog,
-    quickCompleteNextWeights, setQuickCompleteNextWeights, workoutNote, setWorkoutNote,
+    quickCompleteNextWeights, setQuickCompleteNextWeights, workoutNote, setWorkoutNote, stretchingDone, setStretchingDone,
     showCompletionPreview, setShowCompletionPreview, completionData,
     scheduleDraggedIdx, scheduleDragOverIdx,
     calendarDays, periodProgress, nextWorkout, completedWorkouts, calendarPreview,

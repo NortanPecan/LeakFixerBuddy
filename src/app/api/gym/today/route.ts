@@ -239,7 +239,8 @@ export async function POST(request: NextRequest) {
       wellbeingNote,
       additionalActivities,
       exercises,
-      cycleNote // v1.6: workout note to save as cycle note for next cycle
+      cycleNote, // v1.6: workout note to save as cycle note for next cycle
+      stretchingDone // v5.22: stretching after workout
     } = body
 
     if (!workoutId) {
@@ -307,6 +308,7 @@ export async function POST(request: NextRequest) {
         wellbeing: wellbeing ?? undefined,
         wellbeingNote: wellbeingNote ?? undefined,
         additionalActivities: additionalActivities ? JSON.stringify(additionalActivities) : undefined,
+        stretchingDone: stretchingDone ?? false,
         updatedAt: new Date()
       }
     })

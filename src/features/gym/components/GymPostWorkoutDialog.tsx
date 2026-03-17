@@ -18,6 +18,7 @@ export function GymPostWorkoutDialog() {
     exerciseRatings, setExerciseRatings,
     editingActivities,
     workoutNote, setWorkoutNote,
+    stretchingDone, setStretchingDone,
     finalizeWorkout,
   } = useGymContext()
 
@@ -106,6 +107,22 @@ export function GymPostWorkoutDialog() {
             })}
           </div>
 
+          {/* Stretching checkbox */}
+          <button
+            onClick={() => setStretchingDone(prev => !prev)}
+            className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${
+              stretchingDone
+                ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-400'
+                : 'border-border bg-muted/20 text-muted-foreground'
+            }`}
+          >
+            <span className="text-xl">{stretchingDone ? '✅' : '🧘'}</span>
+            <span className="text-sm font-medium">Растяжка выполнена</span>
+            {stretchingDone && (
+              <span className="ml-auto text-xs text-emerald-500">+восстановление</span>
+            )}
+          </button>
+
           <div className="flex gap-2 pt-2">
             <Button
               variant="outline"
@@ -118,7 +135,7 @@ export function GymPostWorkoutDialog() {
               className="flex-1 bg-emerald-600 hover:bg-emerald-700"
               onClick={() => {
                 if (selectedWorkout) {
-                  finalizeWorkout(selectedWorkout.id, exerciseRatings, editingActivities, workoutNote)
+                  finalizeWorkout(selectedWorkout.id, exerciseRatings, editingActivities, workoutNote, stretchingDone)
                 }
               }}
             >

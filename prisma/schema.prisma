@@ -353,6 +353,7 @@ model GymWorkout {
   additionalActivities String?  @map("additional_activities")              // JSON: [{ type, value, unit }]
   workoutTemplateId    String?  @map("workout_template_id") @db.Uuid      // ссылка на шаблон дня
   cycleNumber          Int?     @map("cycle_number")                       // номер цикла (1-8)
+  stretchingDone       Boolean  @default(false) @map("stretching_done")   // растяжка после тренировки
   createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 
