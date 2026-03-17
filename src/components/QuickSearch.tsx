@@ -159,6 +159,21 @@ export function QuickSearch({ open, onClose }: QuickSearchProps) {
       keywords: ['экспорт', 'export', 'данные', 'выгрузка'],
       type: 'navigate', screen: 'export',
     },
+    {
+      id: 'weekly-report', label: 'Недельный отчёт', emoji: '🔍',
+      keywords: ['отчёт', 'лики', 'неделя', 'паттерны', 'report', 'weekly'],
+      type: 'navigate', screen: 'weekly-report',
+    },
+    {
+      id: 'habits', label: 'Привычки', emoji: '🔄',
+      keywords: ['привычки', 'habit', 'habits', 'трекер'],
+      type: 'navigate', screen: 'habits',
+    },
+    {
+      id: 'daily-summary', label: 'Сводка дня', emoji: '📊',
+      keywords: ['сводка', 'день', 'дневная', 'summary', 'daily'],
+      type: 'navigate', screen: 'daily-summary',
+    },
   ]
 
   const filtered = query.length < 1
