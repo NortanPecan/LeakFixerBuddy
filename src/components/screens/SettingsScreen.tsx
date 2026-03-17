@@ -11,6 +11,7 @@ import { useState, useEffect } from 'react'
 
 interface UserSettings {
   ritualReminders: boolean
+  checkinReminders: boolean
   taskReminders: boolean
   zoneHealthEnabled: boolean
   zoneLeakfixerEnabled: boolean
@@ -25,6 +26,7 @@ export function SettingsScreen() {
   )
   const [settings, setSettings] = useState<UserSettings>({
     ritualReminders: true,
+    checkinReminders: true,
     taskReminders: true,
     zoneHealthEnabled: true,
     zoneLeakfixerEnabled: true,
@@ -42,6 +44,7 @@ export function SettingsScreen() {
         if (data.success && data.settings) {
           setSettings({
             ritualReminders: data.settings.ritualReminders ?? true,
+            checkinReminders: data.settings.checkinReminders ?? true,
             taskReminders: data.settings.taskReminders ?? true,
             zoneHealthEnabled: data.settings.zoneHealthEnabled ?? true,
             zoneLeakfixerEnabled: data.settings.zoneLeakfixerEnabled ?? true,
@@ -116,6 +119,17 @@ export function SettingsScreen() {
             <Switch
               checked={settings.ritualReminders}
               onCheckedChange={v => updateSetting('ritualReminders', v)}
+              disabled={savingSettings}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Напоминания о чек-инах</p>
+              <p className="text-xs text-muted-foreground">Утром и вечером, если чек-ин не сделан</p>
+            </div>
+            <Switch
+              checked={settings.checkinReminders}
+              onCheckedChange={v => updateSetting('checkinReminders', v)}
               disabled={savingSettings}
             />
           </div>

@@ -745,6 +745,7 @@ model UserSettings {
   id                    String   @id @default(uuid()) @db.Uuid
   userId                String   @unique @map("user_id") @db.Uuid
   ritualReminders       Boolean  @default(true) @map("ritual_reminders")
+  checkinReminders      Boolean  @default(true) @map("checkin_reminders")
   taskReminders         Boolean  @default(true) @map("task_reminders")
   zoneSteamEnabled      Boolean  @default(true) @map("zone_steam_enabled")
   zoneLeakfixerEnabled  Boolean  @default(true) @map("zone_leakfixer_enabled")

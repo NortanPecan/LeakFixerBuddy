@@ -1,8 +1,16 @@
 {
   "crons": [
     {
+      "path": "/api/telegram/notify?type=morning",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/telegram/notify?type=evening",
+      "schedule": "0 17 * * *"
+    },
+    {
       "path": "/api/notifications/send-reminder",
-      "schedule": "0 19 * * *"
+      "schedule": "0 16 * * *"
     }
   ]
 }
