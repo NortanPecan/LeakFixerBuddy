@@ -57,7 +57,7 @@ interface Lesson {
 
 interface DailySummary {
   water: { current: number; target: number; percentage: number }
-  food: { calories: number; entriesCount: number; qualityBreakdown: { good: number; neutral: number; bad: number }; firstMeal: string | null; lastMeal: string | null; eatingWindowHours: number | null }
+  food: { calories: number; entriesCount: number; qualityBreakdown: { good: number; neutral: number; bad: number }; firstMeal: string | null; lastMeal: string | null; eatingWindowHours: number | null; avgCalories7d: number | null }
   rituals: { completed: number; total: number; percentage: number }
   state: { mood: number | null; energy: number | null }
   supplements: { checked: number; total: number; percentage: number }
@@ -608,6 +608,11 @@ export function HomeScreen() {
                 {dailySummary.food.eatingWindowHours !== null && (
                   <div className="text-[9px] text-muted-foreground/70 mt-0.5">
                     ⏱ {dailySummary.food.eatingWindowHours}ч
+                  </div>
+                )}
+                {dailySummary.food.avgCalories7d !== null && (
+                  <div className="text-[9px] text-muted-foreground/50 mt-0.5">
+                    ∅{dailySummary.food.avgCalories7d}
                   </div>
                 )}
               </div>

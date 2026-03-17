@@ -38,6 +38,7 @@ interface DailySummary {
     firstMeal: string | null
     lastMeal: string | null
     eatingWindowHours: number | null
+    avgCalories7d: number | null
   }
   rituals: {
     completed: number
@@ -81,6 +82,10 @@ export async function GET(request: NextRequest) {
     const startOfDay = getStartOfDay(targetDate)
     const endOfDay = getEndOfDay(targetDate)
 
+    // 7-day rolling window for calorie average
+    const sevenDaysAgo = new Date(startOfDay)
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
+
     // Fetch all relevant data in parallel
     const [
       fitnessDaily,
@@ -91,6 +96,7 @@ export async function GET(request: NextRequest) {
       supplementIntakes,
       activeSupplements,
       checkins,
+      pastFoodEntries,
     ] = await Promise.all([
       // FitnessDaily for water
       db.fitnessDaily.findFirst({
@@ -151,6 +157,14 @@ export async function GET(request: NextRequest) {
       db.dailyCheckin.findMany({
         where: { userId, date: startOfDay },
       }).catch(() => []),
+      // Past 7 days food (for rolling calorie average)
+      db.foodEntry.findMany({
+        where: {
+          userId,
+          date: { gte: sevenDaysAgo, lt: startOfDay },
+        },
+        select: { date: true, calories: true },
+      }).catch(() => []),
     ])
 
     // Calculate water
@@ -161,6 +175,17 @@ export async function GET(request: NextRequest) {
         ? Math.round((fitnessDaily.water / (fitnessDaily.waterTarget || 2000)) * 100)
         : 0
     }
+
+    // 7-day rolling calorie average (5.5)
+    const pastByDay = new Map<string, number>()
+    for (const e of pastFoodEntries) {
+      const key = e.date.toISOString().split('T')[0]
+      pastByDay.set(key, (pastByDay.get(key) || 0) + (e.calories || 0))
+    }
+    const pastDaysWithFood = Array.from(pastByDay.values()).filter(c => c > 0)
+    const avgCalories7d = pastDaysWithFood.length > 0
+      ? Math.round(pastDaysWithFood.reduce((a, b) => a + b, 0) / pastDaysWithFood.length)
+      : null
 
     // Calculate food
     const foodCalories = foodEntries.reduce((sum, e) => sum + (e.calories || 0), 0)
@@ -198,6 +223,7 @@ export async function GET(request: NextRequest) {
       firstMeal,
       lastMeal,
       eatingWindowHours,
+      avgCalories7d,
     }
 
     // Calculate rituals

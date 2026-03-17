@@ -61,6 +61,7 @@ interface DailySummaryData {
     firstMeal: string | null
     lastMeal: string | null
     eatingWindowHours: number | null
+    avgCalories7d: number | null
   }
   rituals: {
     completed: number
@@ -457,6 +458,19 @@ export function DailySummaryScreen() {
                   <span className="font-medium text-foreground">
                     {summary.food.firstMeal} — {summary.food.lastMeal}
                     <span className="text-muted-foreground ml-1">({summary.food.eatingWindowHours} ч)</span>
+                  </span>
+                </div>
+              )}
+              {/* 7-day rolling calorie average */}
+              {summary.food.avgCalories7d !== null && (
+                <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+                  <span>∅ Среднее за 7 дней</span>
+                  <span className={`font-medium ${
+                    summary.food.calories > summary.food.avgCalories7d * 1.2 ? 'text-red-400' :
+                    summary.food.calories < summary.food.avgCalories7d * 0.8 ? 'text-yellow-400' :
+                    'text-foreground'
+                  }`}>
+                    {summary.food.avgCalories7d} ккал
                   </span>
                 </div>
               )}
