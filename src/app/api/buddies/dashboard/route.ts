@@ -114,64 +114,59 @@ export async function GET(request: NextRequest) {
       where: { userId: buddyId, status: 'active' }
     })
 
-    // Streak history (last 7 days) for buddy
-    const last7Days: { date: string; completions: number }[] = []
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date()
-      d.setDate(d.getDate() - i)
-      d.setHours(0, 0, 0, 0)
-      const next = new Date(d)
-      next.setDate(next.getDate() + 1)
+    // Get 7-day range
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
+    sevenDaysAgo.setHours(0, 0, 0, 0)
 
-      const completions = await db.ritualCompletion.count({
-        where: {
-          userId: buddyId,
-          date: { gte: d, lt: next },
-          completed: true
+    // Bulk fetch both users' 7-day completions in 2 queries instead of 14
+    const [buddyWeekCompletions, myWeekCompletions, currentUser, myTodayCompletions] = await Promise.all([
+      db.ritualCompletion.findMany({
+        where: { userId: buddyId, date: { gte: sevenDaysAgo }, completed: true },
+        select: { date: true },
+      }),
+      db.ritualCompletion.findMany({
+        where: { userId, date: { gte: sevenDaysAgo }, completed: true },
+        select: { date: true },
+      }),
+      db.appUser.findUnique({
+        where: { id: userId },
+        select: {
+          telegramFirstName: true,
+          telegramLastName: true,
+          telegramUsername: true,
+          firstName: true,
+          lastName: true,
+          telegramPhotoUrl: true,
+          photoUrl: true,
+          day: true,
+          streak: true,
+          points: true,
         }
-      })
-      last7Days.push({ date: d.toISOString().split('T')[0], completions })
-    }
-
-    // Current user stats for comparison
-    const currentUser = await db.appUser.findUnique({
-      where: { id: userId },
-      select: {
-        telegramFirstName: true,
-        telegramLastName: true,
-        telegramUsername: true,
-        firstName: true,
-        lastName: true,
-        telegramPhotoUrl: true,
-        photoUrl: true,
-        day: true,
-        streak: true,
-        points: true,
-      }
-    })
+      }),
+      db.ritualCompletion.count({
+        where: { userId, date: { gte: today, lt: tomorrow }, completed: true }
+      }),
+    ])
 
     const myName = currentUser?.telegramFirstName
       ? `${currentUser.telegramFirstName}${currentUser.telegramLastName ? ` ${currentUser.telegramLastName}` : ''}`
       : currentUser?.firstName || currentUser?.telegramUsername || 'Я'
 
-    // My today's ritual completions
-    const myTodayCompletions = await db.ritualCompletion.count({
-      where: { userId, date: { gte: today, lt: tomorrow }, completed: true }
-    })
-
-    // My 7-day activity
-    const myLast7Days: { date: string; completions: number }[] = []
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date()
-      d.setDate(d.getDate() - i)
-      d.setHours(0, 0, 0, 0)
-      const next = new Date(d)
-      next.setDate(next.getDate() + 1)
-      const completions = await db.ritualCompletion.count({
-        where: { userId, date: { gte: d, lt: next }, completed: true }
+    // Build 7-day arrays from bulk data
+    const buildLast7Days = (completions: { date: Date }[]) => {
+      return Array.from({ length: 7 }, (_, i) => {
+        const d = new Date()
+        d.setDate(d.getDate() - (6 - i))
+        d.setHours(0, 0, 0, 0)
+        const dateStr = d.toISOString().split('T')[0]
+        const count = completions.filter(c => c.date.toISOString().split('T')[0] === dateStr).length
+        return { date: dateStr, completions: count }
       })
-      myLast7Days.push({ date: d.toISOString().split('T')[0], completions })
     }
+
+    const last7Days = buildLast7Days(buddyWeekCompletions)
+    const myLast7Days = buildLast7Days(myWeekCompletions)
 
     return NextResponse.json({
       success: true,
