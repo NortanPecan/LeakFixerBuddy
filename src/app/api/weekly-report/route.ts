@@ -114,6 +114,7 @@ export async function GET(request: NextRequest) {
         ritualsTotal: dayRituals.length,
         habitsCompleted: dayHabits.length,
         expenses: dayExpenses,
+        sleepHours: state?.sleepHours ?? null,
       })
     }
 
@@ -181,6 +182,7 @@ interface DayData {
   ritualsTotal: number
   habitsCompleted: number
   expenses: number
+  sleepHours: number | null
 }
 
 interface LeakHint {

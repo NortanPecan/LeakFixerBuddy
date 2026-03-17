@@ -57,6 +57,7 @@ async function handleReminder(request: NextRequest) {
         select: {
           telegramId: true,
           telegramFirstName: true,
+          streak: true,
         },
       },
     },
@@ -99,17 +100,21 @@ async function handleReminder(request: NextRequest) {
       continue
     }
 
-    const firstName = user.telegramFirstName || 'Привет'
+    const firstName = user.telegramFirstName || 'друг'
+    const streak = user.streak ?? 0
+    const streakLine = streak > 0 ? `🔥 Стрик: <b>${streak} дней</b> — не прерывай!\n\n` : ''
+
     const ritualList = incomplete
       .slice(0, 5)
-      .map(r => `• ${r.name}`)
+      .map(r => `• ${r.title}`)
       .join('\n')
     const more = incomplete.length > 5 ? `\n...и ещё ${incomplete.length - 5}` : ''
 
     const message =
-      `👋 ${firstName}, не забудь про ритуалы на сегодня!\n\n` +
+      `⏰ <b>${firstName}</b>, осталось выполнить ${incomplete.length} ритуал${incomplete.length === 1 ? '' : incomplete.length < 5 ? 'а' : 'ов'} сегодня:\n\n` +
       `${ritualList}${more}\n\n` +
-      `🔥 Открой <b>LeakFixer Buddy</b> и сделай чек-ин.`
+      `${streakLine}` +
+      `📱 Открой <b>LeakFixer Buddy</b> и отметь выполненные.`
 
     const sent = await sendTelegramMessage(user.telegramId, message)
     if (sent) {

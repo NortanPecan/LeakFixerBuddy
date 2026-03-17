@@ -23,6 +23,7 @@ interface DayData {
   ritualsTotal: number
   habitsCompleted: number
   expenses: number
+  sleepHours: number | null
 }
 
 interface LeakHint {
@@ -307,6 +308,41 @@ function CorrelationInsights({ days }: { days: DayData[] }) {
   })
   if (highCalThenLowEnergy.length >= 2) {
     insights.push({ emoji: '🍔', text: `${highCalThenLowEnergy.length}× после дня переедания (>2500 ккал) энергия на следующий день падала ниже 5` })
+  }
+
+  // Sleep → next-day energy correlation
+  const sleepDays = days.filter((d, i) => d.sleepHours !== null && i < days.length - 1)
+  if (sleepDays.length >= 2) {
+    const goodSleepNextEnergy = sleepDays
+      .filter(d => (d.sleepHours ?? 0) >= 7.5)
+      .map(d => days[days.indexOf(d) + 1]?.energy)
+      .filter((e): e is number => e !== null && e !== undefined)
+    const shortSleepNextEnergy = sleepDays
+      .filter(d => (d.sleepHours ?? 0) < 6)
+      .map(d => days[days.indexOf(d) + 1]?.energy)
+      .filter((e): e is number => e !== null && e !== undefined)
+    if (goodSleepNextEnergy.length >= 2 && shortSleepNextEnergy.length >= 1) {
+      const avgGood = goodSleepNextEnergy.reduce((a, b) => a + b, 0) / goodSleepNextEnergy.length
+      const avgShort = shortSleepNextEnergy.reduce((a, b) => a + b, 0) / shortSleepNextEnergy.length
+      if (avgGood - avgShort > 1.5) {
+        insights.push({ emoji: '😴', text: `После ночи 7.5ч+ энергия на следующий день выше на ${(avgGood - avgShort).toFixed(1)} балла` })
+      }
+    }
+  }
+
+  // Gym → next-day mood (gym lifts mood the day after)
+  const gymNextMoods = days
+    .filter((d, i) => d.hadGym && i < days.length - 1 && days[i + 1].mood !== null)
+    .map(d => days[days.indexOf(d) + 1].mood as number)
+  const noGymNextMoods = days
+    .filter((d, i) => !d.hadGym && i < days.length - 1 && days[i + 1].mood !== null)
+    .map(d => days[days.indexOf(d) + 1].mood as number)
+  if (gymNextMoods.length >= 2 && noGymNextMoods.length >= 2) {
+    const avgGym = gymNextMoods.reduce((a, b) => a + b, 0) / gymNextMoods.length
+    const avgNo = noGymNextMoods.reduce((a, b) => a + b, 0) / noGymNextMoods.length
+    if (avgGym - avgNo > 1.2) {
+      insights.push({ emoji: '💪', text: `После тренировок настроение на следующий день выше на ${(avgGym - avgNo).toFixed(1)} балла` })
+    }
   }
 
   // Evening checkin → better day rating
