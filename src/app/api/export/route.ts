@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get('userId')
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
-    const entities = searchParams.get('entities')?.split(',') || ['rituals', 'tasks', 'challenges', 'skills', 'traits', 'notes']
+    const entities = searchParams.get('entities')?.split(',') || ['checkins', 'rituals', 'tasks', 'challenges', 'skills', 'traits', 'notes']
 
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
@@ -28,6 +28,50 @@ export async function GET(request: NextRequest) {
     let markdown = `# Сводка за период ${dateRange}\n\n`
 
     // Fetch and format each entity type
+    if (entities.includes('checkins')) {
+      const checkins = await db.dailyCheckin.findMany({
+        where: {
+          userId,
+          date: { gte: start, lte: end },
+        },
+        orderBy: { date: 'asc' },
+      }).catch(() => [])
+
+      if (checkins.length > 0) {
+        const morningCheckins = checkins.filter(c => c.type === 'morning')
+        const eveningCheckins = checkins.filter(c => c.type === 'evening')
+        const avgEnergy = morningCheckins.filter(c => c.energy).reduce((s, c) => s + (c.energy || 0), 0) / (morningCheckins.filter(c => c.energy).length || 1)
+        const avgRating = eveningCheckins.filter(c => c.dayRating).reduce((s, c) => s + (c.dayRating || 0), 0) / (eveningCheckins.filter(c => c.dayRating).length || 1)
+
+        markdown += `## Чекапы\n`
+        markdown += `- Утренних чекапов: ${morningCheckins.length}\n`
+        markdown += `- Вечерних чекапов: ${eveningCheckins.length}\n`
+        if (morningCheckins.filter(c => c.energy).length > 0) {
+          markdown += `- Средняя утренняя энергия: ${avgEnergy.toFixed(1)}/10\n`
+        }
+        if (eveningCheckins.filter(c => c.dayRating).length > 0) {
+          markdown += `- Средняя оценка дня: ${avgRating.toFixed(1)}/10\n`
+        }
+
+        const wins = eveningCheckins.filter(c => c.win).map(c => c.win)
+        if (wins.length > 0) {
+          markdown += `- Победы дня:\n`
+          wins.slice(0, 10).forEach(w => {
+            markdown += `  - ${w}\n`
+          })
+        }
+
+        const intentions = morningCheckins.filter(c => c.intention).map(c => c.intention)
+        if (intentions.length > 0) {
+          markdown += `- Намерения утра:\n`
+          intentions.slice(0, 10).forEach(i => {
+            markdown += `  - ${i}\n`
+          })
+        }
+        markdown += `\n`
+      }
+    }
+
     if (entities.includes('rituals')) {
       const rituals = await db.ritual.findMany({
         where: { userId, status: 'active' },
