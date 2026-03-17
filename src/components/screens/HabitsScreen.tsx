@@ -38,6 +38,7 @@ interface Habit {
   completed: number
   isCompleted: boolean
   last7Days?: { date: string; completed: boolean }[]
+  completionRate30d?: number
 }
 
 interface WeeklyStat {
@@ -408,6 +409,15 @@ export function HabitsScreen() {
                           <span className="flex items-center gap-0.5 font-medium text-orange-400">
                             <Flame className="w-3 h-3" />
                             {habit.streak}
+                          </span>
+                        )}
+                        {habit.completionRate30d !== undefined && (
+                          <span className={`text-[11px] ml-auto ${
+                            habit.completionRate30d >= 70 ? 'text-emerald-400' :
+                            habit.completionRate30d >= 40 ? 'text-yellow-400' :
+                            'text-muted-foreground/50'
+                          }`}>
+                            30д: {habit.completionRate30d}%
                           </span>
                         )}
                       </div>

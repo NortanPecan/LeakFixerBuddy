@@ -128,6 +128,10 @@ export async function GET(request: NextRequest) {
         return { date: dateStr, completed: log?.completed || false }
       })
 
+      // 30-day completion rate
+      const completedDays30 = logs.filter(l => l.completed).length
+      const completionRate30d = Math.round((completedDays30 / 30) * 100)
+
       return {
         id: habit.id,
         name: habit.name,
@@ -138,6 +142,7 @@ export async function GET(request: NextRequest) {
         completed: todayLog?.count || 0,
         isCompleted: todayLog?.completed || false,
         last7Days,
+        completionRate30d,
       }
     }))
 
