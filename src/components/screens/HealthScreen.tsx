@@ -234,6 +234,7 @@ export function HealthScreen() {
   })
   
   const [editingFood, setEditingFood] = useState<FoodEntry | null>(null)
+  const [foodSearch, setFoodSearch] = useState('')
 
   // Load all data
   useEffect(() => {
@@ -647,13 +648,24 @@ export function HealthScreen() {
               </Button>
             </div>
           </div>
+          {(foodData?.entries.length ?? 0) > 3 && (
+            <Input
+              value={foodSearch}
+              onChange={e => setFoodSearch(e.target.value)}
+              placeholder="Поиск по еде..."
+              className="h-8 text-sm mt-2"
+            />
+          )}
         </CardHeader>
         <CardContent>
           {foodData?.entries.length ? (
             <div className="space-y-4 max-h-80 overflow-y-auto">
               {/* Grouped by meal type */}
               {['breakfast', 'lunch', 'dinner', 'snack'].map(mealType => {
-                const entries = foodData.byMealType[mealType] || []
+                const allEntries = foodData.byMealType[mealType] || []
+                const entries = foodSearch
+                  ? allEntries.filter(e => e.name.toLowerCase().includes(foodSearch.toLowerCase()))
+                  : allEntries
                 if (entries.length === 0) return null
                 
                 const mealLabel = MEAL_TYPE_LABELS[mealType]
@@ -719,7 +731,10 @@ export function HealthScreen() {
               {foodData && Object.keys(foodData.byMealType)
                 .filter(type => type.startsWith('custom:'))
                 .map(customType => {
-                  const entries = foodData.byMealType[customType] || []
+                  const allEntries = foodData.byMealType[customType] || []
+                  const entries = foodSearch
+                    ? allEntries.filter(e => e.name.toLowerCase().includes(foodSearch.toLowerCase()))
+                    : allEntries
                   if (entries.length === 0) return null
                   
                   const customName = customType.substring(7) // Remove 'custom:' prefix

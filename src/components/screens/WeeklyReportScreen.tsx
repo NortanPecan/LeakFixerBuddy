@@ -262,6 +262,9 @@ export function WeeklyReportScreen() {
       {/* Correlation insights (3.2) */}
       <CorrelationInsights days={report.days} />
 
+      {/* Smart recommendation (6.5) */}
+      <SmartRecommendation report={report} />
+
       {/* AI Prompt export */}
       <AiPromptButton report={report} />
     </div>
@@ -333,6 +336,109 @@ function CorrelationInsights({ days }: { days: DayData[] }) {
             <span className="text-white/70">{ins.text}</span>
           </div>
         ))}
+      </CardContent>
+    </Card>
+  )
+}
+
+function SmartRecommendation({ report }: { report: WeeklyReport }) {
+  const s = report.summary
+  const days = report.days
+
+  interface Rec { emoji: string; title: string; action: string; score: number }
+  const candidates: Rec[] = []
+
+  // Low checkin rate
+  if (s.checkinDays < 4) {
+    candidates.push({
+      emoji: '☀️',
+      title: 'Фокус на чекапы',
+      action: `Ты заполнил чекапы только ${s.checkinDays}/7 дней. На следующей неделе ставь будильник на 8:00 и 20:00 — данных для анализа будет в разы больше.`,
+      score: (7 - s.checkinDays) * 2,
+    })
+  }
+
+  // Low gym
+  if (s.gymDays === 0) {
+    candidates.push({
+      emoji: '💪',
+      title: 'Добавь одну тренировку',
+      action: 'Ноль тренировок за неделю — запланируй хотя бы одну. Даже 30 минут изменят самочувствие и статистику.',
+      score: 12,
+    })
+  } else if (s.gymDays === 1) {
+    candidates.push({
+      emoji: '💪',
+      title: 'Ещё одна тренировка',
+      action: 'Всего 1 тренировка за неделю — попробуй добавить вторую. Два раза в неделю уже системный результат.',
+      score: 7,
+    })
+  }
+
+  // Low mood
+  if (s.avgMood > 0 && s.avgMood < 5) {
+    candidates.push({
+      emoji: '🧠',
+      title: 'Работа с настроением',
+      action: `Среднее настроение ${s.avgMood.toFixed(1)}/10 — критически низко. Приоритет на следующей неделе: 8+ часов сна и ежедневная прогулка.`,
+      score: (5 - s.avgMood) * 3,
+    })
+  }
+
+  // Low energy
+  if (s.avgEnergy > 0 && s.avgEnergy < 5) {
+    candidates.push({
+      emoji: '⚡',
+      title: 'Восстанови энергию',
+      action: `Средняя энергия ${s.avgEnergy.toFixed(1)}/10. Попробуй: ранний подъём в одно время, нет кофе после 13:00, 20 минут ходьбы.`,
+      score: (5 - s.avgEnergy) * 3,
+    })
+  }
+
+  // Low rituals completion
+  const ritualDays = days.filter(d => d.ritualsTotal > 0)
+  if (ritualDays.length >= 3) {
+    const avgRate = ritualDays.reduce((acc, d) => acc + d.ritualsCompleted / d.ritualsTotal, 0) / ritualDays.length
+    if (avgRate < 0.5) {
+      candidates.push({
+        emoji: '🔥',
+        title: 'Упрости ритуалы',
+        action: `Ритуалы выполнены менее чем наполовину. Убери 1–2 ритуала, которые не идут — лучше меньше, но стабильно каждый день.`,
+        score: (0.5 - avgRate) * 20,
+      })
+    }
+  }
+
+  if (candidates.length === 0) {
+    // All good — give a growth rec
+    return (
+      <Card style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.15)' }}>
+        <CardContent className="pt-3 pb-3">
+          <div className="flex gap-3 items-start">
+            <span className="text-xl">🎯</span>
+            <div>
+              <p className="text-sm font-medium text-emerald-300">Рекомендация недели</p>
+              <p className="text-sm text-white/60 mt-1">Неделя прошла хорошо! Выбери одну привычку и подними планку на 10%.</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  candidates.sort((a, b) => b.score - a.score)
+  const best = candidates[0]
+
+  return (
+    <Card style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
+      <CardContent className="pt-3 pb-3">
+        <div className="flex gap-3 items-start">
+          <span className="text-xl">{best.emoji}</span>
+          <div>
+            <p className="text-sm font-medium text-indigo-300">💡 Рекомендация: {best.title}</p>
+            <p className="text-sm text-white/60 mt-1">{best.action}</p>
+          </div>
+        </div>
       </CardContent>
     </Card>
   )
