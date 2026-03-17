@@ -33,6 +33,7 @@ const DATE_PRESETS = [
 ]
 
 const ENTITIES = [
+  { id: 'checkins', label: 'Чекапы', icon: '📋' },
   { id: 'rituals', label: 'Ритуалы', icon: '🔥' },
   { id: 'tasks', label: 'Задачи', icon: '✅' },
   { id: 'challenges', label: 'Челенджи', icon: '🏆' },
@@ -55,7 +56,7 @@ export function ExportScreen() {
   const [customEndDate, setCustomEndDate] = useState('')
   
   // Entity selection
-  const [selectedEntities, setSelectedEntities] = useState<string[]>(['rituals', 'tasks', 'challenges', 'skills', 'traits', 'notes'])
+  const [selectedEntities, setSelectedEntities] = useState<string[]>(['checkins', 'rituals', 'tasks', 'challenges', 'skills', 'traits', 'notes'])
 
   const getDateRange = () => {
     const end = new Date()
