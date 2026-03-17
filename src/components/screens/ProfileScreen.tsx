@@ -90,6 +90,9 @@ export function ProfileScreen() {
   // Personal records (5.26)
   const [topPRs, setTopPRs] = useState<Array<{ templateId: string; name: string; maxWeight: number }>>([])
 
+  // Community percentile (3.10)
+  const [communityStats, setCommunityStats] = useState<{ streakPercentile: number; pointsPercentile: number; totalUsers: number } | null>(null)
+
   // New state
   const [bio, setBio] = useState('')
   const [isEditingBio, setIsEditingBio] = useState(false)
@@ -168,6 +171,12 @@ export function ProfileScreen() {
         fetch(`/api/gym/records?userId=${user.id}`)
           .then(r => r.json())
           .then(d => { if (d.topPRs) setTopPRs(d.topPRs.slice(0, 5)) })
+          .catch(() => {/* silent */})
+
+        // Load community percentile (3.10)
+        fetch(`/api/stats/community?userId=${user.id}`)
+          .then(r => r.json())
+          .then(d => { if (d.success) setCommunityStats({ streakPercentile: d.streakPercentile, pointsPercentile: d.pointsPercentile, totalUsers: d.totalUsers }) })
           .catch(() => {/* silent */})
 
         // Set bio from profile
@@ -387,10 +396,16 @@ export function ProfileScreen() {
               <div className="p-2 rounded-lg bg-background/50">
                 <div className="text-lg font-bold text-yellow-400">{user.points}</div>
                 <div className="text-[10px] text-muted-foreground">очков</div>
+                {communityStats && communityStats.pointsPercentile >= 50 && (
+                  <div className="text-[9px] text-yellow-400/60 mt-0.5">топ {100 - communityStats.pointsPercentile}%</div>
+                )}
               </div>
               <div className="p-2 rounded-lg bg-background/50">
                 <div className="text-lg font-bold text-orange-400">🔥 {user.streak}</div>
                 <div className="text-[10px] text-muted-foreground">серия</div>
+                {communityStats && communityStats.streakPercentile >= 50 && (
+                  <div className="text-[9px] text-orange-400/60 mt-0.5">топ {100 - communityStats.streakPercentile}%</div>
+                )}
               </div>
               <div className="p-2 rounded-lg bg-background/50">
                 <div className="text-lg font-bold text-cyan-400">{stats.totalWorkouts}</div>
