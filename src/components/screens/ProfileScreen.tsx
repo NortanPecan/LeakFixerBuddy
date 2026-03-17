@@ -87,6 +87,9 @@ export function ProfileScreen() {
   const [showMeasurements, setShowMeasurements] = useState(false)
   const [newMeasurement, setNewMeasurement] = useState({ type: 'weight', value: '' })
   
+  // Personal records (5.26)
+  const [topPRs, setTopPRs] = useState<Array<{ templateId: string; name: string; maxWeight: number }>>([])
+
   // New state
   const [bio, setBio] = useState('')
   const [isEditingBio, setIsEditingBio] = useState(false)
@@ -160,6 +163,12 @@ export function ProfileScreen() {
             totalWorkouts: statsData.stats.totalWorkouts || 0
           }))
         }
+
+        // Load personal records (5.26)
+        fetch(`/api/gym/records?userId=${user.id}`)
+          .then(r => r.json())
+          .then(d => { if (d.topPRs) setTopPRs(d.topPRs.slice(0, 5)) })
+          .catch(() => {/* silent */})
 
         // Set bio from profile
         if (profile?.bio) {
@@ -387,6 +396,33 @@ export function ProfileScreen() {
                 <div className="text-lg font-bold text-cyan-400">{stats.totalWorkouts}</div>
                 <div className="text-[10px] text-muted-foreground">тренировок</div>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Personal Records (5.26) */}
+      {topPRs.length > 0 && (
+        <Card className="bg-card/50 backdrop-blur">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-yellow-400" />
+              Личные рекорды
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {topPRs.map((pr, i) => (
+                <div key={pr.templateId} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground w-4">{i + 1}.</span>
+                    <span className="text-sm">{pr.name}</span>
+                  </div>
+                  <Badge className="bg-yellow-500/15 text-yellow-400 border-yellow-500/20">
+                    🏆 {pr.maxWeight} кг
+                  </Badge>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
