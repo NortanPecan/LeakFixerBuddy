@@ -8,7 +8,7 @@ import { Progress } from '@/components/ui/progress'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { DatePicker, DateBadge } from '@/components/DatePicker'
 import { Plus, CheckCircle2, Circle, Droplets, Apple, Pill, Clock, ChevronRight, Trash2, Timer, Utensils } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -896,6 +896,7 @@ export function HealthScreen() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Новый БАД</DialogTitle>
+            <DialogDescription className="sr-only">Добавить новый БАД</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-4">
             <div className="space-y-2">
@@ -1001,6 +1002,7 @@ export function HealthScreen() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Добавить еду</DialogTitle>
+            <DialogDescription className="sr-only">Добавить запись о приёме пищи</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-4">
             <div className="space-y-2">
@@ -1116,6 +1118,7 @@ export function HealthScreen() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Редактировать еду</DialogTitle>
+            <DialogDescription className="sr-only">Редактировать запись о приёме пищи</DialogDescription>
           </DialogHeader>
           {editingFood && (
             <div className="space-y-4 pt-4">
