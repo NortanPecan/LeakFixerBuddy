@@ -13,7 +13,9 @@ import {
   Download,
   ChevronRight,
   BarChart3,
-  MapPin
+  MapPin,
+  Search,
+  TrendingUp,
 } from 'lucide-react'
 import { QUICK_ACCESS_ITEMS } from '../constants'
 import type { Screen } from '@/lib/store'
@@ -31,6 +33,8 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Download,
   BarChart3,
   MapPin,
+  Search,
+  TrendingUp,
 }
 
 interface QuickAccessProps {

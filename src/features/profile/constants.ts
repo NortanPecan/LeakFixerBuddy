@@ -47,6 +47,8 @@ export const DONATE_URL = 'https://boosty.to/leakfixer'
 // Quick access navigation items
 export const QUICK_ACCESS_ITEMS = [
   { screen: 'stats', label: 'Статистика', icon: 'BarChart3', color: 'text-emerald-400' },
+  { screen: 'weekly-report', label: 'Лики недели', icon: 'Search', color: 'text-violet-400' },
+  { screen: 'monthly-report', label: 'Месячный анализ', icon: 'TrendingUp', color: 'text-blue-400' },
   { screen: 'tasks', label: 'Дела', icon: 'Target', color: 'text-cyan-400' },
   { screen: 'fitness', label: 'Фитнес', icon: 'Flame', color: 'text-orange-400' },
   { screen: 'health', label: 'Здоровье', icon: 'Heart', color: 'text-red-400' },
