@@ -73,6 +73,7 @@ const INCOME_RE   = /^(?:доход|income|заработал|заработал
 const EXPENSE_RE  = /^(?:расход|расходы|потратил|потратила|купил|купила|expense)\s+(\d+(?:[.,]\d+)?)(?:\s+(.+))?$/i
 const MENU_RE     = /^(?:меню|menu|\/start|\/menu)$/i
 const HELP_RE     = /^(?:помощь|help|старт|start|команды)$/i
+const LEAK_RE     = /^(?:лик|leak|утечка)\s+(.+)$/i
 
 // ─── Telegram API ──────────────────────────────────────────────────────────
 
@@ -498,6 +499,25 @@ async function buildFullSummary(userId: string, today: Date): Promise<string> {
   return msg
 }
 
+// ─── Leak classifier (keyword-based) ──────────────────────────────────────
+
+function classifyLeakFromText(text: string): string {
+  const t = text.toLowerCase()
+  if (/(?:трен|зал|gym|спорт|качал|упражн)/.test(t)) {
+    if (/(?:бросил|перестал|не хожу|забил|пропускаю|dropout)/.test(t)) return 'gym_dropout'
+    return 'no_gym'
+  }
+  if (/(?:усталост|нет сил|мало энерги|низкая энерги|не могу встать|вялост)/.test(t)) return 'low_energy'
+  if (/(?:хронич|всегда устал|постоянно нет сил)/.test(t)) return 'chronic_low_energy'
+  if (/(?:ритуал|привычк|habit|не делаю)/.test(t)) return 'ritual_consistency'
+  if (/(?:сон|сплю|недосып|sleep|ложусь поздно)/.test(t)) return 'sleep_deficit'
+  if (/(?:стресс|тревог|переживаю|нервничаю|anxiety)/.test(t)) return 'high_stress'
+  if (/(?:расход|трачу|деньги|финанс|покупк)/.test(t)) return 'expense_spike'
+  if (/(?:срыв|снова|опять|чекап|не заполняю)/.test(t)) return 'tracking_dropout'
+  if (/(?:еда|питание|переел|food|калори)/.test(t)) return 'calorie_spikes'
+  return 'low_energy' // generic fallback
+}
+
 // ─── Text command handler ──────────────────────────────────────────────────
 
 async function handleCommand(userId: string, text: string): Promise<{ reply: string; keyboard?: InlineKeyboard }> {
@@ -514,7 +534,8 @@ async function handleCommand(userId: string, text: string): Promise<{ reply: str
       '💧 <b>вода 500</b>  ⚖️ <b>вес 74.5</b>  😊 <b>настроение 8</b>\n' +
       '⚡ <b>энергия 7</b>  🍽️ <b>ел пицца 800</b>  💪 <b>зал 60</b>\n' +
       '✅ <b>задача текст</b>  🙌 <b>ритуалы</b>  😴 <b>сон 8</b>\n' +
-      '📊 <b>сводка</b>  💚 <b>доход 5000</b>  💸 <b>расход 500</b>'
+      '📊 <b>сводка</b>  💚 <b>доход 5000</b>  💸 <b>расход 500</b>\n\n' +
+      '🤖 <b>лик описание проблемы</b> — AI-анализ лика'
     return { reply, keyboard }
   }
 
@@ -690,9 +711,77 @@ async function handleCommand(userId: string, text: string): Promise<{ reply: str
     return { reply, keyboard: backBtn() }
   }
 
+  // Лик — AI-анализ произвольной проблемы
+  const leakMatch = t.match(LEAK_RE)
+  if (leakMatch) {
+    const userText = leakMatch[1].trim()
+    if (!userText) {
+      return {
+        reply:
+          '🔍 Напиши описание проблемы после команды:\n\n' +
+          '<code>лик не могу встать на тренировку</code>\n' +
+          '<code>лик снова срыв в питании</code>\n' +
+          '<code>лик очень низкая энергия весь день</code>',
+      }
+    }
+
+    // Отправляем сообщение-заглушку пока AI думает
+    const thinkingMsg =
+      '🤖 <b>Анализирую лик...</b>\n\n' +
+      `"${userText.slice(0, 80)}${userText.length > 80 ? '…' : ''}"\n\n` +
+      '<i>Это занимает 5–15 секунд</i>'
+
+    // Определяем тип лика по ключевым словам (простая классификация)
+    const leakType = classifyLeakFromText(userText)
+    const severity = 'warning'
+
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_VERCEL_URL
+        ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+        : process.env.APP_BASE_URL ?? 'http://localhost:3000'
+
+      const res = await fetch(`${baseUrl}/api/ai/analyze-leak`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, leakType, leakMessage: userText, severity }),
+      })
+
+      const data = (await res.json()) as {
+        success: boolean
+        analysis?: {
+          cause: string
+          solutions: { text: string; deadline: string; priority: string }[]
+          personalizedInsight: string
+          urgency: string
+        }
+        provider?: string
+        error?: string
+      }
+
+      if (!data.success || !data.analysis) {
+        return { reply: `🤖 ${thinkingMsg}\n\n❌ ${data.error ?? 'Ошибка анализа'}` }
+      }
+
+      const { formatLeakAnalysisForTelegram } = await import('@/lib/ai-leak-prompts')
+      const reply = formatLeakAnalysisForTelegram(
+        leakType,
+        data.analysis as Parameters<typeof formatLeakAnalysisForTelegram>[1],
+        data.provider ?? 'groq'
+      )
+      return { reply, keyboard: backBtn() }
+    } catch (err) {
+      console.error('[Telegram /лик] AI error:', err)
+      return {
+        reply:
+          '❌ AI-анализ временно недоступен.\n\n' +
+          'Убедись что добавлены <code>GROQ_API_KEY</code> и <code>GEMINI_API_KEY</code> в Vercel ENV.',
+      }
+    }
+  }
+
   // Unknown
   return {
-    reply: '🤔 Не понял команду. Напиши <b>помощь</b> или нажми кнопку.\n\nПримеры: <code>вода 500</code>, <code>вес 74.5</code>, <code>настроение 8</code>',
+    reply: '🤔 Не понял команду. Напиши <b>помощь</b> или нажми кнопку.\n\nПримеры: <code>вода 500</code>, <code>вес 74.5</code>, <code>настроение 8</code>\n💡 <code>лик описание проблемы</code> — AI-анализ лика',
   }
 }
 

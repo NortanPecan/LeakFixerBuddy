@@ -108,6 +108,7 @@ model AppUser {
   dailyCheckins         DailyCheckin[]
   emotionLogs           EmotionLog[]
   fleetingThoughts      FleetingThought[]
+  aiPatterns            UserAiPattern[]
 
   @@index([telegramId])
   @@index([email])
@@ -1354,4 +1355,40 @@ model FleetingThought {
 
   @@index([userId, expiresAt])
   @@map("fleeting_thoughts")
+}
+
+// ============================================
+// AI LEAK ANALYSIS — персонализированные паттерны
+// ============================================
+
+/// Персонализированные паттерны пользователя для AI-контекста.
+/// Хранит историю анализов и что сработало/не сработало по каждому типу лика.
+model UserAiPattern {
+  id       String @id @default(uuid()) @db.Uuid
+  userId   String @map("user_id") @db.Uuid
+  leakType String @map("leak_type") // "gym_dropout", "low_energy", ...
+
+  /// Последний AI-анализ (LeakAnalysis JSON)
+  lastAnalysis Json? @map("last_analysis")
+
+  /// Попытки решений: [{ text, triedAt, worked }]
+  triedSolutions Json @default("[]") @map("tried_solutions")
+
+  /// Что сработало: строки с текстами решений
+  whatWorked Json @default("[]") @map("what_worked")
+
+  /// Сколько раз этот лик анализировался
+  analysisCount Int @default(1) @map("analysis_count")
+
+  /// Провайдер последнего анализа: "groq" | "gemini"
+  lastProvider String? @map("last_provider")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, leakType])
+  @@index([userId])
+  @@map("user_ai_patterns")
 }

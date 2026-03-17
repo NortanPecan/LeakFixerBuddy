@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { LeakAiAnalysisCard } from '@/components/LeakAiAnalysisCard'
 
 interface WeekSummary {
   weekNum: number
@@ -224,6 +225,14 @@ export function MonthlyReportScreen() {
                           </Badge>
                         ))}
                       </div>
+                    )}
+                    {user?.id && (
+                      <LeakAiAnalysisCard
+                        userId={user.id}
+                        leakType={leak.type}
+                        leakMessage={leak.message}
+                        severity={leak.severity}
+                      />
                     )}
                   </div>
                 </div>
