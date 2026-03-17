@@ -22,9 +22,24 @@ import {
   Target,
   Zap,
   ArrowRight,
+  ArrowLeft,
   Clock,
   Calendar
 } from 'lucide-react'
+
+const ACHIEVEMENT_LABELS: Record<string, string> = {
+  first_day: '🌱 Первый день',
+  week_1: '📅 Неделя пройдена',
+  week_2: '💪 Две недели',
+  week_3: '🔥 Три недели',
+  streak_3: '⚡ 3 дня подряд',
+  streak_7: '🏅 7 дней подряд',
+  streak_14: '🥇 14 дней подряд',
+  streak_30: '💎 30 дней подряд',
+  all_tasks: '✅ Все задания дня',
+  perfect_week: '⭐ Идеальная неделя',
+  journey_complete: '🏆 Journey завершён',
+}
 
 interface JourneyTask {
   id: string
@@ -238,6 +253,12 @@ export function JourneyScreen() {
   if (showGoalSelection || !progress) {
     return (
       <div className="flex flex-col gap-4 pb-20">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setScreen('home')}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <h1 className="text-xl font-bold">LeakFixer Journey</h1>
+        </div>
         <Card className="bg-gradient-to-br from-primary/20 to-primary/5 border-primary/30">
           <CardContent className="pt-6 text-center">
             <div className="text-4xl mb-4">🗺️</div>
@@ -294,17 +315,25 @@ export function JourneyScreen() {
     <ScrollArea className="h-[calc(100vh-140px)]">
       <div className="flex flex-col gap-4 pb-20 px-1">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <Map className="w-6 h-6 text-primary" />
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 shrink-0"
+            onClick={() => setScreen('home')}
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div className="flex-1">
+            <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+              <Map className="w-5 h-5 text-primary" />
               Journey
+              <span className="text-sm font-normal text-muted-foreground ml-1">
+                день {progress.currentDay}/30
+              </span>
             </h1>
-            <p className="text-muted-foreground text-sm">
-              День {progress.currentDay} из 30
-            </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <Badge variant="secondary" className="flex items-center gap-1">
               <Flame className="w-4 h-4 text-orange-500" />
               {progress.streak}
@@ -516,7 +545,7 @@ export function JourneyScreen() {
               <div className="flex flex-wrap gap-2">
                 {progress.achievements.map((a) => (
                   <Badge key={a.code} variant="outline" className="bg-yellow-500/10 text-yellow-400 border-yellow-500/30">
-                    🏆 {a.code}
+                    {ACHIEVEMENT_LABELS[a.code] ?? `🏆 ${a.code}`}
                   </Badge>
                 ))}
               </div>

@@ -93,8 +93,10 @@ export function BuddyScreen() {
   const [suggestions, setSuggestions] = useState<Array<{
     id: string; name: string; username?: string; photoUrl?: string
     day: number; streak: number; score: number; reasons: string[]
+    categories?: string[]
   }>>([])
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
 
   const acceptedBuddies = outgoingRequests.filter(b => b.status === 'accepted')
   const activeBuddy = acceptedBuddies[0]
@@ -162,6 +164,18 @@ export function BuddyScreen() {
     }
   }, [activeBuddy?.partnerId, loadBuddyStats])
 
+  const CATEGORY_FILTER_OPTIONS = [
+    { id: 'health', label: '🧘 Здоровье' },
+    { id: 'money', label: '💰 Финансы' },
+    { id: 'learning', label: '📚 Обучение' },
+    { id: 'mind', label: '🧠 Психология' },
+    { id: 'productivity', label: '⚡ Продуктивность' },
+    { id: 'relationships', label: '🤝 Отношения' },
+  ]
+
+  // Max possible score in suggest algorithm ≈ 15 pts
+  const MAX_BUDDY_SCORE = 15
+
   const filteredUsers = useMemo(() => {
     if (!searchQuery.trim()) return users
     const query = searchQuery.toLowerCase()
@@ -170,6 +184,11 @@ export function BuddyScreen() {
       (u.username && u.username.toLowerCase().includes(query))
     )
   }, [users, searchQuery])
+
+  const filteredSuggestions = useMemo(() => {
+    if (!categoryFilter) return suggestions
+    return suggestions.filter(s => s.categories?.includes(categoryFilter))
+  }, [suggestions, categoryFilter])
 
   const handleSendRequest = async (partner: UserProfile) => {
     if (!user?.id || !isOnline()) return
@@ -581,65 +600,113 @@ export function BuddyScreen() {
           {/* Smart suggestions */}
           {!activeBuddy && suggestions.length > 0 && !searchQuery && (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-white/50 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
-                Похожий путь — рекомендуем
-              </p>
-              {suggestions.map(s => {
-                const status = getRequestStatus(s.id)
-                return (
-                  <Card key={s.id} className="bg-card/50 backdrop-blur border-indigo-500/20">
-                    <CardContent className="py-3">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="w-10 h-10">
-                          <AvatarImage src={s.photoUrl} />
-                          <AvatarFallback className="bg-indigo-500/20 text-indigo-300 text-sm">
-                            {s.name[0]?.toUpperCase() || 'U'}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1">
-                          <p className="font-medium text-sm">{s.name}</p>
-                          <div className="flex gap-2 text-xs text-muted-foreground">
-                            <span>🔥 {s.streak} дней</span>
-                            <span>📅 День {s.day}</span>
-                          </div>
-                          {s.reasons.length > 0 && (
-                            <div className="flex gap-1 mt-1 flex-wrap">
-                              {s.reasons.map((r, i) => (
-                                <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300">
-                                  {r}
-                                </span>
-                              ))}
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-white/50 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
+                  Похожий путь — рекомендуем
+                </p>
+                <span className="text-[10px] text-muted-foreground">{filteredSuggestions.length} из {suggestions.length}</span>
+              </div>
+
+              {/* Category filter chips */}
+              <div className="flex gap-1.5 flex-wrap">
+                <button
+                  onClick={() => setCategoryFilter(null)}
+                  className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${
+                    !categoryFilter
+                      ? 'bg-primary/20 border-primary/50 text-primary'
+                      : 'bg-muted/30 border-white/10 text-muted-foreground hover:border-white/20'
+                  }`}
+                >
+                  Все
+                </button>
+                {CATEGORY_FILTER_OPTIONS.map(cat => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setCategoryFilter(categoryFilter === cat.id ? null : cat.id)}
+                    className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${
+                      categoryFilter === cat.id
+                        ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300'
+                        : 'bg-muted/30 border-white/10 text-muted-foreground hover:border-white/20'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
+              {filteredSuggestions.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-3">
+                  Нет совпадений по фильтру. Попробуй другую категорию.
+                </p>
+              ) : (
+                filteredSuggestions.map(s => {
+                  const status = getRequestStatus(s.id)
+                  const matchPct = Math.min(100, Math.round((s.score / MAX_BUDDY_SCORE) * 100))
+                  return (
+                    <Card key={s.id} className="bg-card/50 backdrop-blur border-indigo-500/20">
+                      <CardContent className="py-3">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="w-10 h-10">
+                            <AvatarImage src={s.photoUrl} />
+                            <AvatarFallback className="bg-indigo-500/20 text-indigo-300 text-sm">
+                              {s.name[0]?.toUpperCase() || 'U'}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-sm truncate">{s.name}</p>
+                              <span className="text-[10px] text-indigo-300 shrink-0 font-bold">{matchPct}%</span>
                             </div>
+                            {/* Match bar */}
+                            <div className="w-full h-1 bg-muted/40 rounded-full mt-0.5 mb-1">
+                              <div
+                                className="h-1 rounded-full bg-indigo-500 transition-all"
+                                style={{ width: `${matchPct}%` }}
+                              />
+                            </div>
+                            <div className="flex gap-2 text-xs text-muted-foreground">
+                              <span>🔥 {s.streak} дней</span>
+                              <span>📅 День {s.day}</span>
+                            </div>
+                            {s.reasons.length > 0 && (
+                              <div className="flex gap-1 mt-1 flex-wrap">
+                                {s.reasons.map((r, i) => (
+                                  <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300">
+                                    {r}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          {status === 'accepted' ? (
+                            <Badge className="bg-emerald-500/20 text-emerald-400 shrink-0">Бадди</Badge>
+                          ) : status === 'pending' ? (
+                            <Badge variant="outline" className="text-muted-foreground shrink-0">
+                              <Clock className="w-3 h-3 mr-1" />
+                              Ожидание
+                            </Badge>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-indigo-500/30 shrink-0"
+                              onClick={() => handleSendRequest({ id: s.id, name: s.name, photoUrl: s.photoUrl, username: s.username, streak: s.streak, day: s.day })}
+                              disabled={sendingTo === s.id || !!activeBuddy}
+                            >
+                              {sendingTo === s.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <UserPlus className="w-4 h-4" />
+                              )}
+                            </Button>
                           )}
                         </div>
-                        {status === 'accepted' ? (
-                          <Badge className="bg-emerald-500/20 text-emerald-400">Бадди</Badge>
-                        ) : status === 'pending' ? (
-                          <Badge variant="outline" className="text-muted-foreground">
-                            <Clock className="w-3 h-3 mr-1" />
-                            Ожидание
-                          </Badge>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border-indigo-500/30"
-                            onClick={() => handleSendRequest({ id: s.id, name: s.name, photoUrl: s.photoUrl, username: s.username, streak: s.streak, day: s.day })}
-                            disabled={sendingTo === s.id || !!activeBuddy}
-                          >
-                            {sendingTo === s.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <UserPlus className="w-4 h-4" />
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
+                      </CardContent>
+                    </Card>
+                  )
+                })
+              )}
               <div className="h-px bg-white/5 my-1" />
             </div>
           )}

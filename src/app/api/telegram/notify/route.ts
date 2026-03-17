@@ -24,18 +24,47 @@ async function sendTelegramMessage(chatId: bigint, text: string): Promise<boolea
   }
 }
 
-function buildMorningMessage(firstName: string): string {
+interface UserStats {
+  streak: number
+  morningEnergy: number | null
+  ritualsDone: number
+  ritualsTotal: number
+}
+
+function buildMorningMessage(firstName: string, stats: UserStats): string {
+  const streakLine = stats.streak > 0
+    ? `🔥 Стрик: <b>${stats.streak} дней</b> — не прерывай!\n`
+    : ''
+  const motiveLine = stats.streak >= 30
+    ? '💎 Ты легенда — 30+ дней подряд!'
+    : stats.streak >= 14
+    ? '🏆 Две недели без пропусков — отлично!'
+    : stats.streak >= 7
+    ? '⚡ Неделя позади — продолжай в том же духе!'
+    : ''
+
   return (
-    `☀️ Доброе утро, ${firstName}!\n\n` +
-    `Не забудь сделать <b>утренний чек-ин</b> — поставь энергию, выбери фокус-слово и задачи на день.\n\n` +
+    `☀️ Доброе утро, <b>${firstName}</b>!\n\n` +
+    `${streakLine}` +
+    (motiveLine ? `${motiveLine}\n\n` : '\n') +
+    `Не забудь сделать <b>утренний чек-ин</b> — поставь энергию, выбери фокус и задачи на день.\n\n` +
     `🚀 Открой <b>LeakFixer Buddy</b> и начни день осознанно!`
   )
 }
 
-function buildEveningMessage(firstName: string): string {
+function buildEveningMessage(firstName: string, stats: UserStats): string {
+  const energyLine = stats.morningEnergy !== null
+    ? `⚡ Утренняя энергия была: <b>${stats.morningEnergy}/10</b>\n`
+    : ''
+  const ritualsLine = stats.ritualsTotal > 0
+    ? `🔥 Ритуалы: <b>${stats.ritualsDone}/${stats.ritualsTotal}</b> выполнено сегодня\n`
+    : ''
+
   return (
-    `🌙 Добрый вечер, ${firstName}!\n\n` +
-    `Не забудь закрыть день — сделай <b>вечерний чек-ин</b>: оцени день, отметь выполненные задачи, запиши победу.\n\n` +
+    `🌙 Добрый вечер, <b>${firstName}</b>!\n\n` +
+    `${energyLine}` +
+    `${ritualsLine}` +
+    `\nЗакрой день — сделай <b>вечерний чек-ин</b>: оцени день, отметь задачи, запиши победу.\n\n` +
     `✨ Открой <b>LeakFixer Buddy</b> и подведи итоги!`
   )
 }
@@ -96,6 +125,7 @@ async function handleNotify(
         select: {
           telegramId: true,
           telegramFirstName: true,
+          streak: true,
         },
       },
     },
@@ -132,11 +162,41 @@ async function handleNotify(
       continue
     }
 
-    const firstName = user.telegramFirstName || 'Привет'
+    const firstName = user.telegramFirstName || 'друг'
+
+    // Fetch lightweight stats for personalization
+    let morningEnergy: number | null = null
+    let ritualsDone = 0
+    let ritualsTotal = 0
+    try {
+      const [morningCheckin, ritualCompletions, activeRituals] = await Promise.all([
+        db.dailyCheckin.findFirst({
+          where: { userId: settings.userId, date: today, type: 'morning' },
+          select: { energy: true },
+        }),
+        db.ritualCompletion.count({
+          where: { userId: settings.userId, date: today, completed: true },
+        }),
+        db.ritual.count({ where: { userId: settings.userId, status: 'active' } }),
+      ])
+      morningEnergy = morningCheckin?.energy ?? null
+      ritualsDone = ritualCompletions
+      ritualsTotal = activeRituals
+    } catch {
+      // best-effort
+    }
+
+    const stats: UserStats = {
+      streak: user.streak ?? 0,
+      morningEnergy,
+      ritualsDone,
+      ritualsTotal,
+    }
+
     const message =
       type === 'morning'
-        ? buildMorningMessage(firstName)
-        : buildEveningMessage(firstName)
+        ? buildMorningMessage(firstName, stats)
+        : buildEveningMessage(firstName, stats)
 
     const sent = await sendTelegramMessage(user.telegramId, message)
     if (sent) {

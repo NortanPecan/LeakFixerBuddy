@@ -272,6 +272,7 @@ export async function GET(request: NextRequest) {
           score,
           reasons: reasons.slice(0, 3),
           leakOverlap: theirLeakTypes.filter(t => myLeakSet.has(t)),
+          categories: Array.from(candidateCategoryMap.get(candidate.id) ?? []),
         }
       })
       .filter(c => c.score > 0)
