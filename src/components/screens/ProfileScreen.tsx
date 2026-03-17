@@ -73,6 +73,32 @@ import {
 } from '@/features/profile'
 import { QuickAccess, DonateCard } from '@/features/profile'
 
+function WeightSparkline({ data }: { data: Array<{ date: string; weight: number }> }) {
+  const W = 120, H = 24, PAD = 2
+  const weights = data.map(d => d.weight)
+  const minW = Math.min(...weights)
+  const maxW = Math.max(...weights)
+  const range = maxW - minW || 1
+  const points = data.map((d, i) => {
+    const x = PAD + (i / (data.length - 1)) * (W - PAD * 2)
+    const y = H - PAD - ((d.weight - minW) / range) * (H - PAD * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+  const last = data[data.length - 1]
+  const prev = data[data.length - 2]
+  const rising = last.weight >= prev.weight
+  return (
+    <div className="flex items-center gap-2 pl-6">
+      <svg width={W} height={H} className="overflow-visible">
+        <polyline points={points} fill="none" stroke={rising ? '#10b981' : '#f59e0b'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <span className={`text-xs ${rising ? 'text-emerald-400' : 'text-yellow-400'}`}>
+        {rising ? '↑' : '↓'} {data[0].weight}→{last.weight} кг
+      </span>
+    </div>
+  )
+}
+
 export function ProfileScreen() {
   const { user, profile, isDemoMode, isOwnerMode, setScreen } = useAppStore()
   const { setTheme } = useTheme()
@@ -89,6 +115,7 @@ export function ProfileScreen() {
   
   // Personal records (5.26)
   const [topPRs, setTopPRs] = useState<Array<{ templateId: string; name: string; maxWeight: number }>>([])
+  const [prHistory, setPrHistory] = useState<Record<string, Array<{ date: string; weight: number }>>>({})
 
   // Community percentile (3.10)
   const [communityStats, setCommunityStats] = useState<{ streakPercentile: number; pointsPercentile: number; totalUsers: number } | null>(null)
@@ -170,7 +197,10 @@ export function ProfileScreen() {
         // Load personal records (5.26)
         fetch(`/api/gym/records?userId=${user.id}`)
           .then(r => r.json())
-          .then(d => { if (d.topPRs) setTopPRs(d.topPRs.slice(0, 5)) })
+          .then(d => {
+            if (d.topPRs) setTopPRs(d.topPRs.slice(0, 5))
+            if (d.history) setPrHistory(d.history)
+          })
           .catch(() => {/* silent */})
 
         // Load community percentile (3.10)
@@ -426,18 +456,26 @@ export function ProfileScreen() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              {topPRs.map((pr, i) => (
-                <div key={pr.templateId} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground w-4">{i + 1}.</span>
-                    <span className="text-sm">{pr.name}</span>
+            <div className="space-y-3">
+              {topPRs.map((pr, i) => {
+                const hist = prHistory[pr.templateId] ?? []
+                return (
+                  <div key={pr.templateId}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-4">{i + 1}.</span>
+                        <span className="text-sm">{pr.name}</span>
+                      </div>
+                      <Badge className="bg-yellow-500/15 text-yellow-400 border-yellow-500/20">
+                        🏆 {pr.maxWeight} кг
+                      </Badge>
+                    </div>
+                    {hist.length >= 2 && (
+                      <WeightSparkline data={hist} />
+                    )}
                   </div>
-                  <Badge className="bg-yellow-500/15 text-yellow-400 border-yellow-500/20">
-                    🏆 {pr.maxWeight} кг
-                  </Badge>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </CardContent>
         </Card>

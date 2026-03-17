@@ -506,10 +506,10 @@ export function DailySummaryScreen() {
         </CardContent>
       </Card>
 
-      {/* Food slip reframe (5.6) */}
+      {/* Food slip reframe + smart swaps (5.6 + 5.2) */}
       {summary.food.qualityBreakdown.bad > 2 && (
         <Card className="bg-orange-500/5 border border-orange-500/20">
-          <CardContent className="pt-4 pb-3">
+          <CardContent className="pt-4 pb-3 space-y-3">
             <div className="flex gap-3 items-start">
               <span className="text-2xl">🔄</span>
               <div>
@@ -518,6 +518,25 @@ export function DailySummaryScreen() {
                   Один плохой день не ломает прогресс. Следующий приём пищи — чистый лист.
                   Пей воду, подвигайся 10 минут — это перезапустит метаболизм.
                 </p>
+              </div>
+            </div>
+            <div className="border-t border-orange-500/10 pt-3">
+              <p className="text-xs font-medium text-orange-300/80 mb-2">💡 Умные замены на следующий раз:</p>
+              <div className="space-y-1.5">
+                {[
+                  { bad: 'Чипсы / сухарики', good: 'Орехи или морковь с хумусом' },
+                  { bad: 'Сладкая газировка', good: 'Вода с лимоном или зелёный чай' },
+                  { bad: 'Майонез', good: 'Авокадо или греческий йогурт' },
+                  { bad: 'Белый хлеб', good: 'Цельнозерновой или бездрожжевой' },
+                  { bad: 'Фаст-фуд', good: 'Куриная грудка + овощи за 15 минут' },
+                  { bad: 'Молочный шоколад', good: 'Горький 70%+ или финики' },
+                ].slice(0, 3).map((swap, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    <span className="text-red-400/70 line-through">{swap.bad}</span>
+                    <span className="text-white/30">→</span>
+                    <span className="text-emerald-400/80">{swap.good}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </CardContent>
