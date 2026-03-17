@@ -4,6 +4,21 @@ import { parseDateKey, getStartOfDay, getEndOfDay, getDayOfWeek } from '@/lib/da
 
 interface DailySummary {
   date: string
+  checkin: {
+    morning: {
+      done: boolean
+      energy: number | null
+      focusWord: string | null
+      tasks: (string | null)[]
+      intention: string | null
+    }
+    evening: {
+      done: boolean
+      dayRating: number | null
+      win: string | null
+      tasksDone: boolean[]
+    }
+  }
   water: {
     current: number
     target: number
@@ -71,7 +86,8 @@ export async function GET(request: NextRequest) {
       ritualCompletions,
       activeRituals,
       supplementIntakes,
-      activeSupplements
+      activeSupplements,
+      checkins,
     ] = await Promise.all([
       // FitnessDaily for water
       db.fitnessDaily.findFirst({
@@ -127,7 +143,11 @@ export async function GET(request: NextRequest) {
           userId,
           isActive: true
         }
-      })
+      }),
+      // Morning/evening check-ins for this day
+      db.dailyCheckin.findMany({
+        where: { userId, date: startOfDay },
+      }).catch(() => []),
     ])
 
     // Calculate water
@@ -212,18 +232,44 @@ export async function GET(request: NextRequest) {
         : 0
     }
 
+    // Build checkin summary
+    const morningCheckin = checkins.find(c => c.type === 'morning')
+    const eveningCheckin = checkins.find(c => c.type === 'evening')
+    const checkin = {
+      morning: {
+        done: !!morningCheckin,
+        energy: morningCheckin?.energy ?? null,
+        focusWord: morningCheckin?.focusWord ?? null,
+        tasks: [morningCheckin?.task1 ?? null, morningCheckin?.task2 ?? null, morningCheckin?.task3 ?? null],
+        intention: morningCheckin?.intention ?? null,
+      },
+      evening: {
+        done: !!eveningCheckin,
+        dayRating: eveningCheckin?.dayRating ?? null,
+        win: eveningCheckin?.win ?? null,
+        tasksDone: [eveningCheckin?.task1Done ?? false, eveningCheckin?.task2Done ?? false, eveningCheckin?.task3Done ?? false],
+      },
+    }
+
+    // Update flags with checkin data
+    const checkinFlags = {
+      isLowEnergy: (state.energy !== null && state.energy < 4) || (morningCheckin?.energy !== undefined && morningCheckin.energy !== null && morningCheckin.energy <= 3),
+      isBadMood: (state.mood !== null && state.mood < 4) || (eveningCheckin?.dayRating !== undefined && eveningCheckin.dayRating !== null && eveningCheckin.dayRating <= 3),
+    }
+
     // Calculate flags for LeakFix analytics
     const flags = {
       isOvereating: foodCalories > 3000 || qualityBreakdown.bad > 2,
-      isLowEnergy: state.energy !== null && state.energy < 4,
-      isBadMood: state.mood !== null && state.mood < 4,
+      isLowEnergy: checkinFlags.isLowEnergy,
+      isBadMood: checkinFlags.isBadMood,
       isRitualsFailed: todayRituals.length > 0 && rituals.percentage < 50,
       isDehydrated: water.percentage < 50,
-      hasNoData: !fitnessDaily && !dailyState && foodEntries.length === 0 && ritualCompletions.length === 0
+      hasNoData: !fitnessDaily && !dailyState && foodEntries.length === 0 && ritualCompletions.length === 0 && checkins.length === 0,
     }
 
     const summary: DailySummary = {
       date: dateKey,
+      checkin,
       water,
       food,
       rituals,

@@ -23,8 +23,25 @@ import {
   Minus
 } from 'lucide-react'
 
+interface CheckinData {
+  morning: {
+    done: boolean
+    energy: number | null
+    focusWord: string | null
+    tasks: (string | null)[]
+    intention: string | null
+  }
+  evening: {
+    done: boolean
+    dayRating: number | null
+    win: string | null
+    tasksDone: boolean[]
+  }
+}
+
 interface DailySummaryData {
   date: string
+  checkin?: CheckinData
   water: {
     current: number
     target: number
@@ -274,6 +291,76 @@ export function DailySummaryScreen() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Checkin block */}
+      {summary.checkin && (summary.checkin.morning.done || summary.checkin.evening.done) && (
+        <Card className="bg-card/50 backdrop-blur">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              📋 Чекапы
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Morning */}
+            {summary.checkin.morning.done && (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-white/60">🌅 Утро</span>
+                  {summary.checkin.morning.energy !== null && (
+                    <Badge variant="outline" className="text-[10px]">
+                      ⚡ {summary.checkin.morning.energy}/10
+                    </Badge>
+                  )}
+                  {summary.checkin.morning.focusWord && (
+                    <Badge variant="outline" className="text-[10px]">
+                      {summary.checkin.morning.focusWord}
+                    </Badge>
+                  )}
+                </div>
+                {summary.checkin.morning.tasks.some(t => t) && (
+                  <div className="pl-1 space-y-0.5">
+                    {summary.checkin.morning.tasks.map((task, i) =>
+                      task ? (
+                        <div key={i} className="flex items-center gap-1.5 text-xs text-white/50">
+                          {summary.checkin?.evening.done
+                            ? (summary.checkin.evening.tasksDone[i]
+                              ? <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                              : <Circle className="w-3 h-3 text-white/20 flex-shrink-0" />)
+                            : <span className="w-3 h-3 flex-shrink-0" />}
+                          <span className={summary.checkin?.evening.done && summary.checkin.evening.tasksDone[i] ? 'line-through text-white/30' : ''}>{task}</span>
+                        </div>
+                      ) : null
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Evening */}
+            {summary.checkin.evening.done && (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-white/60">🌙 Вечер</span>
+                  {summary.checkin.evening.dayRating !== null && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px]"
+                      style={{
+                        color: summary.checkin.evening.dayRating >= 7 ? '#22c55e'
+                          : summary.checkin.evening.dayRating >= 5 ? '#f59e0b' : '#ef4444',
+                      }}
+                    >
+                      {summary.checkin.evening.dayRating}/10
+                    </Badge>
+                  )}
+                </div>
+                {summary.checkin.evening.win && (
+                  <p className="text-xs text-white/50 pl-1">🏆 {summary.checkin.evening.win}</p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Water */}
       <Card className="bg-card/50 backdrop-blur">
