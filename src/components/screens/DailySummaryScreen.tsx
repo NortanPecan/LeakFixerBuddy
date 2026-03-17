@@ -58,6 +58,9 @@ interface DailySummaryData {
       bad: number
     }
     entriesCount: number
+    firstMeal: string | null
+    lastMeal: string | null
+    eatingWindowHours: number | null
   }
   rituals: {
     completed: number
@@ -425,8 +428,8 @@ export function DailySummaryScreen() {
               </div>
 
               {/* Quality breakdown */}
-              {(summary.food.qualityBreakdown.good > 0 || 
-                summary.food.qualityBreakdown.neutral > 0 || 
+              {(summary.food.qualityBreakdown.good > 0 ||
+                summary.food.qualityBreakdown.neutral > 0 ||
                 summary.food.qualityBreakdown.bad > 0) && (
                 <div className="flex gap-2 text-xs">
                   {summary.food.qualityBreakdown.good > 0 && (
@@ -444,6 +447,17 @@ export function DailySummaryScreen() {
                       ✗ {summary.food.qualityBreakdown.bad} вредно
                     </Badge>
                   )}
+                </div>
+              )}
+
+              {/* Intermittent fasting window */}
+              {summary.food.firstMeal && summary.food.lastMeal && summary.food.eatingWindowHours !== null && (
+                <div className="mt-3 pt-3 border-t border-border/30 flex items-center justify-between text-xs text-muted-foreground">
+                  <span>⏱ Окно питания</span>
+                  <span className="font-medium text-foreground">
+                    {summary.food.firstMeal} — {summary.food.lastMeal}
+                    <span className="text-muted-foreground ml-1">({summary.food.eatingWindowHours} ч)</span>
+                  </span>
                 </div>
               )}
             </>
