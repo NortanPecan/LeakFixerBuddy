@@ -323,6 +323,47 @@ function detectLeaks(days: DayData[]): LeakHint[] {
     }
   }
 
+  // Hint 10: Weekend ritual drop
+  const weekdayRitualDays = days.filter(d => {
+    const day = new Date(d.date).getDay()
+    return day >= 1 && day <= 5 && d.ritualsTotal > 0
+  })
+  const weekendRitualDays = days.filter(d => {
+    const day = new Date(d.date).getDay()
+    return (day === 0 || day === 6) && d.ritualsTotal > 0
+  })
+  if (weekdayRitualDays.length >= 2 && weekendRitualDays.length >= 1) {
+    const weekdayRate = avg(weekdayRitualDays.map(d => d.ritualsTotal > 0 ? d.ritualsCompleted / d.ritualsTotal : 0))
+    const weekendRate = avg(weekendRitualDays.map(d => d.ritualsTotal > 0 ? d.ritualsCompleted / d.ritualsTotal : 0))
+    if (weekdayRate - weekendRate > 0.3) {
+      hints.push({
+        type: 'weekend_drop',
+        severity: 'info',
+        emoji: '📅',
+        message: `В выходные ритуалы выполняются хуже (${Math.round(weekendRate * 100)}% vs ${Math.round(weekdayRate * 100)}% в будни). Упрости выходную рутину.`,
+      })
+    }
+  }
+
+  // Hint 11: High spending week
+  const weekExpenses = days.reduce((s, d) => s + d.expenses, 0)
+  const daysWithExpenses = days.filter(d => d.expenses > 0)
+  if (daysWithExpenses.length >= 2 && weekExpenses > 0) {
+    const highSpendDays = days.filter(d => {
+      const avgPerDay = weekExpenses / daysWithExpenses.length
+      return d.expenses > avgPerDay * 2 && d.expenses > 1000
+    })
+    if (highSpendDays.length >= 1) {
+      hints.push({
+        type: 'high_spend_days',
+        severity: 'info',
+        emoji: '💸',
+        message: `${highSpendDays.length} дн. с расходами в 2× выше среднего. Проверь категории трат.`,
+        days: highSpendDays.map(d => d.dayOfWeek),
+      })
+    }
+  }
+
   return hints
 }
 
