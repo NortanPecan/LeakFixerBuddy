@@ -159,34 +159,42 @@ export function ProfileScreen() {
       try {
         // Load measurements
         const measurementsRes = await fetch(`/api/measurements?userId=${user.id}`)
-        const measurementsData = await measurementsRes.json()
-        setMeasurements(measurementsData.latestByType || {})
-        setFirstMeasurements(measurementsData.firstByType || {})
+        if (measurementsRes.ok) {
+          const measurementsData = await measurementsRes.json()
+          setMeasurements(measurementsData.latestByType || {})
+          setFirstMeasurements(measurementsData.firstByType || {})
+        }
 
         // Load buddies
         const buddiesRes = await fetch(`/api/buddies?userId=${user.id}`)
-        const buddiesData = await buddiesRes.json()
-        setBuddies(buddiesData.buddies || [])
+        if (buddiesRes.ok) {
+          const buddiesData = await buddiesRes.json()
+          setBuddies(buddiesData.buddies || [])
+        }
 
         // Load attributes
         const attrsRes = await fetch(`/api/rituals/attributes?userId=${user.id}`)
-        const attrsData = await attrsRes.json()
-        setAttributes(attrsData.attributes || [])
+        if (attrsRes.ok) {
+          const attrsData = await attrsRes.json()
+          setAttributes(attrsData.attributes || [])
+        }
 
         // Load settings
         const settingsRes = await fetch(`/api/settings?userId=${user.id}`)
-        const settingsData = await settingsRes.json()
-        if (settingsData.settings) {
-          setSettings(settingsData.settings)
-          // Apply saved theme
-          if (settingsData.settings.theme) {
-            setTheme(settingsData.settings.theme)
+        if (settingsRes.ok) {
+          const settingsData = await settingsRes.json()
+          if (settingsData.settings) {
+            setSettings(settingsData.settings)
+            // Apply saved theme
+            if (settingsData.settings.theme) {
+              setTheme(settingsData.settings.theme)
+            }
           }
         }
 
         // Load activity stats
         const statsRes = await fetch(`/api/stats?userId=${user.id}`)
-        const statsData = await statsRes.json()
+        const statsData = statsRes.ok ? await statsRes.json() : {}
         if (statsData.stats) {
           setActivityStats({
             activeRituals: statsData.stats.activeRituals || 0,
@@ -206,8 +214,9 @@ export function ProfileScreen() {
 
         // Load personal records (5.26)
         fetch(`/api/gym/records?userId=${user.id}`)
-          .then(r => r.json())
+          .then(r => r.ok ? r.json() : null)
           .then(d => {
+            if (!d) return
             if (d.topPRs) setTopPRs(d.topPRs.slice(0, 5))
             if (d.history) setPrHistory(d.history)
           })
@@ -215,8 +224,8 @@ export function ProfileScreen() {
 
         // Load community percentile (3.10)
         fetch(`/api/stats/community?userId=${user.id}`)
-          .then(r => r.json())
-          .then(d => { if (d.success) setCommunityStats({ streakPercentile: d.streakPercentile, pointsPercentile: d.pointsPercentile, totalUsers: d.totalUsers }) })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d?.success) setCommunityStats({ streakPercentile: d.streakPercentile, pointsPercentile: d.pointsPercentile, totalUsers: d.totalUsers }) })
           .catch(() => {/* silent */})
 
         // Set bio from profile

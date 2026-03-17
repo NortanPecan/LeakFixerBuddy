@@ -201,3 +201,21 @@ export function isOnline(): boolean {
 export function getOfflineMessage(): string {
   return 'Нет подключения к интернету. Проверьте соединение.'
 }
+
+/**
+ * Safe parseFloat — returns null instead of NaN
+ */
+export function safeParseFloat(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const n = parseFloat(String(value))
+  return isNaN(n) ? null : n
+}
+
+/**
+ * Safe parseInt — returns null instead of NaN
+ */
+export function safeParseInt(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const n = parseInt(String(value), 10)
+  return isNaN(n) ? null : n
+}

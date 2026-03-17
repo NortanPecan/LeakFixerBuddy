@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { safeParseFloat } from '@/lib/network-utils'
 
 // GET - Get today's weight and summary
 export async function GET(request: NextRequest) {
@@ -135,12 +136,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'userId and value required' }, { status: 400 })
     }
 
+    const parsedWeight = safeParseFloat(value)
+    if (parsedWeight === null) {
+      return NextResponse.json({ error: 'value must be a valid number' }, { status: 400 })
+    }
+
     // Create measurement
     const measurement = await db.measurement.create({
       data: {
         userId,
         type: 'weight',
-        value: parseFloat(value),
+        value: parsedWeight,
         unit: 'kg',
         note
       }
@@ -157,8 +163,8 @@ export async function POST(request: NextRequest) {
         await db.userProfile.update({
           where: { userId },
           data: {
-            weight: parseFloat(value),
-            weightStart: parseFloat(value),
+            weight: parsedWeight,
+            weightStart: parsedWeight,
             weightStartAt: new Date()
           }
         })
@@ -166,7 +172,7 @@ export async function POST(request: NextRequest) {
         // Just update current weight
         await db.userProfile.update({
           where: { userId },
-          data: { weight: parseFloat(value) }
+          data: { weight: parsedWeight }
         })
       }
     }

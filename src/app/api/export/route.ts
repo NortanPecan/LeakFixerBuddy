@@ -40,16 +40,18 @@ export async function GET(request: NextRequest) {
       if (checkins.length > 0) {
         const morningCheckins = checkins.filter(c => c.type === 'morning')
         const eveningCheckins = checkins.filter(c => c.type === 'evening')
-        const avgEnergy = morningCheckins.filter(c => c.energy).reduce((s, c) => s + (c.energy || 0), 0) / (morningCheckins.filter(c => c.energy).length || 1)
-        const avgRating = eveningCheckins.filter(c => c.dayRating).reduce((s, c) => s + (c.dayRating || 0), 0) / (eveningCheckins.filter(c => c.dayRating).length || 1)
+        const morningWithEnergy = morningCheckins.filter(c => c.energy)
+        const eveningWithRating = eveningCheckins.filter(c => c.dayRating)
+        const avgEnergy = morningWithEnergy.reduce((s, c) => s + (c.energy || 0), 0) / (morningWithEnergy.length || 1)
+        const avgRating = eveningWithRating.reduce((s, c) => s + (c.dayRating || 0), 0) / (eveningWithRating.length || 1)
 
         markdown += `## Чекапы\n`
         markdown += `- Утренних чекапов: ${morningCheckins.length}\n`
         markdown += `- Вечерних чекапов: ${eveningCheckins.length}\n`
-        if (morningCheckins.filter(c => c.energy).length > 0) {
+        if (morningWithEnergy.length > 0) {
           markdown += `- Средняя утренняя энергия: ${avgEnergy.toFixed(1)}/10\n`
         }
-        if (eveningCheckins.filter(c => c.dayRating).length > 0) {
+        if (eveningWithRating.length > 0) {
           markdown += `- Средняя оценка дня: ${avgRating.toFixed(1)}/10\n`
         }
 

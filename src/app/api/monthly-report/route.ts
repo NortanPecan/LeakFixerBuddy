@@ -286,7 +286,7 @@ function detectMonthlyLeaks(days: DayData[], weeks: WeekSummary[]): MonthlyLeak[
 
   // 2. Gym dropout (was going, then stopped)
   const weekGymDays = weeks.map(w => w.gymDays)
-  if (weekGymDays[0] >= 2 && weekGymDays[3] === 0) {
+  if (weekGymDays.length >= 4 && weekGymDays[0] >= 2 && weekGymDays[3] === 0) {
     leaks.push({
       type: 'gym_dropout',
       severity: 'warning',
@@ -349,7 +349,7 @@ function detectMonthlyLeaks(days: DayData[], weeks: WeekSummary[]): MonthlyLeak[
 
   // 6. Data tracking dropout
   const trackingRates = weeks.map(w => w.dataScore)
-  if (trackingRates[0] >= 60 && trackingRates[3] < 30) {
+  if (trackingRates.length >= 4 && trackingRates[0] >= 60 && trackingRates[3] < 30) {
     leaks.push({
       type: 'tracking_dropout',
       severity: 'warning',

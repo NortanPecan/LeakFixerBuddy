@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { safeParseFloat, safeParseInt } from '@/lib/network-utils'
 
 // POST - Add set to exercise (v1.5: with warmup support)
 export async function POST(request: NextRequest) {
@@ -62,9 +63,9 @@ export async function POST(request: NextRequest) {
       data: {
         exerciseId,
         setNum: finalSetNum,
-        weight: weight ? parseFloat(weight) : exercise.weight,
-        reps: reps ? parseInt(reps) : exercise.targetReps,
-        duration: duration ? parseInt(duration) : null,
+        weight: weight ? (safeParseFloat(weight) ?? exercise.weight) : exercise.weight,
+        reps: reps ? (safeParseInt(reps) ?? exercise.targetReps) : exercise.targetReps,
+        duration: duration ? safeParseInt(duration) : null,
         completed: false,
         isWarmup: isWarmupSet,
       },
@@ -95,9 +96,9 @@ export async function PATCH(request: NextRequest) {
       notes?: string | null
     } = {}
 
-    if (weight !== undefined) updateData.weight = weight ? parseFloat(weight) : null
-    if (reps !== undefined) updateData.reps = reps ? parseInt(reps) : null
-    if (duration !== undefined) updateData.duration = duration ? parseInt(duration) : null
+    if (weight !== undefined) updateData.weight = weight ? safeParseFloat(weight) : null
+    if (reps !== undefined) updateData.reps = reps ? safeParseInt(reps) : null
+    if (duration !== undefined) updateData.duration = duration ? safeParseInt(duration) : null
     if (completed !== undefined) updateData.completed = completed
     if (notes !== undefined) updateData.notes = notes
 
@@ -121,13 +122,13 @@ export async function PATCH(request: NextRequest) {
             isWarmup: false,
             weight: null,
           },
-          data: { weight: parseFloat(weight) }
+          data: { weight: safeParseFloat(weight) }
         })
         
         // Also update exercise weight
         await db.gymExercise.update({
           where: { id: exercise.id },
-          data: { weight: parseFloat(weight) }
+          data: { weight: safeParseFloat(weight) }
         })
       }
     }

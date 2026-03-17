@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { safeParseFloat } from '@/lib/network-utils'
 
 // GET /api/transactions?userId=xxx&accountId=xxx&categoryId=xxx&from=xxx&to=xxx
 export async function GET(request: NextRequest) {
@@ -53,6 +54,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'userId, accountId, and amount are required' }, { status: 400 })
     }
 
+    const parsedAmount = safeParseFloat(amount)
+    if (parsedAmount === null) {
+      return NextResponse.json({ error: 'amount must be a valid number' }, { status: 400 })
+    }
+
     // Get zone from category if not provided
     let transactionZone = zone
     if (!transactionZone && categoryId) {
@@ -69,7 +75,7 @@ export async function POST(request: NextRequest) {
         accountId,
         categoryId: categoryId || null,
         date: date ? new Date(date) : new Date(),
-        amount: parseFloat(amount),
+        amount: parsedAmount,
         description,
         zone: transactionZone
       },
@@ -108,7 +114,11 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (data.amount !== undefined) {
-      data.amount = parseFloat(data.amount)
+      const parsedAmt = safeParseFloat(data.amount)
+      if (parsedAmt === null) {
+        return NextResponse.json({ error: 'amount must be a valid number' }, { status: 400 })
+      }
+      data.amount = parsedAmt
     }
     if (data.date) {
       data.date = new Date(data.date)

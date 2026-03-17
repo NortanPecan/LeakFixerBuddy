@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { safeParseFloat } from '@/lib/network-utils'
 
 // GET - Fetch measurements for user
 export async function GET(request: NextRequest) {
@@ -74,11 +75,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'userId, type, and value required' }, { status: 400 })
     }
 
+    const parsedValue = safeParseFloat(value)
+    if (parsedValue === null) {
+      return NextResponse.json({ error: 'value must be a valid number' }, { status: 400 })
+    }
+
     const measurement = await db.measurement.create({
       data: {
         userId,
         type,
-        value: parseFloat(value),
+        value: parsedValue,
         unit: unit || getTypeUnit(type),
         note,
         photoUrl
@@ -91,7 +97,7 @@ export async function POST(request: NextRequest) {
       if (profile) {
         await db.userProfile.update({
           where: { userId },
-          data: { [type]: parseFloat(value) }
+          data: { [type]: parsedValue }
         })
       }
     }
