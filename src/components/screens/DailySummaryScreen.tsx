@@ -526,6 +526,14 @@ export function DailySummaryScreen() {
                   </Badge>
                 </div>
               )}
+              {summary.flags.isRitualsFailed && summary.rituals.total > 0 && (
+                <div className="mt-3 flex gap-2 items-start p-2 rounded-lg bg-yellow-500/5 border border-yellow-500/15">
+                  <span className="text-base">🔄</span>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Сегодня не лучший день для ритуалов. Выбери 1 самый важный и сделай только его — это лучше нуля.
+                  </p>
+                </div>
+              )}
             </>
           ) : (
             <div className="text-center py-2">
