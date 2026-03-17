@@ -27,7 +27,8 @@ import {
   BarChart2,
   RefreshCw,
   Trash2,
-  Calendar
+  Calendar,
+  Sparkles
 } from 'lucide-react'
 import { useEffect, useState, useMemo, useCallback } from 'react'
 
@@ -80,6 +81,11 @@ export function BuddyScreen() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'find' | 'incoming'>('dashboard')
   const [buddyStats, setBuddyStats] = useState<BuddyStats | null>(null)
   const [loadingStats, setLoadingStats] = useState(false)
+  const [suggestions, setSuggestions] = useState<Array<{
+    id: string; name: string; username?: string; photoUrl?: string
+    day: number; streak: number; score: number; reasons: string[]
+  }>>([])
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false)
 
   const acceptedBuddies = outgoingRequests.filter(b => b.status === 'accepted')
   const activeBuddy = acceptedBuddies[0]
@@ -104,6 +110,20 @@ export function BuddyScreen() {
     }
   }, [user?.id])
 
+  const loadSuggestions = useCallback(async () => {
+    if (!user?.id) return
+    setLoadingSuggestions(true)
+    try {
+      const res = await fetch(`/api/buddies/suggest?userId=${user.id}`)
+      const data = await res.json()
+      setSuggestions(data.suggestions || [])
+    } catch {
+      // silent — suggestions are optional
+    } finally {
+      setLoadingSuggestions(false)
+    }
+  }, [user?.id])
+
   const loadBuddyStats = useCallback(async (buddyId: string) => {
     if (!user?.id) return
     setLoadingStats(true)
@@ -121,7 +141,8 @@ export function BuddyScreen() {
   useEffect(() => {
     if (!user?.id) return
     loadData()
-  }, [loadData])
+    loadSuggestions()
+  }, [loadData, loadSuggestions])
 
   useEffect(() => {
     if (activeBuddy) {
@@ -515,6 +536,72 @@ export function BuddyScreen() {
                 </p>
               </CardContent>
             </Card>
+          )}
+
+          {/* Smart suggestions */}
+          {!activeBuddy && suggestions.length > 0 && !searchQuery && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-white/50 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
+                Похожий путь — рекомендуем
+              </p>
+              {suggestions.map(s => {
+                const status = getRequestStatus(s.id)
+                return (
+                  <Card key={s.id} className="bg-card/50 backdrop-blur border-indigo-500/20">
+                    <CardContent className="py-3">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="w-10 h-10">
+                          <AvatarImage src={s.photoUrl} />
+                          <AvatarFallback className="bg-indigo-500/20 text-indigo-300 text-sm">
+                            {s.name[0]?.toUpperCase() || 'U'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">{s.name}</p>
+                          <div className="flex gap-2 text-xs text-muted-foreground">
+                            <span>🔥 {s.streak} дней</span>
+                            <span>📅 День {s.day}</span>
+                          </div>
+                          {s.reasons.length > 0 && (
+                            <div className="flex gap-1 mt-1 flex-wrap">
+                              {s.reasons.map((r, i) => (
+                                <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300">
+                                  {r}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {status === 'accepted' ? (
+                          <Badge className="bg-emerald-500/20 text-emerald-400">Бадди</Badge>
+                        ) : status === 'pending' ? (
+                          <Badge variant="outline" className="text-muted-foreground">
+                            <Clock className="w-3 h-3 mr-1" />
+                            Ожидание
+                          </Badge>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-indigo-500/30"
+                            onClick={() => handleSendRequest({ id: s.id, name: s.name, photoUrl: s.photoUrl, username: s.username, streak: s.streak, day: s.day })}
+                            disabled={sendingTo === s.id || !!activeBuddy}
+                          >
+                            {sendingTo === s.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <UserPlus className="w-4 h-4" />
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+              <div className="h-px bg-white/5 my-1" />
+            </div>
           )}
 
           <div className="relative">
