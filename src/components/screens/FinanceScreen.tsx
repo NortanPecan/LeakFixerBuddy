@@ -862,9 +862,16 @@ export function FinanceScreen() {
                             {formatMoney(spentAbs)}
                           </p>
                           {category.monthlyTarget ? (
-                            <p className={`text-xs ${overBudget ? 'text-red-400 font-medium' : 'text-muted-foreground'}`}>
-                              {overBudget ? '⚠️ ' : ''}из {formatMoney(category.monthlyTarget)}
-                            </p>
+                            <div>
+                              <p className={`text-xs ${overBudget ? 'text-red-400 font-medium' : 'text-muted-foreground'}`}>
+                                {overBudget ? '⚠️ ' : ''}из {formatMoney(category.monthlyTarget)}
+                              </p>
+                              {!overBudget && (
+                                <p className="text-[10px] text-emerald-400/70">
+                                  ост. {formatMoney(category.monthlyTarget - spentAbs)}
+                                </p>
+                              )}
+                            </div>
                           ) : (
                             <p className="text-xs text-muted-foreground/50">нет лимита</p>
                           )}
