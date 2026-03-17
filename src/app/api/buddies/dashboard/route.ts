@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
       where: { userId: buddyId, status: 'active' }
     })
 
-    // Streak history (last 7 days)
+    // Streak history (last 7 days) for buddy
     const last7Days: { date: string; completions: number }[] = []
     for (let i = 6; i >= 0; i--) {
       const d = new Date()
@@ -133,6 +133,46 @@ export async function GET(request: NextRequest) {
       last7Days.push({ date: d.toISOString().split('T')[0], completions })
     }
 
+    // Current user stats for comparison
+    const currentUser = await db.appUser.findUnique({
+      where: { id: userId },
+      select: {
+        telegramFirstName: true,
+        telegramLastName: true,
+        telegramUsername: true,
+        firstName: true,
+        lastName: true,
+        telegramPhotoUrl: true,
+        photoUrl: true,
+        day: true,
+        streak: true,
+        points: true,
+      }
+    })
+
+    const myName = currentUser?.telegramFirstName
+      ? `${currentUser.telegramFirstName}${currentUser.telegramLastName ? ` ${currentUser.telegramLastName}` : ''}`
+      : currentUser?.firstName || currentUser?.telegramUsername || 'Я'
+
+    // My today's ritual completions
+    const myTodayCompletions = await db.ritualCompletion.count({
+      where: { userId, date: { gte: today, lt: tomorrow }, completed: true }
+    })
+
+    // My 7-day activity
+    const myLast7Days: { date: string; completions: number }[] = []
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      d.setHours(0, 0, 0, 0)
+      const next = new Date(d)
+      next.setDate(next.getDate() + 1)
+      const completions = await db.ritualCompletion.count({
+        where: { userId, date: { gte: d, lt: next }, completed: true }
+      })
+      myLast7Days.push({ date: d.toISOString().split('T')[0], completions })
+    }
+
     return NextResponse.json({
       success: true,
       buddy: {
@@ -142,6 +182,15 @@ export async function GET(request: NextRequest) {
         day: buddyUser.day,
         streak: buddyUser.streak,
         points: buddyUser.points,
+      },
+      me: {
+        name: myName,
+        photoUrl: currentUser?.telegramPhotoUrl || currentUser?.photoUrl,
+        day: currentUser?.day,
+        streak: currentUser?.streak,
+        points: currentUser?.points,
+        todayCompletions: myTodayCompletions,
+        last7Days: myLast7Days,
       },
       stats: {
         activeRituals,

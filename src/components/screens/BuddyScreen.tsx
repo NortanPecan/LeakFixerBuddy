@@ -59,6 +59,15 @@ interface BuddyStats {
     streak: number
     points: number
   }
+  me?: {
+    name: string
+    photoUrl?: string
+    day?: number
+    streak?: number
+    points?: number
+    todayCompletions: number
+    last7Days: { date: string; completions: number }[]
+  }
   stats: {
     activeRituals: number
     todayCompletions: number
@@ -364,6 +373,37 @@ export function BuddyScreen() {
                 </div>
               ) : buddyStats ? (
                 <>
+                  {/* Side-by-side comparison */}
+                  {buddyStats.me && (
+                    <Card className="bg-card/50 backdrop-blur">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <BarChart2 className="w-4 h-4 text-indigo-400" />
+                          Сравнение
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-3 gap-2 text-center text-xs mb-3">
+                          <div className="text-white/40">Метрика</div>
+                          <div className="font-medium text-white/80 truncate">{buddyStats.me.name}</div>
+                          <div className="font-medium text-emerald-400 truncate">{buddyStats.buddy.name}</div>
+                        </div>
+                        {[
+                          { label: '🔥 Стрик', my: buddyStats.me.streak ?? 0, their: buddyStats.buddy.streak },
+                          { label: '📅 День', my: buddyStats.me.day ?? 0, their: buddyStats.buddy.day },
+                          { label: '⭐ Очки', my: buddyStats.me.points ?? 0, their: buddyStats.buddy.points },
+                          { label: '✓ Сегодня', my: buddyStats.me.todayCompletions, their: buddyStats.stats.todayCompletions },
+                        ].map(({ label, my, their }) => (
+                          <div key={label} className="grid grid-cols-3 gap-2 text-center py-1 border-b border-white/5 last:border-0">
+                            <div className="text-xs text-white/40 text-left">{label}</div>
+                            <div className={`text-sm font-bold ${my > their ? 'text-emerald-400' : my < their ? 'text-white/60' : 'text-white/80'}`}>{my}</div>
+                            <div className={`text-sm font-bold ${their > my ? 'text-emerald-400' : their < my ? 'text-white/60' : 'text-white/80'}`}>{their}</div>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )}
+
                   {/* Today's activity */}
                   <Card className="bg-card/50 backdrop-blur">
                     <CardHeader className="pb-2">
