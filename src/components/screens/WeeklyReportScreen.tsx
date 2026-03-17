@@ -236,9 +236,82 @@ export function WeeklyReportScreen() {
         </Card>
       )}
 
+      {/* Correlation insights (3.2) */}
+      <CorrelationInsights days={report.days} />
+
       {/* AI Prompt export */}
       <AiPromptButton report={report} />
     </div>
+  )
+}
+
+function CorrelationInsights({ days }: { days: DayData[] }) {
+  const insights: Array<{ emoji: string; text: string }> = []
+
+  const daysWithData = days.filter(d => d.mood !== null || d.energy !== null)
+  if (daysWithData.length < 3) return null
+
+  // Gym → mood correlation
+  const gymDays = days.filter(d => d.hadGym && d.mood !== null)
+  const noGymDays = days.filter(d => !d.hadGym && d.mood !== null)
+  if (gymDays.length >= 2 && noGymDays.length >= 2) {
+    const avgMoodGym = gymDays.reduce((s, d) => s + (d.mood ?? 0), 0) / gymDays.length
+    const avgMoodNoGym = noGymDays.reduce((s, d) => s + (d.mood ?? 0), 0) / noGymDays.length
+    if (avgMoodGym - avgMoodNoGym > 1.5) {
+      insights.push({ emoji: '🏋️', text: `В дни тренировок настроение в среднем на ${(avgMoodGym - avgMoodNoGym).toFixed(1)} балла выше` })
+    }
+  }
+
+  // Rituals → energy correlation
+  const fullRitualDays = days.filter(d => d.ritualsTotal > 0 && d.ritualsCompleted === d.ritualsTotal && d.energy !== null)
+  const missedRitualDays = days.filter(d => d.ritualsTotal > 0 && d.ritualsCompleted < d.ritualsTotal / 2 && d.energy !== null)
+  if (fullRitualDays.length >= 2 && missedRitualDays.length >= 1) {
+    const avgEnergyFull = fullRitualDays.reduce((s, d) => s + (d.energy ?? 0), 0) / fullRitualDays.length
+    const avgEnergyMissed = missedRitualDays.reduce((s, d) => s + (d.energy ?? 0), 0) / missedRitualDays.length
+    if (avgEnergyFull - avgEnergyMissed > 1) {
+      insights.push({ emoji: '🎯', text: `Когда все ритуалы выполнены — энергия выше на ${(avgEnergyFull - avgEnergyMissed).toFixed(1)} балла` })
+    }
+  }
+
+  // High calories → lower next-day energy
+  const calDays = days.filter((d, i) => i < days.length - 1 && d.totalCalories > 0)
+  const highCalThenLowEnergy = calDays.filter((d, i) => {
+    const nextDay = days[days.indexOf(d) + 1]
+    return d.totalCalories > 2500 && nextDay?.energy !== null && (nextDay.energy ?? 10) < 5
+  })
+  if (highCalThenLowEnergy.length >= 2) {
+    insights.push({ emoji: '🍔', text: `${highCalThenLowEnergy.length}× после дня переедания (>2500 ккал) энергия на следующий день падала ниже 5` })
+  }
+
+  // Evening checkin → better day rating
+  const withEvening = days.filter(d => d.eveningCheckinDone && d.eveningRating !== null)
+  const withoutEvening = days.filter(d => !d.eveningCheckinDone && d.eveningRating !== null)
+  if (withEvening.length >= 2 && withoutEvening.length >= 1) {
+    const avgWith = withEvening.reduce((s, d) => s + (d.eveningRating ?? 0), 0) / withEvening.length
+    const avgWithout = withoutEvening.reduce((s, d) => s + (d.eveningRating ?? 0), 0) / withoutEvening.length
+    if (avgWith - avgWithout > 1) {
+      insights.push({ emoji: '🌙', text: `В дни с вечерним чекапом оценка дня выше на ${(avgWith - avgWithout).toFixed(1)} балла` })
+    }
+  }
+
+  if (insights.length === 0) return null
+
+  return (
+    <Card style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)' }}>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          🔗 Паттерны недели
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {insights.map((ins, i) => (
+          <div key={i} className="flex gap-2 text-sm">
+            <span>{ins.emoji}</span>
+            <span className="text-white/70">{ins.text}</span>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   )
 }
 
