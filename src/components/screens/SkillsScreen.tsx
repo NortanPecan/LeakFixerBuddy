@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useAppStore } from '@/lib/store'
+import { showSuccessToast, showErrorToast } from '@/lib/network-utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -158,18 +159,24 @@ export function SkillsScreen() {
   const handleAddXP = async (skill: Skill) => {
     setXpLoading(skill.id)
     try {
-      await fetch('/api/skills', {
+      const res = await fetch('/api/skills', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          id: skill.id, 
-          xpGained: 25, 
-          reason: 'manual' 
+        body: JSON.stringify({
+          id: skill.id,
+          xpGained: 25,
+          reason: 'manual'
         })
       })
+      const data = await res.json()
+      if (data.leveledUp) {
+        showSuccessToast(`🎉 Уровень ${data.newLevel}! Навык "${skill.name}" повышен!`)
+      } else {
+        showSuccessToast(`+25 XP → ${skill.name}`)
+      }
       await loadSkills()
     } catch (err) {
-      console.error('Add XP error:', err)
+      showErrorToast(err, 'добавление XP')
     } finally {
       setXpLoading(null)
     }
