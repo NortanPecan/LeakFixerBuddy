@@ -20,7 +20,8 @@ import {
   ArrowLeft,
   TrendingUp,
   TrendingDown,
-  Minus
+  Minus,
+  Moon
 } from 'lucide-react'
 
 interface CheckinData {
@@ -71,6 +72,7 @@ interface DailySummaryData {
   state: {
     mood: number | null
     energy: number | null
+    sleepHours: number | null
   }
   supplements: {
     checked: number
@@ -260,8 +262,11 @@ export function DailySummaryScreen() {
       )}
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 gap-3">
-        {/* Mood/Energy */}
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: `repeat(${summary.state.sleepHours !== null ? 3 : 2}, 1fr)` }}
+      >
+        {/* Mood/Energy/Sleep */}
         <Card className="bg-card/50 backdrop-blur">
           <CardContent className="pt-4">
             <div className="flex items-center gap-2 mb-2">
@@ -295,6 +300,21 @@ export function DailySummaryScreen() {
             )}
           </CardContent>
         </Card>
+
+        {summary.state.sleepHours !== null && (
+          <Card className="bg-card/50 backdrop-blur">
+            <CardContent className="pt-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Moon className="w-4 h-4 text-indigo-400" />
+                <span className="text-xs text-muted-foreground">Сон</span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-bold">{summary.state.sleepHours}</span>
+                <span className="text-xs text-muted-foreground">ч</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Checkin block */}

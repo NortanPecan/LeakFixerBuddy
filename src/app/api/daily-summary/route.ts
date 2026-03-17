@@ -249,10 +249,11 @@ export async function GET(request: NextRequest) {
         : 0
     }
 
-    // State (mood/energy)
+    // State (mood/energy/sleep)
     const state = {
       mood: dailyState?.mood ?? null,
-      energy: dailyState?.energy ?? null
+      energy: dailyState?.energy ?? null,
+      sleepHours: dailyState?.sleepHours ?? null,
     }
 
     // Calculate supplements
