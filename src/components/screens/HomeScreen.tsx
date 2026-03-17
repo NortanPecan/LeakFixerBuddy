@@ -587,6 +587,25 @@ export function HomeScreen() {
         </CardContent>
       </Card>
 
+      {/* Monthly report shortcut */}
+      <Card
+        className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors"
+        onClick={() => setScreen('monthly-report' as Screen)}
+      >
+        <CardContent className="pt-4 pb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">📈</span>
+              <div>
+                <div className="text-sm font-medium text-white">Месячный анализ</div>
+                <div className="text-xs text-white/40">Тренды, глубокие лики, советы</div>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Quick stats */}
       <div className="grid grid-cols-2 gap-3">
         <Card className="bg-card/50 backdrop-blur">

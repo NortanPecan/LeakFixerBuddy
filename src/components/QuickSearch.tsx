@@ -174,6 +174,11 @@ export function QuickSearch({ open, onClose }: QuickSearchProps) {
       keywords: ['сводка', 'день', 'дневная', 'summary', 'daily'],
       type: 'navigate', screen: 'daily-summary',
     },
+    {
+      id: 'monthly-report', label: 'Месячный отчёт', emoji: '📈',
+      keywords: ['месяц', 'monthly', 'месячный', 'отчёт месяц', 'глубокий анализ'],
+      type: 'navigate', screen: 'monthly-report' as Screen,
+    },
   ]
 
   const filtered = query.length < 1

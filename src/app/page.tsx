@@ -41,6 +41,7 @@ const AllRitualsScreen = lazy(() => import('@/components/screens/AllRitualsScree
 const SettingsScreen = lazy(() => import('@/components/screens/SettingsScreen').then(m => ({ default: m.SettingsScreen })))
 const HabitsScreen = lazy(() => import('@/components/screens/HabitsScreen').then(m => ({ default: m.HabitsScreen })))
 const WeeklyReportScreen = lazy(() => import('@/components/screens/WeeklyReportScreen').then(m => ({ default: m.WeeklyReportScreen })))
+const MonthlyReportScreen = lazy(() => import('@/components/screens/MonthlyReportScreen').then(m => ({ default: m.MonthlyReportScreen })))
 const QuickEntryFAB = lazy(() => import('@/components/QuickEntryFAB').then(m => ({ default: m.QuickEntryFAB })))
 
 // Screens that show bottom nav
@@ -130,6 +131,8 @@ function ScreenRouter({ screen, contentId }: { screen: Screen; contentId?: strin
             return <HabitsScreen />
           case 'weekly-report' as Screen:
             return <WeeklyReportScreen />
+          case 'monthly-report' as Screen:
+            return <MonthlyReportScreen />
           case 'note-detail' as Screen:
             return <NotesScreen />
           default:
