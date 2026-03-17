@@ -42,6 +42,7 @@ import {
 import { Slider } from '@/components/ui/slider'
 import { DatePicker, DateBadge } from '@/components/DatePicker'
 import { WellbeingWidget } from '@/components/wellbeing'
+import { EmotionWidget } from '@/components/EmotionWidget'
 import { WeightHistoryModal } from '@/components/weight/WeightHistoryModal'
 import { WeightRecordsModal } from '@/components/weight/WeightRecordsModal'
 import { WeightGoalModal } from '@/components/weight/WeightGoalModal'
@@ -452,10 +453,13 @@ export function HomeScreen() {
       </Card>
 
       {/* Wellbeing Widget */}
-      <WellbeingWidget 
+      <WellbeingWidget
         mood={globalState?.mood}
         energy={globalState?.energy}
       />
+
+      {/* Emotion Tracker */}
+      {user?.id && <EmotionWidget userId={user.id} />}
 
       {/* Weight Tracking Card */}
       <Card className="bg-card/50 backdrop-blur">

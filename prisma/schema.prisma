@@ -106,6 +106,8 @@ model AppUser {
   zones                 Zone[]
   // Daily check-ins (morning / evening)
   dailyCheckins         DailyCheckin[]
+  emotionLogs           EmotionLog[]
+  fleetingThoughts      FleetingThought[]
 
   @@index([telegramId])
   @@index([email])
@@ -1313,4 +1315,41 @@ model DailyCheckin {
   @@unique([userId, date, type])
   @@index([userId, date])
   @@map("daily_checkins")
+}
+
+// ============================================
+// EMOTION TRACKER (5.30)
+// ============================================
+
+/// Quick emotion log — multiple per day, lightweight
+model EmotionLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  emotion   String   // emoji key: "joy", "anxiety", "anger", "calm", "sad", "excited"
+  intensity Int      @default(3) // 1-5
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("emotion_logs")
+}
+
+// ============================================
+// FLEETING THOUGHTS (5.31)
+// ============================================
+
+/// Transient notes that auto-expire after 48 hours
+model FleetingThought {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  text      String
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("fleeting_thoughts")
 }
