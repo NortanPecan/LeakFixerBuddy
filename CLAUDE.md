@@ -117,7 +117,7 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Текущее состояние (2026-03-17, сессия 10)
+## Текущее состояние (2026-03-17, сессия 11)
 
 ### Что реализовано (полный список)
 
@@ -167,16 +167,22 @@ export function GymWorkoutDetailDialog() {
 - ✅ Поиск по еде в HealthScreen (фильтр по имени)
 - ✅ Export данных + готовый AI-промпт
 
-**AI-анализ ликов (сессия 10)**
+**AI-анализ ликов (сессии 10–11)**
 - ✅ `src/lib/ai-provider.ts` — Groq primary + Gemini fallback, таймауты, логирование каждого вызова в `ai_logs`
 - ✅ `src/lib/ai-leak-prompts.ts` — системный промпт, билдер пользовательского контекста (7 дней статистики + паттерны), JSON-парсер ответа, Telegram-форматтер
 - ✅ `src/lib/ai-analyze-leak.ts` — shared функция `analyzeLeakWithAI()`, используется и в API-роуте и в Telegram напрямую
 - ✅ `POST /api/ai/analyze-leak` — собирает контекст юзера, вызывает AI, сохраняет в `user_ai_patterns`
 - ✅ `GET /api/ai/analyze-leak` — возвращает кешированный анализ без нового AI-вызова
+- ✅ `PATCH /api/ai/analyze-leak` — фидбек по решению: `{ userId, leakType, solutionText, worked }` → пишет в `triedSolutions[].worked` и `whatWorked`
+- ✅ `GET /api/ai/recommendations` — возвращает свежайший `UserAiPattern` пользователя за последние 7 дней
 - ✅ `src/components/LeakAiAnalysisCard.tsx` — кнопка «🤖 Разобрать с ИИ» + карточка (причина / 3 решения с дедлайнами / персональное наблюдение)
+- ✅ `LeakAiAnalysisCard` — кнопка «📋 Добавить в задачи»: все 3 решения → `POST /api/tasks` с автоконвертацией дедлайна в дату
+- ✅ `LeakAiAnalysisCard` — фидбек «✅ Сработало» / «❌ Не помогло» под каждым решением (оптимистично)
 - ✅ WeeklyReportScreen — `LeakAiAnalysisCard` под каждым ликом
 - ✅ MonthlyReportScreen — `LeakAiAnalysisCard` под каждым глубоким ликом
 - ✅ Telegram команда `лик [текст]` — keyword-классификатор + прямой вызов AI (без self-referential HTTP)
+- ✅ HomeScreen виджет «💡 AI Рекомендации» — тип лика + топ-решение + кнопка «Все» → WeeklyReport; скрывается через `hiddenWidgets` (`ai_recommendations`)
+- ✅ ProfileScreen → Виджеты: переключатель «AI Рекомендации»
 - ✅ `ai_logs` таблица — логирует промпт/ответ/модель/юзер/латентность/провайдер/ошибки
 - ✅ `user_ai_patterns` таблица — хранит историю анализов, tried solutions, whatWorked по каждому типу лика
 - ✅ Прокси-архитектура: ключи только на сервере, фронт не знает ни ключей, ни провайдера
@@ -211,54 +217,38 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Следующие задачи (приоритет, сессия 11)
+## Следующие задачи (приоритет, сессия 12)
 
-### 1. 🔴 AI-рекомендации — внедрение в приложение (все три уровня за раз, ~4 часа)
-
-**Уровень 1 — Кнопка «📋 Добавить в задачи»** в `LeakAiAnalysisCard`
-- После получения AI-анализа появляется кнопка → каждое из 3 решений становится `Task` с дедлайном
-- `POST /api/tasks` с `text = solution.text`, `dueDate = now + deadline`
-- Показать тост «✅ 3 задачи добавлены»
-
-**Уровень 2 — Виджет «💡 AI Рекомендации» на HomeScreen**
-- Показывать если есть `UserAiPattern` с `lastAnalysis` созданным < 7 дней назад
-- Карточка: тип лика + одна главная рекомендация + кнопка «Посмотреть все»
-- Скрыть виджет через `hiddenWidgets` (ключ `'ai_recommendations'`)
-
-**Уровень 3 — Фидбек «✅ Сработало» / «❌ Не помогло»** под каждым решением
-- `PATCH /api/ai/analyze-leak/feedback` `{ userId, leakType, solutionText, worked: bool }`
-- Пишет в `UserAiPattern.whatWorked` (если `worked: true`) / `triedSolutions[].worked = false`
-- Следующий AI-анализ этого лика видит историю → более точные советы
-
-### 2. 🟡 Supplement reminder — отдельный флаг (30 мин)
+### 1. 🔴 Supplement reminder — отдельный флаг (30 мин)
 Сейчас `/api/notifications/send-supplement-reminder` проверяет `ritualReminders`. Нужен отдельный флаг.
 - `prisma/schema.prisma`: добавить `supplementReminders Boolean @default(true)`
-- `prisma/migrations/YYYYMMDD_supplement_reminders.sql` + применить в Supabase
+- `prisma/migrations/20260317_supplement_reminders.sql` + применить в Supabase SQL Editor
 - `SettingsScreen.tsx`: Switch «Напоминание о БАДах»
 - `send-supplement-reminder/route.ts`: заменить `ritualReminders` → `supplementReminders`
 
-### 3. 🟡 StatsScreen — выбор периода 7д/14д/30д/90д (1 час)
+### 2. 🟡 StatsScreen — выбор периода 7д/14д/30д/90д (1 час)
 Сейчас `?days=30` и `last14Days` жёстко захардкожено.
 - State `periodDays: 7 | 14 | 30 | 90` + кнопки-переключатели в UI
 - API: передавать `?days=N`, пересчёт всех chart и averages
 - Файлы: `src/components/screens/StatsScreen.tsx`, `src/app/api/stats/history/route.ts`
 
-### 4. 🟡 Ачивменты за оценку дня (2 часа)
-Таблица `Achievement` уже есть. Нужны badge-триггеры в DailySummaryScreen:
-- Первый раз получить 80+ → badge «Отличный день»
-- 7 дней подряд 70+ → badge «Неделя качества»
+### 3. 🟡 Ачивменты за оценку дня (2 часа)
+Таблица `Achievement` уже есть в Prisma schema.
+- Триггеры: первый 80+ → badge «Отличный день», 7 дней подряд 70+ → badge «Неделя качества»
 - API: `POST /api/achievements/check` → проверка условий и запись
 - UI: показывать popup при выдаче, список в ProfileScreen
 
-### 5. 🟢 Telegram bot — inline ввод данных через ForceReply (1.5 часа)
+### 4. 🟢 Telegram bot — inline ввод данных через ForceReply (1.5 часа)
 Сейчас кнопки «Сон», «Вес», «Настроение», «Энергия» только показывают текущее значение.
 - Flow: нажал кнопку → бот спрашивает значение (ForceReply) → пользователь отвечает → записывается
-- Хранить `pendingAction` в `UserAiPattern` или временной Note
+- Хранить `pendingAction` в `fleeting_thoughts` (TTL 5 мин) или временной Note
+- Файл: `webhook/route.ts` — проверять `message.reply_to_message`
 
-### 6. 🟢 DailySummaryScreen — кнопка «Поделиться» оценкой (30 мин)
+### 5. 🟢 DailySummaryScreen — кнопка «Поделиться» оценкой (30 мин)
 Кнопка рядом со score формирует текст:
 `📊 Мой день: 83/100 — Отличный! 💧100% 🍽️1800ккал ✅4/5 ритуалов`
-→ `navigator.clipboard.writeText()` или `window.open('tg://...')`
+→ `navigator.clipboard.writeText()` или `window.open('tg://msg?text=...')`
+Файл: `src/components/screens/DailySummaryScreen.tsx`
 
 ---
 
@@ -503,6 +493,34 @@ export function GymWorkoutDetailDialog() {
 - ✅ `ai_logs` миграция применена в Supabase
 - ✅ `GROQ_API_KEY` добавлен в Vercel ENV
 - ✅ `GEMINI_API_KEY` добавлен в Vercel ENV
+
+---
+
+## Что делали в сессии 2026-03-17 (сессия 11)
+
+### AI-рекомендации — все три уровня внедрения
+
+**Новые файлы:**
+- `src/app/api/ai/recommendations/route.ts` — `GET /api/ai/recommendations?userId=...` возвращает свежайший `UserAiPattern` (< 7 дней) пользователя. Используется виджетом на HomeScreen.
+
+**Изменённые файлы:**
+- `src/app/api/ai/analyze-leak/route.ts` — добавлен `PATCH` handler: принимает `{ userId, leakType, solutionText, worked }`, обновляет `triedSolutions[].worked` и `whatWorked` в `UserAiPattern`
+- `src/components/LeakAiAnalysisCard.tsx` — три новых возможности:
+  1. Кнопка «📋 Добавить в задачи» — каждое из 3 решений становится `Task` (POST /api/tasks, zone: 'LeakFixer', date из дедлайна AI)
+  2. Фидбек «✅ Сработало» / «❌ Не помогло» под каждым решением — оптимистичное обновление UI + PATCH на сервер
+  3. Конвертер дедлайна: "сегодня"→today, "завтра"→+1, "за N дней"→+N, "неделя"→+7, "месяц"→+30
+- `src/components/screens/HomeScreen.tsx` — виджет «💡 AI Рекомендации»: загружает `GET /api/ai/recommendations` при монтировании, показывается между «Фокус недели» и «Лики недели» (только день >= 8), скрывается через `hiddenWidgets['ai_recommendations']`
+- `src/components/screens/ProfileScreen.tsx` — добавлен переключатель «AI Рекомендации» в раздел «Виджеты главного экрана»
+
+### Принятые решения (важно для следующих сессий)
+
+- **Фидбек в `PATCH /api/ai/analyze-leak`** — не отдельный endpoint `/feedback`, а в тот же route: чище, меньше файлов
+- **Дедлайн → дата**: парсим текст AI регуляркой (`/(\d+)\s*дн/`, `недел`, `месяц`), fallback → +7 дней. Не пытаемся парсить произвольный русский текст полностью.
+- **Виджет на HomeScreen**: IIFE-паттерн `{(() => { ... })()}` — вместо вынесения в отдельный компонент, сохраняет локальный доступ к `setScreen`
+- **`triedSolutions`**: если решение не найдено в массиве при фидбеке — добавляем новую запись (graceful handling)
+- **Следующий AI-анализ учитывает фидбек**: `buildLeakAnalysisMessage()` уже включает `triedSolutions` и `whatWorked` в промпт через `pastPatterns` — миграций не нужно
+
+### Ничего не осталось незакончено — все три уровня реализованы полностью
 
 ---
 

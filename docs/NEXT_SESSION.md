@@ -1,24 +1,22 @@
 # Next Session — Текущее состояние и задачи
 
-> Обновлено: 2026-03-17 (сессия 9)
-> Ветка: `claude/hopeful-hamilton-tkw1n`
+> Обновлено: 2026-03-17 (сессия 11)
+> Ветка: `claude/ai-recommendations-feedback-TlDoh`
 
 ---
 
-## Последняя сессия (2026-03-17, сессия 9)
+## Последняя сессия (2026-03-17, сессия 11)
 
 ### ✅ Сделано
 
 | # | Задача | Детали |
 |---|--------|--------|
-| — | **Проверка миграций** | Верифицировано через Supabase MCP: emotion_logs, fleeting_thoughts, gym_workouts.stretching_done, user_settings.hidden_widgets — все ✅ применены |
-| — | **Telegram webhook активация** | Токен перевыпущен, Vercel ENV обновлён, webhook зарегистрирован через браузер |
-| — | **Inline keyboard** | Главное меню 11 кнопок, `/start` и `помощь` → меню с клавиатурой |
-| — | **GYM сводка** | Формат `Жим — 4х12х50кг(55) 🏆`, кнопка «Отметить выполненной», live-update |
-| — | **Вода quick-add** | Кнопки +200/+350/+500 мл, live-update без нового сообщения |
-| — | **Ритуалы** | Список ✅/⬜ + кнопка «Отметить все выполненными» |
-| — | **Питание / Финансы / Задачи / Вес / Состояние** | Сводки по каждому модулю |
-| — | **⚙️ Настройки кнопок** | Toggle вкл/выкл для каждой кнопки, хранится в `hidden_widgets` (prefix `tg_`) |
+| 1 | **PATCH /api/ai/analyze-leak** | Фидбек по решению: `{ userId, leakType, solutionText, worked }` → пишет в `triedSolutions[].worked` и `whatWorked` |
+| 2 | **GET /api/ai/recommendations** | Новый endpoint — свежайший `UserAiPattern` пользователя за 7 дней |
+| 3 | **LeakAiAnalysisCard — «📋 Добавить в задачи»** | Все 3 решения → POST /api/tasks, zone 'LeakFixer', дата из дедлайна AI |
+| 4 | **LeakAiAnalysisCard — фидбек ✅/❌** | Кнопки под каждым решением, оптимистичное обновление UI |
+| 5 | **HomeScreen виджет «💡 AI Рекомендации»** | Тип лика + топ-решение + кнопка «Все» → WeeklyReport, скрывается через hiddenWidgets |
+| 6 | **ProfileScreen** | Переключатель «AI Рекомендации» в разделе «Виджеты» |
 
 ---
 
@@ -36,7 +34,7 @@
 ### 1. 🔴 Supplement reminder — отдельный флаг (30 мин)
 Сейчас `send-supplement-reminder` проверяет `ritualReminders`. Нужен отдельный флаг:
 - `prisma/schema.prisma`: `supplementReminders Boolean @default(true)`
-- `prisma/migrations/20260317_supplement_reminders.sql` → применить в Supabase
+- `prisma/migrations/20260317_supplement_reminders.sql` → применить в Supabase SQL Editor
 - `SettingsScreen.tsx`: Switch «Напоминание о БАДах»
 - `send-supplement-reminder/route.ts`: `where: { supplementReminders: true }`
 
@@ -48,7 +46,7 @@
 
 ### 3. 🟡 Ачивменты за оценку дня (2 часа)
 Таблица `Achievement` уже есть в Prisma schema.
-- Триггеры: первый 80+ → badge, 7 дней подряд 70+ → badge
+- Триггеры: первый 80+ → badge «Отличный день», 7 дней подряд 70+ → badge «Неделя качества»
 - `POST /api/achievements/check` — проверка при каждом сохранении оценки
 - UI: popup при выдаче + список в ProfileScreen
 
@@ -56,7 +54,7 @@
 Кнопки «Сон», «Вес», «Настроение», «Энергия» должны запрашивать значение:
 - Нажал кнопку → бот отвечает `ForceReply` «Введи часы сна:»
 - Пользователь отвечает числом → записывается как reply на то сообщение
-- Хранить `pendingAction` в `fleeting_thoughts` (TTL 5 мин) или in-memory
+- Хранить `pendingAction` в `fleeting_thoughts` (TTL 5 мин)
 - Файл: `webhook/route.ts` — проверять `message.reply_to_message`
 
 ### 5. 🟢 DailySummaryScreen — кнопка «Поделиться» оценкой (30 мин)
@@ -82,6 +80,7 @@
 | `сводка` | мини-итоги дня |
 | `доход 5000 зарплата` | income transaction |
 | `расход 500 кофе` | expense transaction |
+| `лик [текст]` | AI-анализ лика (Groq/Gemini) |
 | `помощь` / `/start` / `меню` | список команд + inline keyboard |
 
 ## Telegram inline keyboard — 11 кнопок
@@ -122,10 +121,12 @@
 | Тема | Правило |
 |------|---------|
 | **БД** | Только Supabase PostgreSQL, Prisma ORM |
-| **Ветка** | `claude/hopeful-hamilton-tkw1n` |
+| **Ветка** | `claude/ai-recommendations-feedback-TlDoh` |
 | **Lint** | `bun run lint` перед коммитом (0 ошибок) |
 | **Миграции** | Вручную в Supabase SQL Editor |
 | **Transaction.amount** | Положительный = доход, отрицательный = расход (нет поля type!) |
 | **Supplement reminder** | Пока использует `ritualReminders` — нужен отдельный флаг (задача #1) |
-| **hidden_widgets** | Хранит и web-виджеты (`weight`, `wellbeing` и т.д.) и tg-кнопки (`tg_gym`, `tg_food` и т.д.) |
-| **Telegram editMessageText** | Используем для живых экранов (вода, настройки) чтобы не спамить сообщениями |
+| **hidden_widgets** | Хранит web-виджеты (`weight`, `ai_recommendations` и т.д.) и tg-кнопки (`tg_gym` и т.д.) |
+| **PATCH /api/ai/analyze-leak** | Фидбек — в том же route что POST/GET, не отдельный файл |
+| **Фидбек → следующий анализ** | `analyzeLeakWithAI()` уже передаёт `pastPatterns` (triedSolutions + whatWorked) в промпт — автоматически |
+| **LeakAiAnalysisCard дедлайн** | `deadlineToDate()` парсит текст AI: регулярка на цифры + ключевые слова, fallback +7 дней |
