@@ -60,6 +60,9 @@ export const QUICK_ACCESS_ITEMS = [
   { screen: 'traits', label: 'Черты характера', icon: 'Heart', color: 'text-pink-400' },
   { screen: 'zones', label: 'Зоны', icon: 'MapPin', color: 'text-indigo-400' },
   { screen: 'export', label: 'Экспорт в AI', icon: 'Download', color: 'text-cyan-400' },
+  { screen: 'buddies', label: 'Бадди', icon: 'Users', color: 'text-teal-400' },
+  { screen: 'challenges', label: 'Челенджи', icon: 'Trophy', color: 'text-orange-400' },
+  { screen: 'settings', label: 'Настройки', icon: 'Settings', color: 'text-gray-400' },
 ] as const
 
 // Interfaces

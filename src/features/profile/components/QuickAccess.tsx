@@ -16,6 +16,9 @@ import {
   MapPin,
   Search,
   TrendingUp,
+  Users,
+  Trophy,
+  Settings,
 } from 'lucide-react'
 import { QUICK_ACCESS_ITEMS } from '../constants'
 import type { Screen } from '@/lib/store'
@@ -35,6 +38,9 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   MapPin,
   Search,
   TrendingUp,
+  Users,
+  Trophy,
+  Settings,
 }
 
 interface QuickAccessProps {
