@@ -29,7 +29,9 @@ import {
   Scale,
   Target,
   BarChart3,
-  List
+  List,
+  ShieldCheck,
+  ShieldOff
 } from 'lucide-react'
 import {
   Dialog,
@@ -313,6 +315,22 @@ export function HomeScreen() {
             <Flame className="w-4 h-4 text-orange-500" />
             {user?.streak || 0}
           </Badge>
+          {(() => {
+            const usedAt = user?.streakShieldUsedAt ? new Date(user.streakShieldUsedAt) : null
+            const shieldReady = !usedAt || Date.now() - usedAt.getTime() > 7 * 86400000
+            return (user?.streak ?? 0) > 0 ? (
+              <Badge
+                variant="outline"
+                className={`flex items-center gap-1 text-xs ${shieldReady ? 'border-emerald-500/40 text-emerald-400' : 'border-white/10 text-muted-foreground'}`}
+                title={shieldReady ? 'Щит готов — защитит стрик при пропуске дня' : `Щит перезаряжается до ${new Date((usedAt!.getTime() + 7 * 86400000)).toLocaleDateString('ru')}`}
+              >
+                {shieldReady
+                  ? <ShieldCheck className="w-3.5 h-3.5" />
+                  : <ShieldOff className="w-3.5 h-3.5" />
+                }
+              </Badge>
+            ) : null
+          })()}
           <Badge variant="secondary" className="flex items-center gap-1">
             <Trophy className="w-4 h-4 text-yellow-500" />
             {user?.points || 0}

@@ -155,6 +155,7 @@ function serializeUser(user: {
   day: number
   streak: number
   points: number
+  streakShieldUsedAt?: Date | null
 }) {
   return {
     id: user.id,
@@ -167,5 +168,6 @@ function serializeUser(user: {
     day: user.day,
     streak: user.streak,
     points: user.points,
+    streakShieldUsedAt: user.streakShieldUsedAt?.toISOString() ?? null,
   }
 }

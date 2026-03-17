@@ -52,9 +52,10 @@ model AppUser {
   emailSalt      String?   @map("email_salt")
   
   // User progress & gamification
-  day    Int @default(1)
-  streak Int @default(0)
-  points Int @default(0)
+  day                Int       @default(1)
+  streak             Int       @default(0)
+  points             Int       @default(0)
+  streakShieldUsedAt DateTime? @map("streak_shield_used_at") @db.Timestamptz
   
   // Timestamps
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz

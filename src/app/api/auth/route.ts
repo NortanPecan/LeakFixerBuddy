@@ -260,6 +260,33 @@ export async function POST(request: NextRequest) {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
+    // Streak reset logic: if user missed a day, reset or apply shield
+    let shieldApplied = false
+    if (user.streak > 0 && user.lastLoginAt) {
+      const lastDay = new Date(user.lastLoginAt)
+      lastDay.setHours(0, 0, 0, 0)
+      const daysMissed = Math.floor((today.getTime() - lastDay.getTime()) / 86400000)
+      if (daysMissed > 1) {
+        const shieldAvailable =
+          !user.streakShieldUsedAt ||
+          today.getTime() - new Date(user.streakShieldUsedAt).getTime() > 7 * 86400000
+        if (shieldAvailable) {
+          user = await db.appUser.update({
+            where: { id: user.id },
+            data: { streakShieldUsedAt: new Date() },
+            include: { profile: true },
+          })
+          shieldApplied = true
+        } else {
+          user = await db.appUser.update({
+            where: { id: user.id },
+            data: { streak: 0 },
+            include: { profile: true },
+          })
+        }
+      }
+    }
+
     const todayState = await db.dailyState.findFirst({
       where: { userId: user.id, date: today },
     })
@@ -281,6 +308,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      shieldApplied,
       user: {
         id: user.id,
         telegramId: serializeTelegramId(user.telegramId),
@@ -292,6 +320,7 @@ export async function POST(request: NextRequest) {
         day: user.day,
         streak: user.streak,
         points: user.points,
+        streakShieldUsedAt: user.streakShieldUsedAt?.toISOString() ?? null,
       },
       profile: user.profile
         ? {
@@ -421,6 +450,7 @@ export async function GET(request: NextRequest) {
           day: user.day,
           streak: user.streak,
           points: user.points,
+          streakShieldUsedAt: user.streakShieldUsedAt?.toISOString() ?? null,
         },
         profile: user.profile
           ? {
@@ -531,6 +561,7 @@ export async function GET(request: NextRequest) {
         day: user.day,
         streak: user.streak,
         points: user.points,
+        streakShieldUsedAt: user.streakShieldUsedAt?.toISOString() ?? null,
       },
       profile: user.profile
         ? {

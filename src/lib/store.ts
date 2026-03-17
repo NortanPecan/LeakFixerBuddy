@@ -17,6 +17,7 @@ interface User {
   day: number
   streak: number
   points: number
+  streakShieldUsedAt: string | null
 }
 
 interface UserProfile {

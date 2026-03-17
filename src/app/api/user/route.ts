@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
         day: user.day,
         streak: user.streak,
         points: user.points,
+        streakShieldUsedAt: user.streakShieldUsedAt?.toISOString() ?? null,
       },
       profile: user.profile ? {
         weight: user.profile.weight,
