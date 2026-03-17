@@ -89,6 +89,7 @@ export function HomeScreen() {
     morningFocus?: string
     eveningRating?: number
     eveningWin?: string
+    earlyBird?: boolean
   }>({ morningDone: false, eveningDone: false })
 
   // Weight tracking state
@@ -142,6 +143,9 @@ export function HomeScreen() {
         const res = await fetch(`/api/checkin?userId=${user.id}&date=${today}`)
         const data = await res.json()
         if (data.success) {
+          const morningHour = data.morning?.createdAt
+            ? new Date(data.morning.createdAt).getHours()
+            : null
           setCheckinStatus({
             morningDone: !!data.morning,
             eveningDone: !!data.evening,
@@ -149,6 +153,7 @@ export function HomeScreen() {
             morningFocus: data.morning?.focusWord,
             eveningRating: data.evening?.dayRating,
             eveningWin: data.evening?.win,
+            earlyBird: morningHour !== null && morningHour < 9,
           })
         }
       } catch {
@@ -346,6 +351,7 @@ export function HomeScreen() {
         morningFocus={checkinStatus.morningFocus}
         eveningRating={checkinStatus.eveningRating}
         eveningWin={checkinStatus.eveningWin}
+        earlyBird={checkinStatus.earlyBird}
         isMorningTime={isMorningTime}
         isEveningTime={isEveningTime}
         onOpenDailySummary={() => setScreen('daily-summary')}
@@ -968,10 +974,11 @@ function CheckinStatusBlock({
   isMorningTime: boolean
   isEveningTime: boolean
   onOpenDailySummary?: () => void
+  earlyBird?: boolean
 }) {
   // Always-visible two-badge status row
   const badgeRow = (
-    <div className="flex gap-2 mb-3">
+    <div className="flex gap-2 mb-3 flex-wrap">
       <button
         onClick={onOpenDailySummary}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
@@ -984,6 +991,11 @@ function CheckinStatusBlock({
         <span>Утро</span>
         <span>{morningDone ? '✅' : '⏳'}</span>
       </button>
+      {earlyBird && (
+        <span className="flex items-center gap-1 px-2 py-1.5 rounded-full text-xs font-medium bg-yellow-500/15 text-yellow-400 border border-yellow-500/25">
+          ⚡ Ранняя пташка
+        </span>
+      )}
       <button
         onClick={onOpenDailySummary}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
