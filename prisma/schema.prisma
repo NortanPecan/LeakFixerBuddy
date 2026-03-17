@@ -109,6 +109,7 @@ model AppUser {
   emotionLogs           EmotionLog[]
   fleetingThoughts      FleetingThought[]
   aiPatterns            UserAiPattern[]
+  aiLogs                AiLog[]
 
   @@index([telegramId])
   @@index([email])
@@ -1391,4 +1392,53 @@ model UserAiPattern {
   @@unique([userId, leakType])
   @@index([userId])
   @@map("user_ai_patterns")
+}
+
+// ============================================
+// AI LOGS — аудит всех AI-запросов
+// ============================================
+
+/// Лог каждого запроса к AI (Groq / Gemini).
+/// Хранит промпт, ответ, провайдер, модель, юзер, латентность.
+model AiLog {
+  id         String  @id @default(uuid()) @db.Uuid
+  userId     String? @map("user_id") @db.Uuid  // null для системных вызовов
+
+  /// Контекст вызова: "analyze-leak", "telegram-leak", ...
+  callType   String  @map("call_type")
+
+  /// Тип лика если применимо
+  leakType   String? @map("leak_type")
+
+  /// Провайдер: "groq" | "gemini"
+  provider   String
+
+  /// Название модели
+  model      String
+
+  /// Системный промпт (сокращённый до 2000 символов)
+  systemPrompt String @map("system_prompt") @db.Text
+
+  /// Пользовательское сообщение (сокращённое до 4000 символов)
+  userMessage  String @map("user_message") @db.Text
+
+  /// Ответ AI (сокращённый до 4000 символов)
+  response     String @db.Text
+
+  /// Успех или ошибка
+  success    Boolean @default(true)
+
+  /// Сообщение об ошибке если success=false
+  errorMsg   String? @map("error_msg")
+
+  /// Латентность запроса в мс
+  latencyMs  Int     @map("latency_ms")
+
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user AppUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([callType, createdAt])
+  @@map("ai_logs")
 }
