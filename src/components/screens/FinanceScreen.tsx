@@ -175,6 +175,11 @@ export function FinanceScreen() {
     date: getTodayKey()
   })
 
+  // Budget goals
+  const [editingBudget, setEditingBudget] = useState<Category | null>(null)
+  const [budgetInput, setBudgetInput] = useState('')
+  const [isSavingBudget, setIsSavingBudget] = useState(false)
+
   // Transfer form
   const [showTransfer, setShowTransfer] = useState(false)
   const [isCreatingTransfer, setIsCreatingTransfer] = useState(false)
@@ -596,6 +601,39 @@ export function FinanceScreen() {
     return { income, expenses, change: income - expenses }
   }
 
+  // Save monthly budget for a category
+  const handleSaveBudget = async () => {
+    if (!editingBudget || isSavingBudget) return
+    setIsSavingBudget(true)
+    try {
+      const parsed = parseFloat(budgetInput)
+      const monthlyTarget = budgetInput.trim() === '' || isNaN(parsed) ? null : Math.abs(parsed)
+      const res = await fetch('/api/categories', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editingBudget.id, monthlyTarget }),
+      })
+      if (!res.ok) throw new Error('Failed to update budget')
+      setSummary(prev =>
+        prev
+          ? {
+              ...prev,
+              categories: prev.categories.map(c =>
+                c.id === editingBudget.id ? { ...c, monthlyTarget } : c
+              ),
+            }
+          : prev
+      )
+      setEditingBudget(null)
+      setBudgetInput('')
+      showSuccessToast(monthlyTarget ? `Бюджет сохранён: ${formatMoney(monthlyTarget)}` : 'Бюджет снят')
+    } catch (err) {
+      showErrorToast(err, 'сохранение бюджета')
+    } finally {
+      setIsSavingBudget(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col gap-4 pb-20">
@@ -795,10 +833,19 @@ export function FinanceScreen() {
             <div className="space-y-3">
               {summary.categories.map(category => {
                 const zoneConfig = ZONE_CONFIG[category.zone] || ZONE_CONFIG.general
-                const progress = category.monthlyTarget 
-                  ? Math.min((Math.abs(category.spent) / category.monthlyTarget) * 100, 100)
+                const spentAbs = Math.abs(category.spent)
+                const progress = category.monthlyTarget
+                  ? Math.min((spentAbs / category.monthlyTarget) * 100, 100)
                   : null
-                
+                const overBudget = category.monthlyTarget ? spentAbs > category.monthlyTarget : false
+                const progressColor = !category.monthlyTarget
+                  ? ''
+                  : overBudget
+                    ? '[&>div]:bg-red-500'
+                    : progress !== null && progress >= 70
+                      ? '[&>div]:bg-yellow-500'
+                      : '[&>div]:bg-emerald-500'
+
                 return (
                   <div key={category.id} className="space-y-1">
                     <div className="flex items-center justify-between">
@@ -809,21 +856,35 @@ export function FinanceScreen() {
                           <p className="text-xs text-muted-foreground">{zoneConfig.label}</p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className={`font-bold ${category.spent <= 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                          {formatMoney(Math.abs(category.spent))}
-                        </p>
-                        {category.monthlyTarget && (
-                          <p className="text-xs text-muted-foreground">
-                            из {formatMoney(category.monthlyTarget)}
+                      <div className="flex items-center gap-2">
+                        <div className="text-right">
+                          <p className={`font-bold ${category.spent <= 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                            {formatMoney(spentAbs)}
                           </p>
-                        )}
+                          {category.monthlyTarget ? (
+                            <p className={`text-xs ${overBudget ? 'text-red-400 font-medium' : 'text-muted-foreground'}`}>
+                              {overBudget ? '⚠️ ' : ''}из {formatMoney(category.monthlyTarget)}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground/50">нет лимита</p>
+                          )}
+                        </div>
+                        <button
+                          className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                          onClick={() => {
+                            setEditingBudget(category)
+                            setBudgetInput(category.monthlyTarget?.toString() ?? '')
+                          }}
+                          title="Установить бюджет"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                     {progress !== null && (
-                      <Progress 
-                        value={progress} 
-                        className="h-2"
+                      <Progress
+                        value={progress}
+                        className={`h-2 ${progressColor}`}
                       />
                     )}
                   </div>
@@ -1518,6 +1579,57 @@ export function FinanceScreen() {
                 }
               >
                 {isCreatingTransfer ? 'Переводим...' : 'Перевести'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Budget Goal Edit Dialog */}
+      <Dialog open={!!editingBudget} onOpenChange={open => { if (!open) { setEditingBudget(null); setBudgetInput('') } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span>{editingBudget?.icon || '📦'}</span>
+              Бюджет: {editingBudget?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label>Лимит расходов на месяц</Label>
+              <Input
+                type="number"
+                min="0"
+                placeholder="Например: 5000"
+                value={budgetInput}
+                onChange={e => setBudgetInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSaveBudget()}
+                autoFocus
+              />
+              <p className="text-xs text-muted-foreground">
+                Оставь пустым — лимит будет снят
+              </p>
+            </div>
+            {editingBudget?.monthlyTarget && (
+              <p className="text-xs text-muted-foreground">
+                Текущий: {formatMoney(editingBudget.monthlyTarget)} / мес
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => { setEditingBudget(null); setBudgetInput('') }}
+                disabled={isSavingBudget}
+              >
+                Отмена
+              </Button>
+              <Button
+                className="flex-1 bg-primary"
+                onClick={handleSaveBudget}
+                disabled={isSavingBudget}
+              >
+                {isSavingBudget ? 'Сохранение...' : 'Сохранить'}
               </Button>
             </div>
           </div>
