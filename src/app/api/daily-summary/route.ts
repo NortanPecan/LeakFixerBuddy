@@ -35,6 +35,9 @@ interface DailySummary {
       bad: number
     }
     entriesCount: number
+    firstMeal: string | null
+    lastMeal: string | null
+    eatingWindowHours: number | null
   }
   rituals: {
     completed: number
@@ -171,13 +174,30 @@ export async function GET(request: NextRequest) {
       bad: foodEntries.filter(e => e.quality === 'bad').length
     }
 
+    // Intermittent fasting window (uses FoodEntry.time "HH:MM")
+    const timesWithValue = foodEntries
+      .map(e => e.time)
+      .filter((t): t is string => !!t && /^\d{2}:\d{2}$/.test(t))
+      .sort()
+    const firstMeal = timesWithValue[0] ?? null
+    const lastMeal = timesWithValue[timesWithValue.length - 1] ?? null
+    let eatingWindowHours: number | null = null
+    if (firstMeal && lastMeal && firstMeal !== lastMeal) {
+      const [fh, fm] = firstMeal.split(':').map(Number)
+      const [lh, lm] = lastMeal.split(':').map(Number)
+      eatingWindowHours = Math.round(((lh * 60 + lm) - (fh * 60 + fm)) / 60 * 10) / 10
+    }
+
     const food = {
       calories: foodCalories,
       protein: foodProtein,
       fat: foodFat,
       carbs: foodCarbs,
       qualityBreakdown,
-      entriesCount: foodEntries.length
+      entriesCount: foodEntries.length,
+      firstMeal,
+      lastMeal,
+      eatingWindowHours,
     }
 
     // Calculate rituals

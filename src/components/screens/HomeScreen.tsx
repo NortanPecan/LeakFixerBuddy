@@ -55,7 +55,7 @@ interface Lesson {
 
 interface DailySummary {
   water: { current: number; target: number; percentage: number }
-  food: { calories: number; entriesCount: number; qualityBreakdown: { good: number; neutral: number; bad: number } }
+  food: { calories: number; entriesCount: number; qualityBreakdown: { good: number; neutral: number; bad: number }; firstMeal: string | null; lastMeal: string | null; eatingWindowHours: number | null }
   rituals: { completed: number; total: number; percentage: number }
   state: { mood: number | null; energy: number | null }
   supplements: { checked: number; total: number; percentage: number }
@@ -573,6 +573,11 @@ export function HomeScreen() {
                 <Apple className="w-4 h-4 mx-auto mb-1 text-green-400" />
                 <div className="text-xs text-muted-foreground">Еда</div>
                 <div className="text-sm font-bold">{dailySummary.food.calories}</div>
+                {dailySummary.food.eatingWindowHours !== null && (
+                  <div className="text-[9px] text-muted-foreground/70 mt-0.5">
+                    ⏱ {dailySummary.food.eatingWindowHours}ч
+                  </div>
+                )}
               </div>
               
               {/* Rituals */}
