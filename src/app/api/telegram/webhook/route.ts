@@ -46,6 +46,8 @@ const TASK_RE = /^(?:задача|задание|task)\s+(.+)$/i
 const RITUALS_RE = /^(?:ритуалы|ритуал|rituals?)$/i
 const SLEEP_RE = /^(?:сон|sleep)\s+(\d+(?:[.,]\d+)?)\s*(?:ч|ч\.|часов?|час|hour|h)?$/i
 const SUMMARY_RE = /^(?:сводка|отчёт|отчет|report|summary|итог|итоги)$/i
+const INCOME_RE = /^(?:доход|income|заработал|заработала|получил|получила)\s+(\d+(?:[.,]\d+)?)(?:\s+(.+))?$/i
+const EXPENSE_RE = /^(?:расход|расходы|потратил|потратила|купил|купила|expense)\s+(\d+(?:[.,]\d+)?)(?:\s+(.+))?$/i
 
 // ─── Send Telegram message ────────────────────────────────────────────────
 
@@ -285,6 +287,38 @@ async function handleCommand(
     return `${emoji} Сон <b>${hours} ч</b> записан!`
   }
 
+  // — Income ————————————————————————————————————————————————
+  const incomeMatch = t.match(INCOME_RE)
+  if (incomeMatch) {
+    const amount = parseFloat(incomeMatch[1].replace(',', '.'))
+    const description = incomeMatch[2]?.trim() || null
+    if (isNaN(amount) || amount <= 0) return '❌ Укажи сумму: <b>доход 5000</b>'
+
+    const account = await db.account.findFirst({ where: { userId }, select: { id: true } })
+    if (!account) return '❌ Нет счёта. Создай его в приложении: Финансы → Счета.'
+
+    await db.transaction.create({
+      data: { userId, accountId: account.id, amount, description, date: today },
+    })
+    return `💚 Доход <b>+${amount}₽</b>${description ? ` (${description})` : ''} записан!`
+  }
+
+  // — Expense ———————————————————————————————————————————————
+  const expenseMatch = t.match(EXPENSE_RE)
+  if (expenseMatch) {
+    const amount = parseFloat(expenseMatch[1].replace(',', '.'))
+    const description = expenseMatch[2]?.trim() || null
+    if (isNaN(amount) || amount <= 0) return '❌ Укажи сумму: <b>расход 500 кофе</b>'
+
+    const account = await db.account.findFirst({ where: { userId }, select: { id: true } })
+    if (!account) return '❌ Нет счёта. Создай его в приложении: Финансы → Счета.'
+
+    await db.transaction.create({
+      data: { userId, accountId: account.id, amount: -Math.abs(amount), description, date: today },
+    })
+    return `💸 Расход <b>−${amount}₽</b>${description ? ` (${description})` : ''} записан!`
+  }
+
   // — Summary (today's mini-report) ————————————————————————
   if (SUMMARY_RE.test(t)) {
     const startOfDay = new Date(today)
@@ -338,7 +372,9 @@ async function handleCommand(
       '✅ <b>задача купить хлеб</b> — добавить задачу\n' +
       '🙌 <b>ритуалы</b> — отметить все ритуалы выполненными\n' +
       '😴 <b>сон 8</b> — записать часы сна\n' +
-      '📊 <b>сводка</b> — итоги дня\n\n' +
+      '📊 <b>сводка</b> — итоги дня\n' +
+      '💚 <b>доход 5000 зарплата</b> — записать доход\n' +
+      '💸 <b>расход 500 кофе</b> — записать расход\n\n' +
       'Открой <b>LeakFixer Buddy</b> для полного трекинга.'
     )
   }
