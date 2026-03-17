@@ -214,22 +214,22 @@ export function DailySummaryScreen() {
     }
 
     // Mood (20 pts)
-    const mood = summary.state.mood ?? summary.checkin.evening.dayRating
+    const mood = summary.state.mood ?? summary.checkin?.evening?.dayRating ?? null
     if (mood !== null) {
       score += (mood / 10) * 20
       weight += 20
     }
 
     // Energy (15 pts)
-    const energy = summary.state.energy ?? summary.checkin.morning.energy
+    const energy = summary.state.energy ?? summary.checkin?.morning?.energy ?? null
     if (energy !== null) {
       score += (energy / 10) * 15
       weight += 15
     }
 
     // Checkins (10 pts each)
-    if (summary.checkin.morning.done) { score += 10; weight += 10 }
-    if (summary.checkin.evening.done) { score += 10; weight += 10 }
+    if (summary.checkin?.morning?.done) { score += 10; weight += 10 }
+    if (summary.checkin?.evening?.done) { score += 10; weight += 10 }
 
     return weight > 0 ? Math.round((score / weight) * 100) : null
   })()

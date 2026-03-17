@@ -74,6 +74,7 @@ import {
 import { QuickAccess, DonateCard } from '@/features/profile'
 
 function WeightSparkline({ data }: { data: Array<{ date: string; weight: number }> }) {
+  if (data.length < 2) return null
   const W = 120, H = 24, PAD = 2
   const weights = data.map(d => d.weight)
   const minW = Math.min(...weights)

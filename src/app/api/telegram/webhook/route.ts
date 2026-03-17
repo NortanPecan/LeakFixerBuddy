@@ -409,7 +409,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  const telegramId = BigInt(message.from.id)
+  let telegramId: bigint
+  try {
+    telegramId = BigInt(message.from.id)
+  } catch {
+    return NextResponse.json({ ok: true })
+  }
   const chatId = message.chat.id
   const text = message.text.trim()
 

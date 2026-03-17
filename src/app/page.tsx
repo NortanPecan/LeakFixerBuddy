@@ -202,7 +202,14 @@ export default function Home() {
 
         const urlParams = new URLSearchParams(window.location.search)
         const ownerParam = urlParams.get('owner')
-        const storedMode = localStorage.getItem('leakfixer-auth-mode')
+        let storedMode = localStorage.getItem('leakfixer-auth-mode')
+
+        // If Telegram SDK is present, we're inside a real MiniApp — never use cached demo mode
+        const tgWebApp = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp
+        if (tgWebApp && storedMode === 'demo') {
+          localStorage.removeItem('leakfixer-auth-mode')
+          storedMode = null
+        }
 
         let isDemo = false
         let isOwner = false

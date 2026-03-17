@@ -266,15 +266,21 @@ export const useAppStore = create<AppState>()(
             }
 
             if (!initData) {
-              // Fallback to demo mode if no initData (local dev / preview)
-              if (typeof window !== 'undefined') {
-                localStorage.setItem('leakfixer-auth-mode', 'demo')
+              if (isTelegramContext) {
+                // We're in Telegram but initData is missing — don't silently go demo
+                if (typeof window !== 'undefined') {
+                  ;(window as unknown as { __leakfixerAuthError?: string }).__leakfixerAuthError =
+                    'Не удалось получить данные Telegram. Перезапустите мини-приложение.'
+                }
+                set({ isLoading: false })
+                return false
               }
+              // Local dev / browser preview — fall back to demo without persisting
               return get().login(true)
             }
 
-            // Use Supabase Telegram auth endpoint
-            response = await fetch('/api/auth/telegram', {
+            // Use main Telegram auth endpoint (with HMAC validation)
+            response = await fetch('/api/auth', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ initData })

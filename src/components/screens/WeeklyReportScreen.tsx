@@ -304,25 +304,30 @@ function CorrelationInsights({ days }: { days: DayData[] }) {
   }
 
   // High calories → lower next-day energy
-  const calDays = days.filter((d, i) => i < days.length - 1 && d.totalCalories > 0)
-  const highCalThenLowEnergy = calDays.filter((d, i) => {
-    const nextDay = days[days.indexOf(d) + 1]
+  const calDays = days
+    .map((d, i) => ({ d, i }))
+    .filter(({ d, i }) => i < days.length - 1 && d.totalCalories > 0)
+  const highCalThenLowEnergy = calDays.filter(({ d, i }) => {
+    const nextDay = days[i + 1]
     return d.totalCalories > 2500 && nextDay?.energy !== null && (nextDay.energy ?? 10) < 5
-  })
+  }).map(({ d }) => d)
   if (highCalThenLowEnergy.length >= 2) {
     insights.push({ emoji: '🍔', text: `${highCalThenLowEnergy.length}× после дня переедания (>2500 ккал) энергия на следующий день падала ниже 5` })
   }
 
   // Sleep → next-day energy correlation
-  const sleepDays = days.filter((d, i) => d.sleepHours !== null && i < days.length - 1)
+  const sleepDaysIndexed = days
+    .map((d, i) => ({ d, i }))
+    .filter(({ d, i }) => d.sleepHours !== null && i < days.length - 1)
+  const sleepDays = sleepDaysIndexed.map(({ d }) => d)
   if (sleepDays.length >= 2) {
-    const goodSleepNextEnergy = sleepDays
-      .filter(d => (d.sleepHours ?? 0) >= 7.5)
-      .map(d => days[days.indexOf(d) + 1]?.energy)
+    const goodSleepNextEnergy = sleepDaysIndexed
+      .filter(({ d }) => (d.sleepHours ?? 0) >= 7.5)
+      .map(({ i }) => days[i + 1]?.energy)
       .filter((e): e is number => e !== null && e !== undefined)
-    const shortSleepNextEnergy = sleepDays
-      .filter(d => (d.sleepHours ?? 0) < 6)
-      .map(d => days[days.indexOf(d) + 1]?.energy)
+    const shortSleepNextEnergy = sleepDaysIndexed
+      .filter(({ d }) => (d.sleepHours ?? 0) < 6)
+      .map(({ i }) => days[i + 1]?.energy)
       .filter((e): e is number => e !== null && e !== undefined)
     if (goodSleepNextEnergy.length >= 2 && shortSleepNextEnergy.length >= 1) {
       const avgGood = goodSleepNextEnergy.reduce((a, b) => a + b, 0) / goodSleepNextEnergy.length
@@ -335,11 +340,13 @@ function CorrelationInsights({ days }: { days: DayData[] }) {
 
   // Gym → next-day mood (gym lifts mood the day after)
   const gymNextMoods = days
-    .filter((d, i) => d.hadGym && i < days.length - 1 && days[i + 1].mood !== null)
-    .map(d => days[days.indexOf(d) + 1].mood as number)
+    .map((d, i) => ({ d, i }))
+    .filter(({ d, i }) => d.hadGym && i < days.length - 1 && days[i + 1].mood !== null)
+    .map(({ i }) => days[i + 1].mood as number)
   const noGymNextMoods = days
-    .filter((d, i) => !d.hadGym && i < days.length - 1 && days[i + 1].mood !== null)
-    .map(d => days[days.indexOf(d) + 1].mood as number)
+    .map((d, i) => ({ d, i }))
+    .filter(({ d, i }) => !d.hadGym && i < days.length - 1 && days[i + 1].mood !== null)
+    .map(({ i }) => days[i + 1].mood as number)
   if (gymNextMoods.length >= 2 && noGymNextMoods.length >= 2) {
     const avgGym = gymNextMoods.reduce((a, b) => a + b, 0) / gymNextMoods.length
     const avgNo = noGymNextMoods.reduce((a, b) => a + b, 0) / noGymNextMoods.length
