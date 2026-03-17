@@ -73,12 +73,11 @@ export async function GET(request: NextRequest) {
 
     // Score each candidate
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
 
     // Get activity counts for all candidates in last 7 days
     const candidateIds = candidates.map(c => c.id)
 
-    const [ritualActivity, gymActivity, habitActivity] = await Promise.all([
+    const [ritualActivity, gymActivity, habitActivity, candidateRitualCategories, myActiveCategories] = await Promise.all([
       db.ritualCompletion.groupBy({
         by: ['userId'],
         where: {
@@ -100,6 +99,16 @@ export async function GET(request: NextRequest) {
         },
         _count: { id: true },
       }),
+      // Ritual categories per candidate (for category-overlap scoring)
+      db.ritual.findMany({
+        where: { userId: { in: candidateIds }, status: 'active' },
+        select: { userId: true, category: true },
+      }),
+      // Current user's active ritual categories
+      db.ritual.findMany({
+        where: { userId, status: 'active' },
+        select: { category: true },
+      }),
     ])
 
     // Also check current user's activity to find similar pattern
@@ -114,6 +123,25 @@ export async function GET(request: NextRequest) {
     const ritualMap = new Map(ritualActivity.map(r => [r.userId, r._count.id]))
     const gymMap = new Set(gymActivity.map(g => g.userId))
     const habitMap = new Map(habitActivity.map(h => [h.userId, h._count.id]))
+
+    // Build category-to-userId map for overlap scoring
+    const myCategorySet = new Set(myActiveCategories.map(r => r.category))
+    const candidateCategoryMap = new Map<string, Set<string>>()
+    for (const r of candidateRitualCategories) {
+      if (!candidateCategoryMap.has(r.userId)) {
+        candidateCategoryMap.set(r.userId, new Set())
+      }
+      candidateCategoryMap.get(r.userId)!.add(r.category)
+    }
+
+    const CATEGORY_LABELS: Record<string, string> = {
+      health: 'Здоровье',
+      money: 'Финансы',
+      learning: 'Обучение',
+      relationships: 'Отношения',
+      mind: 'Психология',
+      productivity: 'Продуктивность',
+    }
 
     // Score and rank
     const scored = candidates
@@ -161,6 +189,25 @@ export async function GET(request: NextRequest) {
           reasons.push('Привычки')
         }
 
+        // Ritual category overlap — shared focus areas boost matching
+        if (myCategorySet.size > 0) {
+          const theirCategories = candidateCategoryMap.get(candidate.id)
+          if (theirCategories) {
+            const shared: string[] = []
+            for (const cat of myCategorySet) {
+              if (theirCategories.has(cat)) shared.push(cat)
+            }
+            if (shared.length >= 2) {
+              score += 2
+              reasons.push(`Общие зоны: ${shared.slice(0, 2).map(c => CATEGORY_LABELS[c] || c).join(', ')}`)
+            } else if (shared.length === 1) {
+              score += 1
+              const cat = shared[0]
+              reasons.push(`Общая зона: ${CATEGORY_LABELS[cat] || cat}`)
+            }
+          }
+        }
+
         // Name
         const name = candidate.telegramFirstName
           ? `${candidate.telegramFirstName}${candidate.telegramLastName ? ` ${candidate.telegramLastName}` : ''}`
@@ -193,5 +240,3 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Also check users who haven't been active recently (30 days)
-// to avoid suggesting people who left the app

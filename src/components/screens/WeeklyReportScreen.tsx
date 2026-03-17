@@ -58,6 +58,7 @@ interface WeeklyReport {
 export function WeeklyReportScreen() {
   const { user } = useAppStore()
   const [report, setReport] = useState<WeeklyReport | null>(null)
+  const [prevSummary, setPrevSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
   const [weekOffset, setWeekOffset] = useState(0) // 0 = this week, -1 = last week
 
@@ -68,9 +69,17 @@ export function WeeklyReportScreen() {
       try {
         const weekStart = getMonday(weekOffset)
         const weekStartStr = weekStart.toISOString().split('T')[0]
-        const res = await fetch(`/api/weekly-report?userId=${user.id}&weekStart=${weekStartStr}`)
+        const prevWeekStart = getMonday(weekOffset - 1)
+        const prevWeekStartStr = prevWeekStart.toISOString().split('T')[0]
+        const [res, prevRes] = await Promise.all([
+          fetch(`/api/weekly-report?userId=${user.id}&weekStart=${weekStartStr}`),
+          fetch(`/api/weekly-report?userId=${user.id}&weekStart=${prevWeekStartStr}`),
+        ])
         const data = await res.json()
+        const prevData = await prevRes.json()
         if (data.success) setReport(data)
+        if (prevData.success) setPrevSummary(prevData.summary)
+        else setPrevSummary(null)
       } catch {
         // silent
       } finally {
@@ -128,17 +137,17 @@ export function WeeklyReportScreen() {
 
       {/* Summary stats */}
       <div className="grid grid-cols-4 gap-2">
-        <StatBadge label="Настр." value={report.summary.avgMood} emoji="🎭" />
-        <StatBadge label="Энергия" value={report.summary.avgEnergy} emoji="⚡" />
-        <StatBadge label="Зал" value={report.summary.gymDays} emoji="💪" suffix="д" />
-        <StatBadge label="Чекапы" value={report.summary.checkinDays} emoji="✓" suffix="/7" />
+        <StatBadge label="Настр." value={report.summary.avgMood} emoji="🎭" prev={prevSummary?.avgMood} />
+        <StatBadge label="Энергия" value={report.summary.avgEnergy} emoji="⚡" prev={prevSummary?.avgEnergy} />
+        <StatBadge label="Зал" value={report.summary.gymDays} emoji="💪" suffix="д" prev={prevSummary?.gymDays} />
+        <StatBadge label="Чекапы" value={report.summary.checkinDays} emoji="✓" suffix="/7" prev={prevSummary?.checkinDays} />
       </div>
       {/* Second row of stats */}
       <div className="grid grid-cols-4 gap-2">
-        <StatBadge label="Ритуалы" value={report.summary.totalRitualsCompleted} emoji="🔥" />
-        <StatBadge label="Привычки" value={report.summary.totalHabitsCompleted} emoji="🔄" />
-        <StatBadge label="Оценка дня" value={report.summary.avgEveningRating} emoji="🌙" />
-        <StatBadge label="Расходы" value={report.summary.totalExpenses} emoji="💰" suffix="₽" />
+        <StatBadge label="Ритуалы" value={report.summary.totalRitualsCompleted} emoji="🔥" prev={prevSummary?.totalRitualsCompleted} />
+        <StatBadge label="Привычки" value={report.summary.totalHabitsCompleted} emoji="🔄" prev={prevSummary?.totalHabitsCompleted} />
+        <StatBadge label="Оценка дня" value={report.summary.avgEveningRating} emoji="🌙" prev={prevSummary?.avgEveningRating} />
+        <StatBadge label="Расходы" value={report.summary.totalExpenses} emoji="💰" suffix="₽" prev={prevSummary?.totalExpenses} invertDelta />
       </div>
 
       {/* Leak hints — most important block */}
@@ -227,9 +236,14 @@ export function WeeklyReportScreen() {
   )
 }
 
-function StatBadge({ label, value, emoji, suffix = '' }: {
-  label: string; value: number; emoji: string; suffix?: string
+function StatBadge({ label, value, emoji, suffix = '', prev, invertDelta = false }: {
+  label: string; value: number; emoji: string; suffix?: string; prev?: number; invertDelta?: boolean
 }) {
+  const showDelta = prev !== undefined && prev > 0 && value > 0
+  const delta = showDelta ? value - prev : 0
+  const isPositive = invertDelta ? delta < 0 : delta > 0
+  const isNegative = invertDelta ? delta > 0 : delta < 0
+
   return (
     <div
       className="rounded-xl p-2 text-center"
@@ -242,7 +256,17 @@ function StatBadge({ label, value, emoji, suffix = '' }: {
           : '—'
         }{value > 0 ? suffix : ''}
       </div>
-      <div className="text-[10px] text-white/40">{label}</div>
+      {showDelta && delta !== 0 ? (
+        <div
+          className="text-[9px] font-medium"
+          style={{ color: isPositive ? '#22c55e' : isNegative ? '#ef4444' : '#ffffff40' }}
+        >
+          {delta > 0 ? '+' : ''}{delta.toFixed(delta % 1 === 0 ? 0 : 1)}{suffix}
+        </div>
+      ) : (
+        <div className="text-[10px] text-white/40">{label}</div>
+      )}
+      {showDelta && delta !== 0 && <div className="text-[9px] text-white/30">{label}</div>}
     </div>
   )
 }

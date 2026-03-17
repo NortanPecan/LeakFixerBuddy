@@ -104,6 +104,7 @@ export function HomeScreen() {
   const [showWeightRecords, setShowWeightRecords] = useState(false)
   const [showWeightGoal, setShowWeightGoal] = useState(false)
   const [weeklyLeaksCount, setWeeklyLeaksCount] = useState<number | null>(null)
+  const [topWeeklyLeak, setTopWeeklyLeak] = useState<{ message: string; emoji: string; severity: string } | null>(null)
 
   const currentDay = user?.day || 1
   const progress = ((currentDay - 1) / 30) * 100
@@ -191,6 +192,12 @@ export function HomeScreen() {
         const data = await res.json()
         if (data.success && data.leakHints) {
           setWeeklyLeaksCount(data.leakHints.length)
+          // Store top leak for focus widget (critical first, then warning)
+          const sorted = [...data.leakHints].sort((a: { severity: string }, b: { severity: string }) => {
+            const order: Record<string, number> = { critical: 0, warning: 1, info: 2 }
+            return (order[a.severity] ?? 3) - (order[b.severity] ?? 3)
+          })
+          if (sorted.length > 0) setTopWeeklyLeak(sorted[0])
         }
       } catch {
         // silent — not critical
@@ -589,6 +596,41 @@ export function HomeScreen() {
                 )}
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Today's Focus — top weekly leak as actionable hint */}
+      {topWeeklyLeak && (
+        <Card
+          className="cursor-pointer"
+          style={{
+            background: topWeeklyLeak.severity === 'critical'
+              ? 'rgba(239,68,68,0.08)'
+              : topWeeklyLeak.severity === 'warning'
+              ? 'rgba(245,158,11,0.08)'
+              : 'rgba(99,102,241,0.08)',
+            border: `1px solid ${
+              topWeeklyLeak.severity === 'critical' ? 'rgba(239,68,68,0.2)'
+              : topWeeklyLeak.severity === 'warning' ? 'rgba(245,158,11,0.2)'
+              : 'rgba(99,102,241,0.2)'
+            }`,
+          }}
+          onClick={() => setScreen('weekly-report' as Screen)}
+        >
+          <CardContent className="pt-3 pb-3">
+            <div className="flex items-start gap-3">
+              <span className="text-xl flex-shrink-0">{topWeeklyLeak.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] uppercase tracking-wider font-medium mb-0.5"
+                  style={{ color: topWeeklyLeak.severity === 'critical' ? '#ef4444' : topWeeklyLeak.severity === 'warning' ? '#f59e0b' : '#818cf8' }}
+                >
+                  Фокус недели
+                </div>
+                <p className="text-sm text-white/80 leading-snug">{topWeeklyLeak.message}</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-white/30 flex-shrink-0 mt-1" />
+            </div>
           </CardContent>
         </Card>
       )}
