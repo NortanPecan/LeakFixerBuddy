@@ -42,6 +42,9 @@ const MOOD_RE = /^(?:настроение|mood|настр)\s+(\d+(?:[.,]\d+)?)$/
 const ENERGY_RE = /^(?:энергия|energy|энерг)\s+(\d+(?:[.,]\d+)?)$/i
 const FOOD_RE = /^(?:ел|ела|еда|съел|съела|food|ate)\s+(.+?)(?:\s+(\d+(?:[.,]\d+)?)\s*(?:ккал|кал|cal|kcal)?)?$/i
 const GYM_RE = /^(?:зал|gym|трен(?:ировка)?)\s*(?:(\d+(?:[.,]\d+)?)\s*(?:мин|min|минут)?)?$/i
+const TASK_RE = /^(?:задача|задание|task)\s+(.+)$/i
+const RITUALS_RE = /^(?:ритуалы|ритуал|rituals?)$/i
+const SLEEP_RE = /^(?:сон|sleep)\s+(\d+(?:[.,]\d+)?)\s*(?:ч|ч\.|часов?|час|hour|h)?$/i
 
 // ─── Send Telegram message ────────────────────────────────────────────────
 
@@ -219,6 +222,68 @@ async function handleCommand(
     return `🍽️ <b>${name}</b>${calText} записано!`
   }
 
+  // — Task ———————————————————————————————————————————————————
+  const taskMatch = t.match(TASK_RE)
+  if (taskMatch) {
+    const text = taskMatch[1].trim()
+    if (!text) return '❌ Укажи текст задачи: <b>задача купить хлеб</b>'
+
+    await db.task.create({
+      data: {
+        userId,
+        text,
+        status: 'todo',
+        date: today,
+      },
+    })
+    return `✅ Задача <b>${text}</b> добавлена!`
+  }
+
+  // — Rituals (mark all today's active rituals done) ————————
+  if (RITUALS_RE.test(t)) {
+    const rituals = await db.ritual.findMany({
+      where: { userId, status: 'active' },
+      select: { id: true, title: true },
+    })
+
+    if (rituals.length === 0) {
+      return '📋 У тебя нет активных ритуалов. Добавь их в приложении.'
+    }
+
+    let done = 0
+    for (const ritual of rituals) {
+      try {
+        await db.ritualCompletion.upsert({
+          where: { ritualId_date: { ritualId: ritual.id, date: today } },
+          update: { completed: true },
+          create: { ritualId: ritual.id, userId, date: today, completed: true },
+        })
+        done++
+      } catch {
+        // skip duplicates or errors for individual rituals
+      }
+    }
+
+    return `🙌 <b>${done} из ${rituals.length}</b> ритуалов отмечено выполненными!`
+  }
+
+  // — Sleep ——————————————————————————————————————————————————
+  const sleepMatch = t.match(SLEEP_RE)
+  if (sleepMatch) {
+    const hours = parseFloat(sleepMatch[1].replace(',', '.'))
+    if (isNaN(hours) || hours <= 0 || hours > 24)
+      return '❌ Укажи часы сна: <b>сон 8</b> или <b>сон 7.5</b>'
+
+    await db.dailyState.upsert({
+      where: { userId_date: { userId, date: today } },
+      update: { sleepHours: hours },
+      create: { userId, date: today, mood: 5, energy: 5, sleepHours: hours },
+    })
+
+    const emoji = hours >= 8 ? '😴' : hours >= 6 ? '🛌' : '😵'
+    return `${emoji} Сон <b>${hours} ч</b> записан!`
+  }
+
   // — Help / unknown ————————————————————————————————————————
   if (/^(?:помощь|help|старт|start|команды)$/i.test(t)) {
     return (
@@ -228,14 +293,17 @@ async function handleCommand(
       '😊 <b>настроение 8</b> — настроение 1–10\n' +
       '⚡ <b>энергия 7</b> — энергия 1–10\n' +
       '🍽️ <b>ел пицца 800</b> — еда (название + ккал)\n' +
-      '💪 <b>зал 60</b> — тренировка (мин, опционально)\n\n' +
+      '💪 <b>зал 60</b> — тренировка (мин, опционально)\n' +
+      '✅ <b>задача купить хлеб</b> — добавить задачу\n' +
+      '🙌 <b>ритуалы</b> — отметить все ритуалы выполненными\n' +
+      '😴 <b>сон 8</b> — записать часы сна\n\n' +
       'Открой <b>LeakFixer Buddy</b> для полного трекинга.'
     )
   }
 
   return (
     '🤔 Не понял команду. Напиши <b>помощь</b> для списка команд.\n\n' +
-    'Примеры: <code>вода 500</code>, <code>вес 74.5</code>, <code>настроение 8</code>, <code>ел пицца 800</code>, <code>зал 60</code>'
+    'Примеры: <code>вода 500</code>, <code>вес 74.5</code>, <code>настроение 8</code>, <code>ел пицца 800</code>, <code>зал 60</code>, <code>задача текст</code>, <code>ритуалы</code>, <code>сон 8</code>'
   )
 }
 

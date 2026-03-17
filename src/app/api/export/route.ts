@@ -248,6 +248,121 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    if (entities.includes('measurements')) {
+      const measurements = await db.measurement.findMany({
+        where: { userId, date: { gte: start, lte: end } },
+        orderBy: { date: 'asc' },
+      }).catch(() => [])
+
+      if (measurements.length > 0) {
+        const byType = new Map<string, { first: number; last: number }>()
+        measurements.forEach(m => {
+          const entry = byType.get(m.type)
+          if (!entry) {
+            byType.set(m.type, { first: m.value, last: m.value })
+          } else {
+            entry.last = m.value
+          }
+        })
+
+        markdown += `## Замеры тела\n`
+        byType.forEach(({ first, last }, type) => {
+          const delta = last - first
+          const sign = delta > 0 ? '+' : ''
+          const unit = type === 'weight' ? 'кг' : 'см'
+          if (Math.abs(delta) > 0.01) {
+            markdown += `- ${type}: ${first} → ${last} ${unit} (${sign}${delta.toFixed(1)})\n`
+          } else {
+            markdown += `- ${type}: ${last} ${unit}\n`
+          }
+        })
+        markdown += `\n`
+      }
+    }
+
+    if (entities.includes('gym')) {
+      const workouts = await db.gymWorkout.findMany({
+        where: {
+          period: { userId },
+          status: 'completed',
+          completedAt: { gte: start, lte: end },
+        },
+        include: {
+          exercises: {
+            include: { sets: { orderBy: { createdAt: 'asc' } } },
+          },
+        },
+      }).catch(() => [])
+
+      if (workouts.length > 0) {
+        const totalDuration = workouts.reduce((s, w) => s + (w.duration ?? 0), 0)
+        const stretched = workouts.filter(w => w.stretchingDone).length
+
+        // Collect max weight per exercise
+        const prMap = new Map<string, number>()
+        workouts.forEach(w => {
+          w.exercises.forEach(ex => {
+            ex.sets.forEach(set => {
+              if (set.weight !== null && set.weight > (prMap.get(ex.name) ?? 0)) {
+                prMap.set(ex.name, set.weight)
+              }
+            })
+          })
+        })
+        const topPRs = Array.from(prMap.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+
+        markdown += `## Тренировки (зал)\n`
+        markdown += `- Завершённых тренировок: ${workouts.length}\n`
+        if (totalDuration > 0) {
+          markdown += `- Суммарное время: ${totalDuration} мин (среднее: ${Math.round(totalDuration / workouts.length)} мин)\n`
+        }
+        markdown += `- Растяжка после: ${stretched}/${workouts.length}\n`
+        if (topPRs.length > 0) {
+          markdown += `- Топ веса за период: ${topPRs.map(([name, w]) => `${name} ${w} кг`).join(', ')}\n`
+        }
+        markdown += `\n`
+      } else {
+        markdown += `## Тренировки (зал)\n- Тренировок за период не зафиксировано\n\n`
+      }
+    }
+
+    if (entities.includes('finances')) {
+      const transactions = await db.transaction.findMany({
+        where: { userId, date: { gte: start, lte: end } },
+        include: { category: true },
+        orderBy: { date: 'asc' },
+      }).catch(() => [])
+
+      if (transactions.length > 0) {
+        const income = transactions.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0)
+        const expenses = transactions.filter(t => t.amount < 0).reduce((s, t) => s + t.amount, 0)
+        const balance = income + expenses
+
+        // Top expense categories
+        const catMap = new Map<string, number>()
+        transactions
+          .filter(t => t.amount < 0 && t.category)
+          .forEach(t => {
+            const name = t.category!.name
+            catMap.set(name, (catMap.get(name) ?? 0) + Math.abs(t.amount))
+          })
+        const topCats = Array.from(catMap.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+
+        markdown += `## Финансы\n`
+        markdown += `- Доходы: +${income.toFixed(0)}\n`
+        markdown += `- Расходы: ${expenses.toFixed(0)}\n`
+        markdown += `- Баланс за период: ${balance >= 0 ? '+' : ''}${balance.toFixed(0)}\n`
+        if (topCats.length > 0) {
+          markdown += `- Топ категорий расходов: ${topCats.map(([name, sum]) => `${name} (${sum.toFixed(0)})`).join(', ')}\n`
+        }
+        markdown += `\n`
+      }
+    }
+
     // Leak Engine — weekly analysis section
     if (entities.includes('leaks')) {
       markdown += `## 🔍 Лики (найденные паттерны за неделю)\n\n`

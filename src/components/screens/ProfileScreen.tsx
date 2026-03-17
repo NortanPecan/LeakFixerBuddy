@@ -823,6 +823,11 @@ export function ProfileScreen() {
             {[
               { id: 'weight', label: 'Вес' },
               { id: 'wellbeing', label: 'Велнес' },
+              { id: 'mood', label: 'Настроение / Энергия' },
+              { id: 'water', label: 'Вода (в сводке)' },
+              { id: 'food', label: 'Еда (в сводке)' },
+              { id: 'rituals', label: 'Ритуалы (в сводке)' },
+              { id: 'quickinput', label: 'Быстрый ввод' },
             ].map(({ id, label }) => {
               const hidden = (settings.hiddenWidgets ?? []).includes(id)
               return (

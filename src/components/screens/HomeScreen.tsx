@@ -48,6 +48,23 @@ import { WeightHistoryModal } from '@/components/weight/WeightHistoryModal'
 import { WeightRecordsModal } from '@/components/weight/WeightRecordsModal'
 import { WeightGoalModal } from '@/components/weight/WeightGoalModal'
 
+// ─── Progressive onboarding config (7.1) ────────────────────────────────────
+// Each widget unlocks when user.day >= unlockDay
+const ONBOARDING_UNLOCKS: Array<{ id: string; unlockDay: number }> = [
+  { id: 'emotion', unlockDay: 8 },
+  { id: 'fleeting', unlockDay: 8 },
+  { id: 'weekly_leak_focus', unlockDay: 8 },
+  { id: 'weekly_report', unlockDay: 8 },
+  { id: 'monthly_report', unlockDay: 8 },
+  { id: 'finances_shortcut', unlockDay: 15 },
+  { id: 'buddy_shortcut', unlockDay: 15 },
+]
+
+function isUnlocked(id: string, userDay: number): boolean {
+  const config = ONBOARDING_UNLOCKS.find(u => u.id === id)
+  return config ? userDay >= config.unlockDay : true
+}
+
 interface Lesson {
   id: string
   day: number
@@ -526,7 +543,7 @@ export function HomeScreen() {
       </div>
 
       {/* Global State Widget (Mood/Energy Scale) */}
-      <Card className="bg-gradient-to-br from-slate-900/80 to-slate-800/50 border-white/10 backdrop-blur-xl">
+      {!hiddenWidgets.includes('mood') && <Card className="bg-gradient-to-br from-slate-900/80 to-slate-800/50 border-white/10 backdrop-blur-xl">
         <CardContent className="p-4">
           <div className="flex items-center gap-4">
             {/* Left: Dual vertical scales (mood + energy) */}
@@ -616,7 +633,7 @@ export function HomeScreen() {
             </div>
           </div>
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Wellbeing Widget */}
       {!hiddenWidgets.includes('wellbeing') && <WellbeingWidget
@@ -625,12 +642,12 @@ export function HomeScreen() {
       />}
 
       {/* Emotion Tracker — advanced, unlocks day 8 */}
-      {user?.id && (user.day ?? 1) >= 8 && <EmotionWidget userId={user.id} />}
+      {user?.id && isUnlocked('emotion', user.day ?? 1) && <EmotionWidget userId={user.id} />}
 
       {/* Fleeting Thoughts — advanced, unlocks day 8 */}
-      {user?.id && (user.day ?? 1) >= 8 && <FleetingThoughtsWidget userId={user.id} />}
+      {user?.id && isUnlocked('fleeting', user.day ?? 1) && <FleetingThoughtsWidget userId={user.id} />}
 
-      {/* Onboarding teaser: show until day 7 */}
+      {/* Onboarding teasers */}
       {user && (user.day ?? 1) < 8 && (
         <Card className="border border-primary/20 bg-primary/5">
           <CardContent className="pt-3 pb-3">
@@ -646,6 +663,26 @@ export function HomeScreen() {
               </div>
               <div className="text-right shrink-0">
                 <div className="text-sm font-bold text-primary">{user.day ?? 1}/7</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {user && (user.day ?? 1) >= 8 && (user.day ?? 1) < 15 && (
+        <Card className="border border-amber-500/20 bg-amber-500/5">
+          <CardContent className="pt-3 pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">💰</span>
+                <div>
+                  <div className="text-sm font-medium">Финансы и Buddy откроются на 15-й день</div>
+                  <div className="text-xs text-muted-foreground">
+                    Ещё {15 - (user.day ?? 1)} дн. — продолжай трекить
+                  </div>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-sm font-bold text-amber-500">{user.day ?? 1}/14</div>
               </div>
             </div>
           </CardContent>
@@ -752,6 +789,7 @@ export function HomeScreen() {
       </Card>}
 
       {/* Quick input bar (7.4) */}
+      {!hiddenWidgets.includes('quickinput') && (
       <div className="relative">
         <div className="flex gap-2">
           <Input
@@ -775,6 +813,7 @@ export function HomeScreen() {
           </div>
         )}
       </div>
+      )}
 
       {/* Daily Summary Block */}
       {!summaryLoading && dailySummary && !dailySummary.flags.hasNoData && (
@@ -786,78 +825,96 @@ export function HomeScreen() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-4 gap-2">
-              {/* Water */}
-              <div className="text-center p-2 rounded-lg bg-muted/30">
-                <Droplets className="w-4 h-4 mx-auto mb-1 text-cyan-400" />
-                <div className="text-xs text-muted-foreground">Вода</div>
-                <div className="text-sm font-bold">{dailySummary.water.percentage}%</div>
-              </div>
-              
-              {/* Food */}
-              <div className="text-center p-2 rounded-lg bg-muted/30">
-                <Apple className="w-4 h-4 mx-auto mb-1 text-green-400" />
-                <div className="text-xs text-muted-foreground">Еда</div>
-                <div className="text-sm font-bold">{dailySummary.food.calories}</div>
-                {/* Quality bar (5.9) */}
-                {dailySummary.food.entriesCount > 0 && (
-                  <div className="flex h-1 rounded-full overflow-hidden mt-1 gap-px">
-                    {dailySummary.food.qualityBreakdown.good > 0 && (
-                      <div className="bg-emerald-500" style={{ flex: dailySummary.food.qualityBreakdown.good }} />
+            {(() => {
+              const showWater = !hiddenWidgets.includes('water')
+              const showFood = !hiddenWidgets.includes('food')
+              const showRituals = !hiddenWidgets.includes('rituals')
+              const colCount = [showWater, showFood, showRituals, true].filter(Boolean).length
+              return (
+                <>
+                  <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${colCount}, 1fr)` }}>
+                    {/* Water */}
+                    {showWater && (
+                      <div className="text-center p-2 rounded-lg bg-muted/30">
+                        <Droplets className="w-4 h-4 mx-auto mb-1 text-cyan-400" />
+                        <div className="text-xs text-muted-foreground">Вода</div>
+                        <div className="text-sm font-bold">{dailySummary.water.percentage}%</div>
+                      </div>
                     )}
-                    {dailySummary.food.qualityBreakdown.neutral > 0 && (
-                      <div className="bg-yellow-500" style={{ flex: dailySummary.food.qualityBreakdown.neutral }} />
-                    )}
-                    {dailySummary.food.qualityBreakdown.bad > 0 && (
-                      <div className="bg-red-500" style={{ flex: dailySummary.food.qualityBreakdown.bad }} />
-                    )}
-                  </div>
-                )}
-                {dailySummary.food.eatingWindowHours !== null && (
-                  <div className="text-[9px] text-muted-foreground/70 mt-0.5">
-                    ⏱ {dailySummary.food.eatingWindowHours}ч
-                  </div>
-                )}
-                {dailySummary.food.avgCalories7d !== null && (
-                  <div className="text-[9px] text-muted-foreground/50 mt-0.5">
-                    ∅{dailySummary.food.avgCalories7d}
-                  </div>
-                )}
-              </div>
-              
-              {/* Rituals */}
-              <div className="text-center p-2 rounded-lg bg-muted/30">
-                <CheckCircle2 className="w-4 h-4 mx-auto mb-1 text-purple-400" />
-                <div className="text-xs text-muted-foreground">Ритуалы</div>
-                <div className="text-sm font-bold">{dailySummary.rituals.completed}/{dailySummary.rituals.total}</div>
-              </div>
-              
-              {/* Supplements */}
-              <div className="text-center p-2 rounded-lg bg-muted/30">
-                <Pill className="w-4 h-4 mx-auto mb-1 text-blue-400" />
-                <div className="text-xs text-muted-foreground">БАДы</div>
-                <div className="text-sm font-bold">{dailySummary.supplements.checked}/{dailySummary.supplements.total}</div>
-              </div>
-            </div>
 
-            {/* Quick water add (5.7) */}
-            <div className="mt-3 flex items-center gap-2 pt-2 border-t border-border/20" onClick={e => e.stopPropagation()}>
-              <Droplets className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
-              <span className="text-[10px] text-muted-foreground flex-shrink-0">
-                {dailySummary.water.current} / {dailySummary.water.target} мл
-              </span>
-              <div className="flex gap-1 ml-auto">
-                {[200, 350, 500].map(ml => (
-                  <button
-                    key={ml}
-                    onClick={() => handleQuickWater(ml)}
-                    className="px-2 py-1 rounded-md bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 text-[10px] font-medium transition-colors"
-                  >
-                    +{ml}
-                  </button>
-                ))}
-              </div>
-            </div>
+                    {/* Food */}
+                    {showFood && (
+                      <div className="text-center p-2 rounded-lg bg-muted/30">
+                        <Apple className="w-4 h-4 mx-auto mb-1 text-green-400" />
+                        <div className="text-xs text-muted-foreground">Еда</div>
+                        <div className="text-sm font-bold">{dailySummary.food.calories}</div>
+                        {/* Quality bar (5.9) */}
+                        {dailySummary.food.entriesCount > 0 && (
+                          <div className="flex h-1 rounded-full overflow-hidden mt-1 gap-px">
+                            {dailySummary.food.qualityBreakdown.good > 0 && (
+                              <div className="bg-emerald-500" style={{ flex: dailySummary.food.qualityBreakdown.good }} />
+                            )}
+                            {dailySummary.food.qualityBreakdown.neutral > 0 && (
+                              <div className="bg-yellow-500" style={{ flex: dailySummary.food.qualityBreakdown.neutral }} />
+                            )}
+                            {dailySummary.food.qualityBreakdown.bad > 0 && (
+                              <div className="bg-red-500" style={{ flex: dailySummary.food.qualityBreakdown.bad }} />
+                            )}
+                          </div>
+                        )}
+                        {dailySummary.food.eatingWindowHours !== null && (
+                          <div className="text-[9px] text-muted-foreground/70 mt-0.5">
+                            ⏱ {dailySummary.food.eatingWindowHours}ч
+                          </div>
+                        )}
+                        {dailySummary.food.avgCalories7d !== null && (
+                          <div className="text-[9px] text-muted-foreground/50 mt-0.5">
+                            ∅{dailySummary.food.avgCalories7d}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Rituals */}
+                    {showRituals && (
+                      <div className="text-center p-2 rounded-lg bg-muted/30">
+                        <CheckCircle2 className="w-4 h-4 mx-auto mb-1 text-purple-400" />
+                        <div className="text-xs text-muted-foreground">Ритуалы</div>
+                        <div className="text-sm font-bold">{dailySummary.rituals.completed}/{dailySummary.rituals.total}</div>
+                      </div>
+                    )}
+
+                    {/* Supplements — always visible */}
+                    <div className="text-center p-2 rounded-lg bg-muted/30">
+                      <Pill className="w-4 h-4 mx-auto mb-1 text-blue-400" />
+                      <div className="text-xs text-muted-foreground">БАДы</div>
+                      <div className="text-sm font-bold">{dailySummary.supplements.checked}/{dailySummary.supplements.total}</div>
+                    </div>
+                  </div>
+
+                  {/* Quick water add (5.7) */}
+                  {showWater && (
+                    <div className="mt-3 flex items-center gap-2 pt-2 border-t border-border/20" onClick={e => e.stopPropagation()}>
+                      <Droplets className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+                      <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                        {dailySummary.water.current} / {dailySummary.water.target} мл
+                      </span>
+                      <div className="flex gap-1 ml-auto">
+                        {[200, 350, 500].map(ml => (
+                          <button
+                            key={ml}
+                            onClick={() => handleQuickWater(ml)}
+                            className="px-2 py-1 rounded-md bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 text-[10px] font-medium transition-colors"
+                          >
+                            +{ml}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
 
             {/* Warning flags */}
             {(dailySummary.flags.isOvereating || dailySummary.flags.isLowEnergy || dailySummary.flags.isBadMood || dailySummary.flags.isRitualsFailed || dailySummary.flags.isDehydrated) && (
@@ -914,7 +971,7 @@ export function HomeScreen() {
       })()}
 
       {/* Today's Focus — top weekly leak as actionable hint (unlocks day 8) */}
-      {topWeeklyLeak && (user?.day ?? 1) >= 8 && (
+      {topWeeklyLeak && isUnlocked('weekly_leak_focus', user?.day ?? 1) && (
         <Card
           className="cursor-pointer"
           style={{
@@ -949,7 +1006,7 @@ export function HomeScreen() {
       )}
 
       {/* Weekly report shortcut — unlocks day 8 */}
-      {(user?.day ?? 1) >= 8 && <Card
+      {isUnlocked('weekly_report', user?.day ?? 1) && <Card
         className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors"
         onClick={() => setScreen('weekly-report' as Screen)}
       >
@@ -981,7 +1038,7 @@ export function HomeScreen() {
       </Card>}
 
       {/* Monthly report shortcut — unlocks day 8 */}
-      {(user?.day ?? 1) >= 8 && <Card
+      {isUnlocked('monthly_report', user?.day ?? 1) && <Card
         className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors"
         onClick={() => setScreen('monthly-report')}
       >
@@ -992,6 +1049,44 @@ export function HomeScreen() {
               <div>
                 <div className="text-sm font-medium text-white">Месячный анализ</div>
                 <div className="text-xs text-white/40">Тренды, глубокие лики, советы</div>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>}
+
+      {/* Finance shortcut — unlocks day 15 */}
+      {isUnlocked('finances_shortcut', user?.day ?? 1) && <Card
+        className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors"
+        onClick={() => setScreen('finance' as Screen)}
+      >
+        <CardContent className="pt-4 pb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">💰</span>
+              <div>
+                <div className="text-sm font-medium text-white">Финансы</div>
+                <div className="text-xs text-white/40">Доходы, расходы, бюджет</div>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>}
+
+      {/* Buddy shortcut — unlocks day 15 */}
+      {isUnlocked('buddy_shortcut', user?.day ?? 1) && <Card
+        className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors"
+        onClick={() => setScreen('buddy' as Screen)}
+      >
+        <CardContent className="pt-4 pb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🤝</span>
+              <div>
+                <div className="text-sm font-medium text-white">Buddy Matching</div>
+                <div className="text-xs text-white/40">Найди напарника по профилю</div>
               </div>
             </div>
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
