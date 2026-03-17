@@ -1,85 +1,87 @@
 # Next Session — Текущее состояние и задачи
 
-> Обновлено: 2026-03-17
-> Ветка: `claude/code-review-cV4rg`
+> Обновлено: 2026-03-17 (сессия 2)
+> Ветка: `claude/telegram-push-notifications-uag21`
 
 ---
 
-## Последняя сессия (2026-03-17)
+## Последняя сессия (2026-03-17, сессия 2)
 
 ### ✅ Сделано
 
 | # | Задача | Детали |
 |---|--------|--------|
-| 1 | **GymPeriod миграция** | Применена `prisma/migrations/20260317_gym_period_schedule.sql` |
-| 2 | **GymContext.tsx** | Весь state + handlers вынесен из GymScreen (~1200 строк) |
-| 3 | **7 диалоговых компонентов** | GymWizardDialogs, GymWorkoutDetailDialog, GymExerciseLibraryDialog, GymPostWorkoutDialog, GymQuickCompleteDialog, AddWorkoutDialog, CompletionPreviewDialog |
-| 4 | **GymScreen: 2697 → 895 строк** | -67%, Context/Dialog паттерн |
-| 5 | **Чистка документации** | Удалено 11 устаревших .md, оставлено 3 актуальных |
+| 1 | **Telegram push-уведомления** | `/api/telegram/notify` — утром (06:00 UTC) и вечером (17:00 UTC), пропускает тех кто уже сделал checkin |
+| 2 | **Streak Protection (щит)** | `/api/streak/shield` GET+POST, баннер в RitualsScreen, кулдаун 7 дней |
+| 3 | **Finance: Monthly Budget Goals** | Кнопка ✏️ на каждой категории, диалог ввода лимита, цветная прогресс-полоска |
+| 4 | **Buddy Privacy Settings** | `buddyPrivacy` в UserSettings, фильтрация в dashboard, раздел в SettingsScreen |
+| 5 | **worklog.md архив** | 1322 → 381 строк, Task IDs 1–39 → `worklog.archive.md` |
 
 ### Архитектурные решения сессии
-- **GymContext паттерн**: `useGymContext()` в каждом диалоге — без props-дрилла
-- Все компоненты в `src/features/gym/components/`
-- `setSelectedTemplate` добавлен в GymContext экспорт
+
+- **`/api/telegram/notify`** — отдельный endpoint для checkin-напоминаний (vs `/api/notifications/send-reminder` для ритуалов). GET+POST, `?type=morning|evening`
+- **Streak shield** — хранится в `AppUser.streakShieldUsedAt`, не в UserSettings. 7-дневный кулдаун. Активация ручная + авто при логине (уже было в auth).
+- **Budget goals** — через `Category.monthlyTarget` (уже был в схеме), без новой таблицы `budget_goals`. PATCH `/api/categories` уже поддерживал это поле.
+- **Buddy privacy** — три уровня: `full` / `partial` / `streak`. Фильтрация в dashboard route — `null` вместо скрытых полей.
+
+### Миграции этой сессии (применить в Supabase SQL Editor)
+
+| Файл | Таблица | Статус |
+|------|---------|--------|
+| `prisma/migrations/20260317_checkin_reminders.sql` | `user_settings.checkin_reminders` | ✅ применена |
+| `prisma/migrations/20260317_streak_shield.sql` | `app_users.streak_shield_used_at` | ✅ применена |
+| `prisma/migrations/20260317_buddy_privacy.sql` | `user_settings.buddy_privacy` | ⚠️ применить! |
 
 ---
 
-## Задачи — приоритет по порядку
+## Задачи — следующая сессия (по приоритету)
 
-### 1. Push-уведомления через Telegram Bot 🔴 ВЫСОКИЙ
-**Что нужно**: Когда пользователь не открывает приложение — бот шлёт напоминание о ритуалах/привычках.
+### 1. Buddy Matching v2 (по ЛИКУ-профилю) 🔴 ВЫСОКИЙ
+**Что нужно**: Матчинг по похожим паттернам поведения из Leak Engine, а не только по категориям ритуалов.
 
 **Шаги:**
-- API endpoint `/api/telegram/notify` (POST → TG Bot API sendMessage)
-- Логика: если пользователь не делал checkin сегодня → уведомить
-- Триггер: cron-job или Vercel cron
-
-**Требования**: `TELEGRAM_BOT_TOKEN` уже в ENV
+- Из weekly report — извлекать `leakProfile` (топ-3 паттерна пользователя)
+- Хранить в `UserProfile.leakProfile Json?` (или считать on-demand)
+- В `/api/buddies/suggest` — сортировать по схожести leak-профилей
+- Миграция: `ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS "leak_profile" jsonb;`
 
 ---
 
-### 2. Streak Protection (щит стрика) 🟡 СРЕДНИЙ
-**Что нужно**: 1 раз в неделю можно "защитить" стрик (не потерять при пропуске).
+### 2. HabitsScreen: статистика + streak на карточке привычки 🟡 СРЕДНИЙ
+**Что нужно**: На карточке каждой привычки видна полоска прогресса за 7 дней и текущий стрик.
 
 **Шаги:**
-- Миграция: добавить `streakShield: Int @default(1)` и `lastShieldUsed: DateTime?` в `UserSettings`
-- API: PATCH `/api/user-settings` — use shield
-- UI: кнопка в HabitsScreen/RitualsScreen при пропуске
-
-**SQL для миграции:**
-```sql
-ALTER TABLE user_settings ADD COLUMN "streakShield" integer NOT NULL DEFAULT 1;
-ALTER TABLE user_settings ADD COLUMN "lastShieldUsed" timestamp;
-```
+- `/api/habits` — добавить `last7Days` (массив boolean) в ответ каждой привычки
+- HabitsScreen — маленькая dot-визуализация 7 дней + `🔥 N` стрик
 
 ---
 
-### 3. Finance: Monthly Budget Goals 🟡 СРЕДНИЙ
-**Что нужно**: Установить лимит расходов по каждой категории на месяц.
+### 3. Wellbeing: еженедельный отчёт настроения 🟡 СРЕДНИЙ
+**Что нужно**: В WeeklyReport — раздел с графиком настроения/энергии за неделю.
 
 **Шаги:**
-- Миграция: таблица `budget_goals` (userId, categoryId, month, amount)
-- API: GET/POST/PATCH `/api/finance/budget`
-- UI: в FinanceScreen — панель целей vs фактические расходы
+- `/api/wellbeing/weekly` уже есть — проверить что возвращает
+- WeeklyReportScreen — добавить секцию с мини-графиком (7 точек mood + energy)
+- Цветовая кодировка: зелёный ≥7, жёлтый 4-6, красный ≤3
 
 ---
 
-### 4. Buddy Privacy Settings 🟢 НИЗКИЙ
-**Что нужно**: Настроить что видит бадди (100% / 70% / только streak).
+### 4. Daily Summary: утренний и вечерний checkin на HomeScreen 🟢 НИЗКИЙ
+**Что нужно**: На HomeScreen показывать статус утреннего/вечернего чек-ина с быстрым доступом.
 
 **Шаги:**
-- Миграция: `buddyPrivacy: String @default("full")` в UserSettings
-- UI: раздел в SettingsScreen
+- Загружать `GET /api/checkin?userId=...&date=today` при загрузке HomeScreen
+- Показывать два бейджа: `☀️ Утро ✅` / `🌙 Вечер ⏳`
+- Тап → открывает DailySummaryScreen
 
 ---
 
-### 5. Buddy Matching v2 (по ликам) 🟢 НИЗКИЙ
-**Что нужно**: Найти пользователей с похожим LEAK-профилем (не только категории ритуалов).
+### 5. Onboarding: шаг с выбором Buddy Privacy 🟢 НИЗКИЙ
+**Что нужно**: При первом запуске — объяснить и настроить приватность бадди.
 
 **Шаги:**
-- Вычислять leak-profile per user (из weekly report)
-- Хранить в БД или считать on-demand
-- Алгоритм сходства (cosine similarity по метрикам)
+- В OnboardingScreen добавить шаг с выбором `buddyPrivacy`
+- Сохранять через PATCH `/api/settings`
 
 ---
 
@@ -88,25 +90,24 @@ ALTER TABLE user_settings ADD COLUMN "lastShieldUsed" timestamp;
 | Тема | Правило |
 |------|---------|
 | **БД** | Только Supabase PostgreSQL, Prisma ORM |
-| **Ветка** | `claude/code-review-cV4rg` |
+| **Ветка** | `claude/telegram-push-notifications-uag21` |
 | **Git** | Claude Code делает git самостоятельно |
 | **Lint** | `bun run lint` перед коммитом (0 ошибок) |
 | **Миграции** | Вручную в Supabase SQL Editor |
-| **API** | ~70 endpoints в `src/app/api/` |
+| **API** | ~75 endpoints в `src/app/api/` |
 
-## Структура gym модуля (после рефакторинга)
+## Vercel Cron (актуальное расписание)
+
+| Cron | UTC | MSK | Что делает |
+|------|-----|-----|-----------|
+| `0 6 * * *` | 06:00 | 09:00 | Утренний checkin reminder |
+| `0 16 * * *` | 16:00 | 19:00 | Ritual reminder |
+| `0 17 * * *` | 17:00 | 20:00 | Вечерний checkin reminder |
+
+## Новые API endpoints (эта сессия)
+
 ```
-src/features/gym/
-├── GymContext.tsx           # Весь state + handlers
-├── constants.ts
-├── types.ts
-├── index.ts
-└── components/
-    ├── GymWizardDialogs.tsx          # Wizard 4 шага + exercise picker
-    ├── GymWorkoutDetailDialog.tsx    # Детали тренировки (615 строк → отдельный)
-    ├── GymExerciseLibraryDialog.tsx  # Библиотека упражнений
-    ├── GymPostWorkoutDialog.tsx      # Заметки/оценка после тренировки
-    ├── GymQuickCompleteDialog.tsx    # Быстрое завершение с весами
-    ├── AddWorkoutDialog.tsx          # Добавить тренировку из календаря
-    └── CompletionPreviewDialog.tsx   # Превью итогов тренировки
+GET/POST /api/telegram/notify?type=morning|evening  — checkin напоминания
+GET      /api/streak/shield?userId=xxx              — статус щита
+POST     /api/streak/shield { userId }              — активировать щит
 ```
