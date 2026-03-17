@@ -179,6 +179,41 @@ export function QuickSearch({ open, onClose }: QuickSearchProps) {
       keywords: ['месяц', 'monthly', 'месячный', 'отчёт месяц', 'глубокий анализ'],
       type: 'navigate', screen: 'monthly-report',
     },
+    {
+      id: 'buddies', label: 'Бадди система', emoji: '👥',
+      keywords: ['бадди', 'buddy', 'партнёр', 'компаньон', 'друг'],
+      type: 'navigate', screen: 'buddies',
+    },
+    {
+      id: 'challenges', label: 'Челенджи', emoji: '🏆',
+      keywords: ['челендж', 'challenge', 'соревнование', '30 дней'],
+      type: 'navigate', screen: 'challenges',
+    },
+    {
+      id: 'skills', label: 'Навыки', emoji: '⚡',
+      keywords: ['навык', 'skill', 'умение', 'развитие'],
+      type: 'navigate', screen: 'skills',
+    },
+    {
+      id: 'traits', label: 'Черты характера', emoji: '🌟',
+      keywords: ['черта', 'trait', 'характер', 'качество'],
+      type: 'navigate', screen: 'traits',
+    },
+    {
+      id: 'journey', label: 'Путь', emoji: '🗺️',
+      keywords: ['путь', 'journey', 'прогресс', 'маршрут'],
+      type: 'navigate', screen: 'journey',
+    },
+    {
+      id: 'settings', label: 'Настройки', emoji: '⚙️',
+      keywords: ['настройки', 'settings', 'навигация', 'уведомления'],
+      type: 'navigate', screen: 'settings',
+    },
+    {
+      id: 'zones', label: 'Зоны', emoji: '🗂️',
+      keywords: ['зона', 'zone', 'категория', 'направление'],
+      type: 'navigate', screen: 'zones',
+    },
   ]
 
   const filtered = query.length < 1
