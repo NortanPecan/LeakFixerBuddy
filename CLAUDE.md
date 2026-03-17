@@ -7,7 +7,7 @@ Self-improvement social network. Next.js 14 App Router + TypeScript + Prisma + S
 
 ## КРИТИЧЕСКИЕ правила
 
-- **ВЕТКА**: только `claude/buddy-matching-v2-jyJbK` — никогда не пушить в main/master без разрешения
+- **ВЕТКА**: только `claude/hopeful-hamilton-tkw1n` — никогда не пушить в main/master без разрешения
 - **БД**: только Supabase PostgreSQL через Prisma ORM (локальной БД нет!)
 - **Язык UI**: русский
 - **Lint**: `bun run lint` перед каждым коммитом (0 ошибок!)
@@ -111,7 +111,7 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Текущее состояние (2026-03-17, сессия 8)
+## Текущее состояние (2026-03-17, сессия 9)
 
 ### Что реализовано (полный список)
 
@@ -161,10 +161,16 @@ export function GymWorkoutDetailDialog() {
 - ✅ Поиск по еде в HealthScreen (фильтр по имени)
 - ✅ Export данных + готовый AI-промпт
 
-**Telegram quick input (сессия 6)**
-- ✅ `POST /api/telegram/webhook` — regex-парсер 6 команд: вода N, вес N, настроение N, энергия N, ел [name] [N ккал], зал [N мин]
-- ✅ Верификация через `TELEGRAM_WEBHOOK_SECRET` (заголовок `X-Telegram-Bot-Api-Secret-Token`)
-- ✅ Поиск пользователя по `telegramId`, ответы с результатом, `/help` → список команд
+**Telegram bot (сессии 6–9)**
+- ✅ `POST /api/telegram/webhook` — 13 текстовых команд: вода/вес/настроение/энергия/ел/зал/задача/ритуалы/сон/сводка/доход/расход/помощь
+- ✅ Верификация через `TELEGRAM_WEBHOOK_SECRET`, GET → healthcheck
+- ✅ Inline keyboard: главное меню с 11 кнопками (💪🍽️💧✅😴⚖️😊⚡💰📊📋)
+- ✅ Callback handlers для каждого модуля — сводки прямо в боте
+- ✅ GYM сводка: упражнения в формате `Жим — 4х12х50кг(55) 🏆`, кнопка «Отметить выполненной»
+- ✅ Вода: live-обновление без нового сообщения, кнопки +200/+350/+500 мл
+- ✅ Ритуалы: список с ✅/⬜, кнопка «Отметить все выполненными»
+- ✅ ⚙️ Настройки кнопок: каждую кнопку можно вкл/выкл прямо в боте, хранится в `hidden_widgets` (префикс `tg_`)
+- ✅ Webhook зарегистрирован, токен перевыпущен через @BotFather
 
 **Онбординг и персонализация (сессия 6)**
 - ✅ Прогрессивный онбординг (7.1): до дня 8 скрыты EmotionWidget, FleetingThoughts, Wellbeing, «Лики недели», «Месячный анализ», «Фокус недели»; показывается баннер «🔓 ещё X дн.»
@@ -183,29 +189,37 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Следующие задачи (приоритет, сессия 9)
+## Следующие задачи (приоритет, сессия 10)
 
-### 1. 🔴 Зарегистрировать Telegram webhook (ручной шаг, 1 команда)
-```bash
-curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
-  -d "url=https://leak-fixer-buddy.vercel.app/api/telegram/webhook" \
-  -d "secret_token=LeakFixer2026Secret"
-```
-Vercel ENV: `TELEGRAM_WEBHOOK_SECRET=LeakFixer2026Secret`.
-**Важно:** токен бота попал в открытый чат — перевыпусти через @BotFather `/revoke` сначала!
+### 1. 🔴 Supplement reminder — отдельный флаг (30 мин)
+Сейчас `/api/notifications/send-supplement-reminder` проверяет `ritualReminders`. Нужен отдельный флаг.
+- `prisma/schema.prisma`: добавить `supplementReminders Boolean @default(true)`
+- `prisma/migrations/20260317_supplement_reminders.sql` + применить в Supabase
+- `SettingsScreen.tsx`: Switch «Напоминание о БАДах»
+- `send-supplement-reminder/route.ts`: заменить `ritualReminders` → `supplementReminders`
 
-### 2. 🟡 Supplement reminder — добавить отдельный флаг в UserSettings
-Сейчас supplement reminder использует `ritualReminders`. Добавить `supplementReminders Boolean @default(true)` в schema.prisma, миграцию, переключатель в SettingsScreen.
-Файлы: `prisma/schema.prisma`, `prisma/migrations/YYYYMMDD_supplement_reminders.sql`, `src/components/screens/SettingsScreen.tsx`, `src/app/api/notifications/send-supplement-reminder/route.ts`.
+### 2. 🟡 StatsScreen — выбор периода 7д/14д/30д/90д (1 час)
+Сейчас `?days=30` и `last14Days` жёстко захардкожено.
+- State `periodDays: 7 | 14 | 30 | 90` + кнопки-переключатели в UI
+- API: передавать `?days=N`, пересчёт всех chart и averages
+- Файлы: `src/components/screens/StatsScreen.tsx`, `src/app/api/stats/history/route.ts`
 
-### 3. 🟡 Ачивменты за оценку дня
-В DailySummaryScreen отображается оценка 0–100. Можно добавить badge-награды при достижении порогов: первый день 80+, 7 дней подряд 70+, и т.д. Хранить в таблице `Achievement`.
+### 3. 🟡 Ачивменты за оценку дня (2 часа)
+Таблица `Achievement` уже есть. Нужны badge-триггеры в DailySummaryScreen:
+- Первый раз получить 80+ → badge «Отличный день»
+- 7 дней подряд 70+ → badge «Неделя качества»
+- API: `POST /api/achievements/check` → проверка условий и запись
+- UI: показывать popup при выдаче, список в ProfileScreen
 
-### 4. 🟢 Stripe/платёж или Export расширить
-ExportScreen уже экспортирует данные. Добавить кнопку «Отправить на email» (простой mailto: с данными) или PDF export через window.print().
+### 4. 🟢 Telegram bot — inline ввод данных через ForceReply (1.5 часа)
+Сейчас кнопки «Сон», «Вес», «Настроение», «Энергия» только показывают текущее значение.
+Добавить flow: нажал кнопку → бот спрашивает значение (ForceReply) → пользователь отвечает → записывается.
+Хранить `pendingAction` в кэше/Redis или временной note.
 
-### 5. 🟢 StatsScreen — добавить сводку за выбранный период
-Сейчас период 14/30 дней фиксирован. Добавить кнопки 7д/14д/30д/90д и пересчёт статистики (averages, totals) для выбранного диапазона.
+### 5. 🟢 DailySummaryScreen — кнопка «Поделиться» оценкой (30 мин)
+Кнопка рядом со score формирует текст:
+`📊 Мой день: 83/100 — Отличный! 💧100% 🍽️1800ккал ✅4/5 ритуалов`
+→ `navigator.clipboard.writeText()` или `window.open('tg://...')`
 
 ---
 
@@ -321,6 +335,55 @@ ExportScreen уже экспортирует данные. Добавить кн
 - JourneyScreen: кнопки назад, ACHIEVEMENT_LABELS
 - Фикс ritual reminder: `r.name` → `r.title`
 - WeeklyReport: корреляции сон→энергия и зал→настроение следующего дня
+
+---
+
+## Что делали в сессии 2026-03-17 (сессия 9)
+
+### Telegram inline keyboard + настройки кнопок
+
+**Telegram webhook — полный рефактор** (`src/app/api/telegram/webhook/route.ts`)
+
+Главное: файл переписан с 454 → 570 строк, добавлены inline keyboard и callback handler.
+
+**Inline keyboard (новое)**
+- Главное меню 11 кнопок по 3 в ряд + ⚙️ Настройки — появляется при `/start`, `меню`, `помощь`
+- `sendMessage` расширен параметром `keyboard?: InlineKeyboard`
+- `editMessageText` — редактирует существующее сообщение (live-обновление без нового сообщения)
+- `answerCallbackQuery` — подтверждение нажатия в 10-секундный лимит Telegram
+
+**Callback handlers (11 модулей)**
+- `btn_gym` → `getGymSummary`: сегодняшняя / последняя тренировка. Формат: `Жим — 4х12х50кг(55) 🏆`. PR определяется сравнением текущего веса с max по всем сетам этого упражнения. Кнопка «Отметить выполненной» → `gym_done_{id}` → обновляет статус и перерисовывает
+- `btn_water` → `getWaterSummary`: статус + бар + кнопки +200/+350/+500 → `water_add_{N}` → live-update того же сообщения
+- `btn_food` → `getFoodSummary`: список с 🟢🟡🔴, сумма ккал
+- `btn_rituals` → `getRitualsSummary`: список ✅/⬜ + кнопка «Отметить все» → `rituals_done_all`
+- `btn_finance` → баланс месяца (доходы/расходы/итог)
+- `btn_tasks` → список задач дня с ✅/⬜
+- `btn_weight` → последний замер + подсказка команды
+- `btn_mood` / `btn_energy` / `btn_sleep` → единый `getMoodEnergySummary` (настроение + энергия + сон)
+- `btn_summary` → полная сводка дня (= текстовая команда `сводка`)
+- `btn_settings` → экран настроек кнопок
+- `btn_menu` → назад в главное меню (editMessageText)
+
+**Настройки кнопок (toggle)**
+- `btn_settings` → `buildSettingsKeyboard`: каждая кнопка с ✅/❌, нажатие → `toggle_tg_{id}`
+- `toggle_tg_{id}` → `toggleTgButton(userId, btnId)` → upsert в `user_settings.hidden_widgets` (добавляет/убирает строку `tg_gym`, `tg_food` и т.д.)
+- После toggle: `editMessageText` с обновлённой клавиатурой (без нового сообщения)
+- `getHiddenTgButtons` фильтрует `hidden_widgets` по префиксу `tg_`
+- Решение: переиспользуем существующее поле `hiddenWidgets jsonb` — миграция не нужна
+
+**Решения сессии**
+- Telegram `editMessageText` вместо `sendMessage` для интерактивных экранов (вода, настройки) — меньше спама
+- PR в GYM: не дёргаем `/api/gym/records`, а делаем один JOIN-запрос к `gym_exercise_sets` прямо в webhook
+- Настройки кнопок в `hidden_widgets` с префиксом `tg_` — расширяемо без изменения схемы
+- Все текстовые команды сохранены без изменений
+
+**Что настроили (ручные шаги пользователя)**
+- ✅ Применены все 4 миграции в Supabase SQL Editor (emotion_logs, fleeting_thoughts, stretching_done, hidden_widgets) — верифицировано через MCP
+- ✅ Токен бота перевыпущен через @BotFather
+- ✅ Новый токен обновлён в Vercel ENV
+- ✅ `TELEGRAM_WEBHOOK_SECRET` добавлен в Vercel ENV
+- ✅ Webhook зарегистрирован через браузер (`setWebhook?url=...&secret_token=...`)
 
 ---
 
