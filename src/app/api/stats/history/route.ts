@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     startDate.setHours(0, 0, 0, 0)
 
     // Get daily stats for the period
-    const [ritualCompletions, habitLogs, dailyStates, tasks, checkins] = await Promise.all([
+    const [ritualCompletions, habitLogs, dailyStates, tasks, checkins, foodEntries, fitnessDaily, weightMeasurements] = await Promise.all([
       // Ritual completions
       db.ritualCompletion.findMany({
         where: {
@@ -86,7 +86,26 @@ export async function GET(request: NextRequest) {
           energy: true,
           dayRating: true,
         }
-      }).catch(() => [] as { date: Date; type: string; energy: number | null; dayRating: number | null }[])
+      }).catch(() => [] as { date: Date; type: string; energy: number | null; dayRating: number | null }[]),
+
+      // Food entries for calorie history
+      db.foodEntry.findMany({
+        where: { userId, date: { gte: startDate } },
+        select: { date: true, calories: true }
+      }).catch(() => [] as { date: Date; calories: number | null }[]),
+
+      // FitnessDaily for water history
+      db.fitnessDaily.findMany({
+        where: { userId, date: { gte: startDate } },
+        select: { date: true, water: true, waterTarget: true }
+      }).catch(() => [] as { date: Date; water: number | null; waterTarget: number | null }[]),
+
+      // Weight measurements
+      db.measurement.findMany({
+        where: { userId, type: 'weight', date: { gte: startDate } },
+        select: { date: true, value: true },
+        orderBy: { date: 'asc' }
+      }).catch(() => [] as { date: Date; value: number }[]),
     ])
 
     // Group by date
@@ -103,6 +122,10 @@ export async function GET(request: NextRequest) {
       sleepHours: number | null
       morningEnergy: number | null
       eveningRating: number | null
+      calories: number
+      water: number | null
+      waterTarget: number | null
+      weight: number | null
     }>()
 
     // Initialize all dates
@@ -123,6 +146,10 @@ export async function GET(request: NextRequest) {
         sleepHours: null,
         morningEnergy: null,
         eveningRating: null,
+        calories: 0,
+        water: null,
+        waterTarget: null,
+        weight: null,
       })
     }
 
@@ -177,6 +204,34 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    // Process food entries (sum calories per day)
+    foodEntries.forEach(fe => {
+      const dateStr = fe.date.toISOString().split('T')[0]
+      const entry = dateMap.get(dateStr)
+      if (entry) {
+        entry.calories += fe.calories || 0
+      }
+    })
+
+    // Process water (fitnessDaily)
+    fitnessDaily.forEach(fd => {
+      const dateStr = fd.date.toISOString().split('T')[0]
+      const entry = dateMap.get(dateStr)
+      if (entry) {
+        entry.water = fd.water
+        entry.waterTarget = fd.waterTarget
+      }
+    })
+
+    // Process weight measurements (use latest per day)
+    weightMeasurements.forEach(wm => {
+      const dateStr = wm.date.toISOString().split('T')[0]
+      const entry = dateMap.get(dateStr)
+      if (entry) {
+        entry.weight = wm.value
+      }
+    })
+
     // Calculate streaks
     let currentStreak = 0
     let maxStreak = 0
@@ -214,13 +269,13 @@ export async function GET(request: NextRequest) {
       date: entry.date,
       ritualsTotal: entry.ritualsTotal,
       ritualsCompleted: entry.ritualsCompleted,
-      ritualsRate: entry.ritualsTotal > 0 
-        ? Math.round((entry.ritualsCompleted / entry.ritualsTotal) * 100) 
+      ritualsRate: entry.ritualsTotal > 0
+        ? Math.round((entry.ritualsCompleted / entry.ritualsTotal) * 100)
         : 0,
       habitsTotal: entry.habitsTotal,
       habitsCompleted: entry.habitsCompleted,
-      habitsRate: entry.habitsTotal > 0 
-        ? Math.round((entry.habitsCompleted / entry.habitsTotal) * 100) 
+      habitsRate: entry.habitsTotal > 0
+        ? Math.round((entry.habitsCompleted / entry.habitsTotal) * 100)
         : 0,
       tasksCompleted: entry.tasksCompleted,
       mood: entry.mood,
@@ -229,6 +284,10 @@ export async function GET(request: NextRequest) {
       sleepHours: entry.sleepHours,
       morningEnergy: entry.morningEnergy,
       eveningRating: entry.eveningRating,
+      calories: entry.calories > 0 ? entry.calories : null,
+      water: entry.water,
+      waterTarget: entry.waterTarget,
+      weight: entry.weight,
       overallScore: calculateOverallScore(entry)
     }))
 

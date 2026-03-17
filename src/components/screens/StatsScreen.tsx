@@ -48,6 +48,10 @@ interface HistoryEntry {
   sleepHours: number | null
   morningEnergy: number | null
   eveningRating: number | null
+  calories: number | null
+  water: number | null
+  waterTarget: number | null
+  weight: number | null
   overallScore: number
 }
 
@@ -446,6 +450,90 @@ export function StatsScreen() {
                         fill="url(#colorSleep)"
                       />
                     </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Calories chart */}
+          {last14Days.some(d => d.calories) && (
+            <Card className="bg-card/50 backdrop-blur">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  🍽️ Калории (14 дней)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-32">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={last14Days}>
+                      <defs>
+                        <linearGradient id="colorCal" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                      <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Area type="monotone" dataKey="calories" name="Калории" stroke="#f59e0b" fillOpacity={1} fill="url(#colorCal)" connectNulls />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Water chart */}
+          {last14Days.some(d => d.water) && (
+            <Card className="bg-card/50 backdrop-blur">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  💧 Вода (мл, 14 дней)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-32">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={last14Days}>
+                      <defs>
+                        <linearGradient id="colorWater" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#38bdf8" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                      <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Area type="monotone" dataKey="water" name="Вода мл" stroke="#38bdf8" fillOpacity={1} fill="url(#colorWater)" connectNulls />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Weight chart */}
+          {last14Days.some(d => d.weight) && (
+            <Card className="bg-card/50 backdrop-blur">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  ⚖️ Вес (кг, 14 дней)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-32">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={last14Days.filter(d => d.weight)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                      <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} domain={['dataMin - 1', 'dataMax + 1']} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Line type="monotone" dataKey="weight" name="Вес кг" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                    </LineChart>
                   </ResponsiveContainer>
                 </div>
               </CardContent>
