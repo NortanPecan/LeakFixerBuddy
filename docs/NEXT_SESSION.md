@@ -1,37 +1,34 @@
 # Next Session — Текущее состояние и задачи
 
-> Обновлено: 2026-03-17 (сессия 3)
+> Обновлено: 2026-03-17 (сессия 4)
 > Ветка: `claude/buddy-matching-v2-jyJbK`
 
 ---
 
-## Последняя сессия (2026-03-17, сессия 3)
+## Последняя сессия (2026-03-17, сессия 4)
 
 ### ✅ Сделано
 
 | # | Задача | Детали |
 |---|--------|--------|
-| 1 | **Buddy Matching v2** | `leak_profile jsonb` в `user_profiles`, Jaccard-сходство +5/+3/+1 в `/api/buddies/suggest`, сохранение top-3 паттернов из weekly-report |
-| 2 | **HabitsScreen: 7-day dots** | Кружки `rounded-full`, подписи дней (Пн/Вт/..), стрик `🔥 N` inline |
-| 3 | **WeeklyReport: mood/energy chart** | SVG-график, две линии (настр./энергия), цветные точки по шкале |
-| 4 | **HomeScreen: checkin badges** | `☀️ Утро ✅` / `🌙 Вечер ⏳` — всегда видны, тап → DailySummary |
-| 5 | **Onboarding: Buddy Privacy** | Шаг 4 из 5, три варианта, PATCH `/api/settings` при завершении |
-| 6 | **WeeklyReport: AI промпт (3.7)** | Кнопка "Скопировать для ИИ" — структурированный промпт со всеми данными |
-| 7 | **IF-трекер (5.3)** | Окно еды из `FoodEntry.time` в `daily-summary`, показывается ⏱ N ч под калориями |
-
-### Архитектурные решения сессии
-
-- **Leak profile** — хранится в `user_profiles.leak_profile jsonb`, обновляется fire-and-forget при каждом GET `/api/weekly-report`
-- **Buddy suggest v2** — загружает `profile { leakProfile }` через relation в одном запросе
-- **IF-трекер** — zero DB migration, использует `FoodEntry.time` (String "HH:MM")
-- **AI промпт** — чистый фронтенд, `navigator.clipboard.writeText`, никакого бэкенда
+| 5.22 | **Растяжка после тренировки** | Кнопка 🧘 в `GymPostWorkoutDialog`, `stretchingDone` в Prisma, migration `20260317_gym_stretching.sql` |
+| 5.6 | **Рефрейминг при срыве в еде** | Карточка 🔄 в `DailySummaryScreen` при `qualityBreakdown.bad > 2` |
+| 2.5 | **Личные рекорды PR** | `/api/gym/records` (MAX weight per template), 🏆 PR badge в `GymWorkoutDetailDialog` |
+| 5.7 | **Быстрое добавление воды** | +200/+350/+500 мл кнопки в Daily Summary на HomeScreen, optimistic update |
+| 5.9 | **Качественный бар еды** | 3-сегментный мини-бар (зелёный/жёлтый/красный) под калориями |
+| 7.4 | **Быстрый ввод** | Строка на HomeScreen: "вода 300", "вес 74.5", "настроение 7", "энергия 8" |
 
 ### Миграции этой сессии
 
 | Файл | Таблица | Статус |
 |------|---------|--------|
-| `prisma/migrations/20260317_leak_profile.sql` | `user_profiles.leak_profile` | ✅ применена |
-| `prisma/migrations/20260317_buddy_privacy.sql` | `user_settings.buddy_privacy` | ✅ применена |
+| `prisma/migrations/20260317_gym_stretching.sql` | `gym_workouts.stretching_done` | ⚠️ **Применить в Supabase!** |
+
+### Новые API endpoints
+
+```
+GET /api/gym/records?userId=xxx  — MAX weight per exercise template
+```
 
 ---
 
@@ -51,25 +48,15 @@
 - Сохранять снапшот метрик при регистрации или в первую неделю
 - На ProfileScreen или HomeScreen — блок "за N дней: вес −3 кг, стрик +45 дней"
 
-### 3. Трекер эмоций (5.30) 🟡 СРЕДНИЙ
-**Что нужно**: быстрая отметка эмоции в течение дня (не только утро/вечер).
+### 3. Шаблон замены плохой еды (5.2) 🟡 СРЕДНИЙ
+**Что нужно**: при добавлении "плохого" продукта → подсказать замену.
 **Шаги:**
-- Модель `EmotionLog` — userId, emotion, intensity, note, createdAt
-- API `/api/emotions` POST + GET
-- Виджет на HomeScreen или в DailySummary: tap на эмодзи → сохраняет
+- Словарь замен: pizza → гречка, Cola → вода + лимон, etc.
+- Всплывающая подсказка в форме добавления еды
 
-### 4. Мимолётные мысли (5.31) 🟡 СРЕДНИЙ
-**Что нужно**: записать мысль быстро, она исчезает через N дней.
-**Шаги:**
-- `FleetingThought` модель с `expiresAt`
-- Cron `/api/cron/cleanup-thoughts` — удаляет просроченные
-- Виджет на HomeScreen или отдельный экран
-
-### 5. Поисковая строка (7.4) 🟢 НИЗКИЙ
-**Что нужно**: пишешь "вода" → сразу добавляет, "настроение 8" → сохраняет.
-**Шаги:**
-- Floating search input на HomeScreen
-- NLP/паттерны: "вода N мл", "вес N кг", "зал", "настроение N"
+### 4. Рекорды тела (подтягивания, планка) (2.5 расширение) 🟢 НИЗКИЙ
+**Текущее**: PR только по весу в зале.
+**Добавить**: bodyweight records — подтягивания, планка (секунды).
 
 ---
 
@@ -81,23 +68,27 @@
 | **Ветка** | `claude/buddy-matching-v2-jyJbK` |
 | **Lint** | `bun run lint` перед коммитом (0 ошибок) |
 | **Миграции** | Вручную в Supabase SQL Editor |
-| **API** | ~80 endpoints в `src/app/api/` |
+| **API** | ~85 endpoints в `src/app/api/` |
 
 ## Vercel Cron (актуальное расписание)
 
 | Cron | UTC | MSK | Что делает |
 |------|-----|-----|-----------|
+| `0 3 * * *` | 03:00 | 06:00 | Очистка истёкших fleeting thoughts |
 | `0 6 * * *` | 06:00 | 09:00 | Утренний checkin reminder |
 | `0 16 * * *` | 16:00 | 19:00 | Ritual reminder |
 | `0 17 * * *` | 17:00 | 20:00 | Вечерний checkin reminder |
 
-## Новые API endpoints (эта сессия)
+## Новые API endpoints (сессия 3+4)
 
 ```
 GET/POST /api/telegram/notify?type=morning|evening  — checkin напоминания
 GET      /api/streak/shield?userId=xxx              — статус щита
 POST     /api/streak/shield { userId }              — активировать щит
-GET      /api/weekly-report                         — теперь сохраняет leak_profile
+GET/POST /api/emotions                              — трекер эмоций
+GET/POST/DELETE /api/thoughts                       — мимолётные мысли
+GET      /api/cron/cleanup-thoughts                 — очистка просроченных мыслей
+GET      /api/gym/records?userId=xxx                — личные рекорды PR
+GET      /api/daily-summary                         — IF window + avgCalories7d
 GET      /api/buddies/suggest                       — v2: Jaccard по leak_profile
-GET      /api/daily-summary                         — теперь возвращает IF window
 ```
