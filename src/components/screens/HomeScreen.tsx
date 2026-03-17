@@ -306,6 +306,77 @@ export function HomeScreen() {
     } catch {/* silent */}
   }
 
+  // Quick input bar state (7.4)
+  const [quickInput, setQuickInput] = useState('')
+  const [quickResult, setQuickResult] = useState<string | null>(null)
+
+  const handleQuickInput = async () => {
+    const raw = quickInput.trim().toLowerCase()
+    if (!raw || !user?.id) return
+
+    let result: string | null = null
+
+    // Water: "вода 300", "вода 300мл", "воды 500"
+    const waterMatch = raw.match(/^вод[аы]\s*(\d+)/)
+    if (waterMatch) {
+      const ml = parseInt(waterMatch[1])
+      const current = dailySummary?.water.current ?? 0
+      const newAmount = current + ml
+      try {
+        await fetch('/api/water', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id, amount: newAmount }),
+        })
+        setDailySummary(prev => prev ? {
+          ...prev,
+          water: { ...prev.water, current: newAmount, percentage: Math.round((newAmount / prev.water.target) * 100) }
+        } : prev)
+        result = `💧 Вода +${ml} мл (${newAmount} мл)`
+      } catch { result = '❌ Ошибка' }
+    }
+
+    // Weight: "вес 74.5", "вес 75кг"
+    const weightMatch = raw.match(/^вес\s*([\d.]+)/)
+    if (weightMatch) {
+      const kg = parseFloat(weightMatch[1])
+      try {
+        await fetch('/api/weight', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id, weight: kg }),
+        })
+        result = `⚖️ Вес: ${kg} кг сохранён`
+      } catch { result = '❌ Ошибка' }
+    }
+
+    // Mood: "настроение 8", "настр 7"
+    const moodMatch = raw.match(/^настр\w*\s*(\d+)/)
+    if (moodMatch) {
+      const val = Math.min(10, Math.max(1, parseInt(moodMatch[1])))
+      try {
+        await updateGlobalState(val, globalState?.energy ?? 5)
+        result = `😊 Настроение: ${val}/10`
+      } catch { result = '❌ Ошибка' }
+    }
+
+    // Energy: "энергия 7", "энерг 8"
+    const energyMatch = raw.match(/^энерг\w*\s*(\d+)/)
+    if (energyMatch) {
+      const val = Math.min(10, Math.max(1, parseInt(energyMatch[1])))
+      try {
+        await updateGlobalState(globalState?.mood ?? 5, val)
+        result = `⚡ Энергия: ${val}/10`
+      } catch { result = '❌ Ошибка' }
+    }
+
+    if (!result) result = '🤔 Не понял. Попробуй: "вода 300", "вес 74.5", "настроение 7"'
+
+    setQuickResult(result)
+    setQuickInput('')
+    setTimeout(() => setQuickResult(null), 3000)
+  }
+
   // Get mood color for scale
   const getMoodColor = useCallback((level: number) => {
     const colors = [
@@ -603,6 +674,31 @@ export function HomeScreen() {
           )}
         </CardContent>
       </Card>
+
+      {/* Quick input bar (7.4) */}
+      <div className="relative">
+        <div className="flex gap-2">
+          <Input
+            value={quickInput}
+            onChange={e => setQuickInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleQuickInput()}
+            placeholder='Быстрый ввод: "вода 300", "вес 74.5", "настроение 7"'
+            className="text-sm bg-card/40 border-border/30 placeholder:text-muted-foreground/40"
+          />
+          <button
+            onClick={handleQuickInput}
+            disabled={!quickInput.trim()}
+            className="px-3 rounded-lg bg-primary/70 hover:bg-primary disabled:opacity-30 text-primary-foreground text-sm font-bold transition-all"
+          >
+            ↵
+          </button>
+        </div>
+        {quickResult && (
+          <div className="absolute top-full left-0 right-0 mt-1 px-3 py-2 rounded-lg bg-card border border-border/50 text-sm z-10 shadow-lg">
+            {quickResult}
+          </div>
+        )}
+      </div>
 
       {/* Daily Summary Block */}
       {!summaryLoading && dailySummary && !dailySummary.flags.hasNoData && (
