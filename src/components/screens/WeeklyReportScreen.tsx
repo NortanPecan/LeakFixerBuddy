@@ -150,6 +150,9 @@ export function WeeklyReportScreen() {
         <StatBadge label="Расходы" value={report.summary.totalExpenses} emoji="💰" suffix="₽" prev={prevSummary?.totalExpenses} invertDelta />
       </div>
 
+      {/* Mood & Energy mini-chart */}
+      <MoodEnergyChart days={report.days} />
+
       {/* Leak hints — most important block */}
       {report.leakHints.length > 0 && (
         <Card
@@ -232,6 +235,134 @@ export function WeeklyReportScreen() {
           </CardContent>
         </Card>
       )}
+    </div>
+  )
+}
+
+function MoodEnergyChart({ days }: { days: DayData[] }) {
+  const hasAnyData = days.some(d => d.mood !== null || d.morningEnergy !== null)
+  if (!hasAnyData) return null
+
+  const MAX = 10
+  const H = 48 // chart area height px
+
+  function dotColor(v: number): string {
+    if (v >= 7) return '#22c55e'
+    if (v >= 4) return '#f59e0b'
+    return '#ef4444'
+  }
+
+  const dayLabels = days.map(d => d.dayOfWeek)
+
+  // Build SVG polylines for mood and energy
+  const points = (values: (number | null)[]): string => {
+    const pts: string[] = []
+    values.forEach((v, i) => {
+      if (v === null) return
+      const x = ((i / 6) * 100).toFixed(1)
+      const y = (H - (v / MAX) * H).toFixed(1)
+      pts.push(`${x},${y}`)
+    })
+    return pts.join(' ')
+  }
+
+  const moodVals = days.map(d => d.mood)
+  const energyVals = days.map(d => d.morningEnergy)
+  const hasMood = moodVals.some(v => v !== null)
+  const hasEnergy = energyVals.some(v => v !== null)
+
+  return (
+    <div
+      className="rounded-2xl p-4"
+      style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255,255,255,0.1)' }}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm font-semibold text-white">Настроение и энергия</span>
+        <div className="flex items-center gap-3 text-[10px] text-white/40">
+          {hasMood && <span><span className="inline-block w-2 h-2 rounded-full bg-violet-400 mr-1" />настр.</span>}
+          {hasEnergy && <span><span className="inline-block w-2 h-2 rounded-full bg-amber-400 mr-1" />энергия</span>}
+        </div>
+      </div>
+
+      {/* SVG chart */}
+      <svg
+        viewBox={`0 0 100 ${H}`}
+        preserveAspectRatio="none"
+        className="w-full"
+        style={{ height: H }}
+      >
+        {/* Horizontal guide lines at 4 and 7 */}
+        {[4, 7].map(v => (
+          <line
+            key={v}
+            x1="0" x2="100"
+            y1={H - (v / MAX) * H} y2={H - (v / MAX) * H}
+            stroke="rgba(255,255,255,0.06)"
+            strokeWidth="0.5"
+          />
+        ))}
+
+        {/* Mood polyline */}
+        {hasMood && (
+          <polyline
+            points={points(moodVals)}
+            fill="none"
+            stroke="#a78bfa"
+            strokeWidth="1.2"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        )}
+        {/* Energy polyline */}
+        {hasEnergy && (
+          <polyline
+            points={points(energyVals)}
+            fill="none"
+            stroke="#fbbf24"
+            strokeWidth="1.2"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        )}
+
+        {/* Mood dots */}
+        {hasMood && moodVals.map((v, i) => v !== null ? (
+          <circle
+            key={`m${i}`}
+            cx={((i / 6) * 100).toFixed(1)}
+            cy={(H - (v / MAX) * H).toFixed(1)}
+            r="2.2"
+            fill={dotColor(v)}
+          />
+        ) : null)}
+
+        {/* Energy dots */}
+        {hasEnergy && energyVals.map((v, i) => v !== null ? (
+          <circle
+            key={`e${i}`}
+            cx={((i / 6) * 100).toFixed(1)}
+            cy={(H - (v / MAX) * H).toFixed(1)}
+            r="2.2"
+            fill={dotColor(v)}
+            stroke="#fbbf24"
+            strokeWidth="0.8"
+          />
+        ) : null)}
+      </svg>
+
+      {/* Day labels */}
+      <div className="flex justify-between mt-1">
+        {dayLabels.map((label, i) => (
+          <span key={i} className="text-[9px] text-white/30">{label}</span>
+        ))}
+      </div>
+
+      {/* Color legend */}
+      <div className="flex gap-3 mt-2 text-[9px] text-white/30">
+        <span><span style={{ color: '#22c55e' }}>●</span> ≥7 хорошо</span>
+        <span><span style={{ color: '#f59e0b' }}>●</span> 4–6 норм</span>
+        <span><span style={{ color: '#ef4444' }}>●</span> ≤3 плохо</span>
+      </div>
     </div>
   )
 }
