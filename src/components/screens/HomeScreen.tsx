@@ -829,7 +829,8 @@ export function HomeScreen() {
               const showWater = !hiddenWidgets.includes('water')
               const showFood = !hiddenWidgets.includes('food')
               const showRituals = !hiddenWidgets.includes('rituals')
-              const colCount = [showWater, showFood, showRituals, true].filter(Boolean).length
+              const showSupplements = !hiddenWidgets.includes('supplements')
+              const colCount = [showWater, showFood, showRituals, showSupplements].filter(Boolean).length
               return (
                 <>
                   <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${colCount}, 1fr)` }}>
@@ -884,12 +885,14 @@ export function HomeScreen() {
                       </div>
                     )}
 
-                    {/* Supplements — always visible */}
-                    <div className="text-center p-2 rounded-lg bg-muted/30">
-                      <Pill className="w-4 h-4 mx-auto mb-1 text-blue-400" />
-                      <div className="text-xs text-muted-foreground">БАДы</div>
-                      <div className="text-sm font-bold">{dailySummary.supplements.checked}/{dailySummary.supplements.total}</div>
-                    </div>
+                    {/* Supplements */}
+                    {showSupplements && (
+                      <div className="text-center p-2 rounded-lg bg-muted/30">
+                        <Pill className="w-4 h-4 mx-auto mb-1 text-blue-400" />
+                        <div className="text-xs text-muted-foreground">БАДы</div>
+                        <div className="text-sm font-bold">{dailySummary.supplements.checked}/{dailySummary.supplements.total}</div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Quick water add (5.7) */}
