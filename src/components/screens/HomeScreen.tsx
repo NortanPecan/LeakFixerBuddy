@@ -812,6 +812,31 @@ export function HomeScreen() {
         </Card>
       )}
 
+      {/* Streak milestone banner (2.8) */}
+      {(() => {
+        const streak = user?.streak ?? 0
+        const milestones: Record<number, { emoji: string; text: string }> = {
+          7:  { emoji: '🎯', text: '7 дней подряд! Первая неделя — самая сложная. Ты справился.' },
+          14: { emoji: '💪', text: '2 недели без пропусков! Привычка начинает формироваться.' },
+          21: { emoji: '🔥', text: '21 день — говорят, именно столько нужно для привычки. Ты у цели!' },
+          30: { emoji: '🏆', text: 'Целый месяц! Это уже не случайность — это характер.' },
+          60: { emoji: '🚀', text: '60 дней подряд — ты в 1% тех, кто не сдаётся.' },
+          90: { emoji: '💎', text: '90 дней! 3 месяца трансформации. Кто ты сейчас — лучше, чем 3 месяца назад.' },
+        }
+        const milestone = milestones[streak]
+        if (!milestone) return null
+        return (
+          <Card className="border border-yellow-500/30 bg-yellow-500/5">
+            <CardContent className="pt-3 pb-3">
+              <div className="flex gap-3 items-center">
+                <span className="text-3xl">{milestone.emoji}</span>
+                <p className="text-sm leading-snug text-yellow-200/90">{milestone.text}</p>
+              </div>
+            </CardContent>
+          </Card>
+        )
+      })()}
+
       {/* Today's Focus — top weekly leak as actionable hint */}
       {topWeeklyLeak && (
         <Card
