@@ -348,6 +348,7 @@ export function HomeScreen() {
         eveningWin={checkinStatus.eveningWin}
         isMorningTime={isMorningTime}
         isEveningTime={isEveningTime}
+        onOpenDailySummary={() => setScreen('daily-summary')}
       />
 
       {/* Progress bar */}
@@ -951,6 +952,7 @@ function CheckinStatusBlock({
   eveningWin,
   isMorningTime,
   isEveningTime,
+  onOpenDailySummary,
 }: {
   morningDone: boolean
   eveningDone: boolean
@@ -960,7 +962,38 @@ function CheckinStatusBlock({
   eveningWin?: string
   isMorningTime: boolean
   isEveningTime: boolean
+  onOpenDailySummary?: () => void
 }) {
+  // Always-visible two-badge status row
+  const badgeRow = (
+    <div className="flex gap-2 mb-3">
+      <button
+        onClick={onOpenDailySummary}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+          morningDone
+            ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+            : 'bg-white/5 text-white/40 border border-white/10'
+        }`}
+      >
+        <span>☀️</span>
+        <span>Утро</span>
+        <span>{morningDone ? '✅' : '⏳'}</span>
+      </button>
+      <button
+        onClick={onOpenDailySummary}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+          eveningDone
+            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+            : 'bg-white/5 text-white/40 border border-white/10'
+        }`}
+      >
+        <span>🌙</span>
+        <span>Вечер</span>
+        <span>{eveningDone ? '✅' : '⏳'}</span>
+      </button>
+    </div>
+  )
+
   // If both done — show combined summary with bars
   if (morningDone && eveningDone) {
     return (
@@ -971,7 +1004,8 @@ function CheckinStatusBlock({
           border: '1px solid rgba(34,197,94,0.2)',
         }}
       >
-        <div className="flex items-center gap-2 mb-3">
+        {badgeRow}
+        <div className="flex items-center gap-2 mb-2">
           <span className="text-green-400 text-sm font-semibold">✓ Оба чекапа выполнены</span>
           {morningFocus && (
             <span className="text-xs text-white/40 ml-auto">слово: {morningFocus}</span>
@@ -998,6 +1032,7 @@ function CheckinStatusBlock({
           border: '1px solid rgba(99,102,241,0.25)',
         }}
       >
+        {badgeRow}
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm font-semibold text-white">Утренний чекап</div>
@@ -1019,6 +1054,7 @@ function CheckinStatusBlock({
           border: '1px solid rgba(245,158,11,0.25)',
         }}
       >
+        {badgeRow}
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm font-semibold text-white">Вечерний чекап</div>
@@ -1045,7 +1081,8 @@ function CheckinStatusBlock({
           border: '1px solid rgba(34,197,94,0.15)',
         }}
       >
-        <div className="flex items-center gap-2 mb-2">
+        {badgeRow}
+        <div className="flex items-center gap-2">
           <span className="text-green-400 text-xs">✓ Утро выполнено</span>
           {morningFocus && <span className="text-xs text-white/30">· {morningFocus}</span>}
           <span className="ml-auto text-white/25 text-[10px]">вечер после 18:00</span>
@@ -1055,5 +1092,6 @@ function CheckinStatusBlock({
     )
   }
 
-  return null
+  // Default: show just the badge row (e.g. middle of the day, no checkins yet)
+  return <div className="rounded-2xl p-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>{badgeRow}</div>
 }
