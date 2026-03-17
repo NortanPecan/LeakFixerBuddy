@@ -627,6 +627,20 @@ export function HomeScreen() {
                 <Apple className="w-4 h-4 mx-auto mb-1 text-green-400" />
                 <div className="text-xs text-muted-foreground">Еда</div>
                 <div className="text-sm font-bold">{dailySummary.food.calories}</div>
+                {/* Quality bar (5.9) */}
+                {dailySummary.food.entriesCount > 0 && (
+                  <div className="flex h-1 rounded-full overflow-hidden mt-1 gap-px">
+                    {dailySummary.food.qualityBreakdown.good > 0 && (
+                      <div className="bg-emerald-500" style={{ flex: dailySummary.food.qualityBreakdown.good }} />
+                    )}
+                    {dailySummary.food.qualityBreakdown.neutral > 0 && (
+                      <div className="bg-yellow-500" style={{ flex: dailySummary.food.qualityBreakdown.neutral }} />
+                    )}
+                    {dailySummary.food.qualityBreakdown.bad > 0 && (
+                      <div className="bg-red-500" style={{ flex: dailySummary.food.qualityBreakdown.bad }} />
+                    )}
+                  </div>
+                )}
                 {dailySummary.food.eatingWindowHours !== null && (
                   <div className="text-[9px] text-muted-foreground/70 mt-0.5">
                     ⏱ {dailySummary.food.eatingWindowHours}ч
