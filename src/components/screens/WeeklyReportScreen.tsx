@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { LeakAiAnalysisCard } from '@/components/LeakAiAnalysisCard'
 
 interface DayData {
   date: string
@@ -197,7 +198,7 @@ export function WeeklyReportScreen() {
             {report.leakHints.map((hint, i) => (
               <div
                 key={i}
-                className="flex gap-3 p-3 rounded-xl"
+                className="p-3 rounded-xl"
                 style={{
                   background: hint.severity === 'critical'
                     ? 'rgba(239,68,68,0.1)'
@@ -211,18 +212,28 @@ export function WeeklyReportScreen() {
                   }`,
                 }}
               >
-                <span className="text-xl flex-shrink-0">{hint.emoji}</span>
-                <div>
-                  <p className="text-sm text-white/80">{hint.message}</p>
-                  {hint.days && (
-                    <div className="flex gap-1 mt-1">
-                      {hint.days.map(d => (
-                        <Badge key={d} variant="outline" className="text-[10px] h-4">
-                          {d}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
+                <div className="flex gap-3">
+                  <span className="text-xl flex-shrink-0">{hint.emoji}</span>
+                  <div className="flex-1">
+                    <p className="text-sm text-white/80">{hint.message}</p>
+                    {hint.days && (
+                      <div className="flex gap-1 mt-1">
+                        {hint.days.map(d => (
+                          <Badge key={d} variant="outline" className="text-[10px] h-4">
+                            {d}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {user?.id && (
+                      <LeakAiAnalysisCard
+                        userId={user.id}
+                        leakType={hint.type}
+                        leakMessage={hint.message}
+                        severity={hint.severity}
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
