@@ -5,7 +5,7 @@ import { ALL_NAV_OPTIONS } from '@/components/BottomNav'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
-import { ArrowLeft, GripVertical, Check, Bell, LayoutGrid } from 'lucide-react'
+import { ArrowLeft, GripVertical, Check, Bell, LayoutGrid, Users } from 'lucide-react'
 import { showSuccessToast, showErrorToast } from '@/lib/network-utils'
 import { useState, useEffect } from 'react'
 
@@ -17,6 +17,7 @@ interface UserSettings {
   zoneLeakfixerEnabled: boolean
   zoneAiEnabled: boolean
   zonePokerEnabled: boolean
+  buddyPrivacy: string
 }
 
 export function SettingsScreen() {
@@ -32,6 +33,7 @@ export function SettingsScreen() {
     zoneLeakfixerEnabled: true,
     zoneAiEnabled: true,
     zonePokerEnabled: true,
+    buddyPrivacy: 'full',
   })
   const [savingSettings, setSavingSettings] = useState(false)
 
@@ -50,6 +52,7 @@ export function SettingsScreen() {
             zoneLeakfixerEnabled: data.settings.zoneLeakfixerEnabled ?? true,
             zoneAiEnabled: data.settings.zoneAiEnabled ?? true,
             zonePokerEnabled: data.settings.zonePokerEnabled ?? true,
+            buddyPrivacy: data.settings.buddyPrivacy ?? 'full',
           })
         }
       })
@@ -71,6 +74,24 @@ export function SettingsScreen() {
   const handleSaveNav = () => {
     setNavItems(localNavItems)
     showSuccessToast('Навигация сохранена')
+  }
+
+  const updatePrivacy = async (value: string) => {
+    if (!user?.id) return
+    setSettings(prev => ({ ...prev, buddyPrivacy: value }))
+    setSavingSettings(true)
+    try {
+      await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, buddyPrivacy: value }),
+      })
+    } catch (err) {
+      showErrorToast(err, 'сохранение приватности')
+      setSettings(prev => ({ ...prev, buddyPrivacy: settings.buddyPrivacy }))
+    } finally {
+      setSavingSettings(false)
+    }
   }
 
   const updateSetting = async (key: keyof UserSettings, value: boolean) => {
@@ -144,6 +165,43 @@ export function SettingsScreen() {
               disabled={savingSettings}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Buddy Privacy */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Users className="w-4 h-4" />
+            Приватность бадди
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">Что видит твой бадди в твоём профиле</p>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {([
+            { value: 'full',    label: 'Всё',           desc: 'Стрик, ритуалы, зал, вес, очки' },
+            { value: 'partial', label: '70%',            desc: 'Стрик, ритуалы, зал — без веса и очков' },
+            { value: 'streak',  label: 'Только стрик',  desc: 'Только имя и стрик' },
+          ] as const).map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => !savingSettings && updatePrivacy(opt.value)}
+              disabled={savingSettings}
+              className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
+                settings.buddyPrivacy === opt.value
+                  ? 'bg-primary/20 border-primary/50'
+                  : 'border-muted hover:border-primary/30 hover:bg-muted/20'
+              }`}
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">{opt.label}</p>
+                <p className="text-xs text-muted-foreground">{opt.desc}</p>
+              </div>
+              {settings.buddyPrivacy === opt.value && (
+                <Check className="w-4 h-4 text-primary shrink-0" />
+              )}
+            </button>
+          ))}
         </CardContent>
       </Card>
 

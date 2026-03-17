@@ -27,6 +27,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Not buddies' }, { status: 403 })
     }
 
+    // Get buddy's privacy setting
+    const buddySettings = await db.userSettings.findUnique({
+      where: { userId: buddyId },
+      select: { buddyPrivacy: true },
+    })
+    const privacy = buddySettings?.buddyPrivacy ?? 'full'
+
     // Get buddy user info
     const buddyUser = await db.appUser.findUnique({
       where: { id: buddyId },
@@ -168,16 +175,35 @@ export async function GET(request: NextRequest) {
     const last7Days = buildLast7Days(buddyWeekCompletions)
     const myLast7Days = buildLast7Days(myWeekCompletions)
 
+    // Build response based on buddy's privacy setting
+    // full    → show everything
+    // partial → hide weight & points; show streak, rituals, gym
+    // streak  → show only streak, day, name
+    const buddyPayload = {
+      id: buddyUser.id,
+      name: buddyName,
+      photoUrl: buddyUser.telegramPhotoUrl || buddyUser.photoUrl,
+      day: buddyUser.day,
+      streak: buddyUser.streak,
+      points: privacy === 'full' ? buddyUser.points : null,
+      privacy,
+    }
+
+    const statsPayload = privacy === 'streak'
+      ? { activeRituals: null, todayCompletions: null, weekWorkouts: null, activeChallenges: null, gymPeriod: null, latestWeight: null, last7Days: [] }
+      : {
+          activeRituals,
+          todayCompletions,
+          weekWorkouts,
+          activeChallenges,
+          gymPeriod: gymPeriod ? `${gymPeriod.name} (день ${gymPeriod.currentDay})` : null,
+          latestWeight: privacy === 'full' && latestWeight ? { weight: latestWeight.value, date: latestWeight.date } : null,
+          last7Days,
+        }
+
     return NextResponse.json({
       success: true,
-      buddy: {
-        id: buddyUser.id,
-        name: buddyName,
-        photoUrl: buddyUser.telegramPhotoUrl || buddyUser.photoUrl,
-        day: buddyUser.day,
-        streak: buddyUser.streak,
-        points: buddyUser.points,
-      },
+      buddy: buddyPayload,
       me: {
         name: myName,
         photoUrl: currentUser?.telegramPhotoUrl || currentUser?.photoUrl,
@@ -187,18 +213,7 @@ export async function GET(request: NextRequest) {
         todayCompletions: myTodayCompletions,
         last7Days: myLast7Days,
       },
-      stats: {
-        activeRituals,
-        todayCompletions,
-        weekWorkouts,
-        activeChallenges,
-        gymPeriod: gymPeriod ? `${gymPeriod.name} (день ${gymPeriod.currentDay})` : null,
-        latestWeight: latestWeight ? {
-          weight: latestWeight.value,
-          date: latestWeight.date
-        } : null,
-        last7Days
-      }
+      stats: statsPayload,
     })
   } catch (error) {
     console.error('Buddy dashboard error:', error)
