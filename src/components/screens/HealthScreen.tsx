@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { DatePicker, DateBadge } from '@/components/DatePicker'
-import { Plus, CheckCircle2, Circle, Droplets, Apple, Pill, Clock, ChevronRight, Trash2 } from 'lucide-react'
+import { Plus, CheckCircle2, Circle, Droplets, Apple, Pill, Clock, ChevronRight, Trash2, Timer, Utensils } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { showErrorToast, showSuccessToast, isOnline } from '@/lib/network-utils'
 
@@ -98,6 +98,107 @@ interface WaterData {
   current: number
   target: number
   percentage: number
+}
+
+// Parse "HH:mm" → minutes since midnight
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + m
+}
+
+function FastingWidget({ entries }: { entries: FoodEntry[] }) {
+  const withTime = entries.filter(e => e.time && /^\d{2}:\d{2}$/.test(e.time))
+  if (withTime.length < 2) {
+    return (
+      <Card className="bg-card/50 backdrop-blur">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Timer className="w-5 h-5 text-violet-400" />
+            Интервальное голодание
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground text-center py-2">
+            {withTime.length === 0
+              ? 'Добавь приёмы пищи со временем, чтобы увидеть окно голодания'
+              : 'Нужно минимум 2 записи с указанным временем'}
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const times = withTime.map(e => timeToMinutes(e.time!)).sort((a, b) => a - b)
+  const firstMin = times[0]
+  const lastMin = times[times.length - 1]
+  const eatingWindow = (lastMin - firstMin) / 60
+  const fastingWindow = 24 - eatingWindow
+
+  const firstEntry = withTime.find(e => timeToMinutes(e.time!) === firstMin)!
+  const lastEntry = withTime.slice().reverse().find(e => timeToMinutes(e.time!) === lastMin)!
+
+  // Named protocols
+  let protocol = ''
+  let protocolColor = 'text-muted-foreground'
+  if (fastingWindow >= 20) { protocol = '20:4'; protocolColor = 'text-violet-400' }
+  else if (fastingWindow >= 18) { protocol = '18:6'; protocolColor = 'text-emerald-400' }
+  else if (fastingWindow >= 16) { protocol = '16:8'; protocolColor = 'text-emerald-400' }
+  else if (fastingWindow >= 14) { protocol = '14:10'; protocolColor = 'text-yellow-400' }
+  else if (fastingWindow >= 12) { protocol = '12:12'; protocolColor = 'text-orange-400' }
+
+  const fastingColor = fastingWindow >= 16 ? '#22c55e' : fastingWindow >= 14 ? '#f59e0b' : fastingWindow >= 12 ? '#f97316' : '#ef4444'
+  const pct = Math.min((fastingWindow / 24) * 100, 100)
+
+  return (
+    <Card className="bg-card/50 backdrop-blur">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Timer className="w-5 h-5 text-violet-400" />
+          Интервальное голодание
+          {protocol && (
+            <span className={`ml-auto text-sm font-bold ${protocolColor}`}>{protocol}</span>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Fasting bar */}
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs text-muted-foreground mb-1">
+            <span>Голодание</span>
+            <span className="font-bold" style={{ color: fastingColor }}>{fastingWindow.toFixed(1)} ч</span>
+          </div>
+          <div className="h-2.5 rounded-full bg-white/10 overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all"
+              style={{ width: `${pct}%`, background: fastingColor }}
+            />
+          </div>
+        </div>
+
+        {/* First / Last meal */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-muted/30 rounded-lg p-3 text-center">
+            <Utensils className="w-4 h-4 mx-auto mb-1 text-emerald-400" />
+            <p className="text-xs text-muted-foreground">Первый приём</p>
+            <p className="font-bold text-sm">{firstEntry.time}</p>
+            <p className="text-xs text-muted-foreground truncate">{firstEntry.name}</p>
+          </div>
+          <div className="bg-muted/30 rounded-lg p-3 text-center">
+            <Clock className="w-4 h-4 mx-auto mb-1 text-orange-400" />
+            <p className="text-xs text-muted-foreground">Последний приём</p>
+            <p className="font-bold text-sm">{lastEntry.time}</p>
+            <p className="text-xs text-muted-foreground truncate">{lastEntry.name}</p>
+          </div>
+        </div>
+
+        {/* Eating window */}
+        <div className="flex items-center justify-between text-sm bg-muted/20 rounded-lg px-3 py-2">
+          <span className="text-muted-foreground">Окно еды</span>
+          <span className="font-medium">{eatingWindow.toFixed(1)} ч</span>
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 export function HealthScreen() {
@@ -697,6 +798,9 @@ export function HealthScreen() {
           )}
         </CardContent>
       </Card>
+
+      {/* FASTING WIDGET */}
+      <FastingWidget entries={foodData?.entries ?? []} />
 
       {/* WATER SECTION */}
       <Card className="bg-card/50 backdrop-blur">
