@@ -10,9 +10,9 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
-import { 
+import {
   Download, Copy, FileText, Brain, Sparkles, CheckCircle,
-  Database, RefreshCw, Calendar
+  Database, RefreshCw, Calendar, MessageSquare
 } from 'lucide-react'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
@@ -43,12 +43,54 @@ const ENTITIES = [
   { id: 'notes', label: 'Заметки', icon: '📝' },
 ]
 
+const AI_PROMPTS: Record<string, string> = {
+  claude: `Ты — мой личный коуч по саморазвитию. Я дам тебе мои данные из приложения LeakFixer Buddy за последние дни.
+
+Твоя задача:
+1. Найди паттерны и корреляции в моих данных (что влияет на настроение/энергию/продуктивность)
+2. Определи мои главные "лики" — слабые места, которые тянут вниз
+3. Дай 2-3 конкретных действия на следующую неделю
+4. Укажи что работает хорошо и что поддерживать
+
+Будь конкретным, опирайся только на данные. Пиши по-русски.
+
+Данные ниже:
+---`,
+  chatgpt: `Проанализируй мои данные из приложения для саморазвития LeakFixer Buddy.
+
+Найди:
+- Паттерны в настроении, энергии, ритуалах
+- Что мешает (лики) и что помогает
+- Связь между зал/ритуалы/еда и самочувствием
+
+Дай практические рекомендации на следующую неделю. Только конкретика, без воды.
+
+Данные:
+---`,
+  gemini: `Анализ данных из приложения саморазвития LeakFixer Buddy.
+
+Проанализируй паттерны, найди корреляции между привычками и состоянием. Выдели 3 главных "лика" (слабых места) и дай рекомендации.
+
+Данные:
+---`,
+  generic: `Это мои данные из приложения для трекинга саморазвития за последние дни.
+
+Пожалуйста:
+1. Найди паттерны и корреляции
+2. Определи слабые места ("лики")
+3. Дай 3 конкретных совета на следующую неделю
+
+Данные:
+---`,
+}
+
 export function ExportScreen() {
   const { user } = useAppStore()
   const [selectedProvider, setSelectedProvider] = useState('claude')
   const [exportData, setExportData] = useState('')
   const [isExporting, setIsExporting] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [copiedPrompt, setCopiedPrompt] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
   // Date range
@@ -121,6 +163,22 @@ export function ExportScreen() {
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(exportData)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleCopyPrompt = async () => {
+    const prompt = AI_PROMPTS[selectedProvider] || AI_PROMPTS.generic
+    await navigator.clipboard.writeText(prompt)
+    setCopiedPrompt(true)
+    setTimeout(() => setCopiedPrompt(false), 2000)
+  }
+
+  const handleCopyPromptWithData = async () => {
+    if (!exportData) return
+    const prompt = AI_PROMPTS[selectedProvider] || AI_PROMPTS.generic
+    const full = prompt + '\n\n' + exportData
+    await navigator.clipboard.writeText(full)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -325,6 +383,39 @@ export function ExportScreen() {
               </>
             )}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* AI Prompt */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <MessageSquare className="w-4 h-4" />
+            Промпт для AI
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="bg-muted/30 rounded-lg p-3 text-sm text-muted-foreground whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto">
+            {AI_PROMPTS[selectedProvider] || AI_PROMPTS.generic}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleCopyPrompt}>
+              {copiedPrompt ? (
+                <><CheckCircle className="w-4 h-4 mr-1" /> Скопировано</>
+              ) : (
+                <><Copy className="w-4 h-4 mr-1" /> Копировать промпт</>
+              )}
+            </Button>
+            {exportData && (
+              <Button variant="outline" size="sm" onClick={handleCopyPromptWithData}>
+                {copied ? (
+                  <><CheckCircle className="w-4 h-4 mr-1" /> Скопировано</>
+                ) : (
+                  <><Sparkles className="w-4 h-4 mr-1" /> Промпт + данные</>
+                )}
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
 

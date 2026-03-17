@@ -901,6 +901,27 @@ function pluralDays(n: number): string {
   return 'дней'
 }
 
+// ─── Energy bar helper ───────────────────────────────────────────────────────
+
+function EnergyBar({ value, label, emoji }: { value: number; label: string; emoji: string }) {
+  const pct = (value / 10) * 100
+  const color = value >= 8 ? '#22c55e' : value >= 6 ? '#f59e0b' : value >= 4 ? '#f97316' : '#ef4444'
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-white/50">{emoji} {label}</span>
+        <span className="font-bold" style={{ color }}>{value}/10</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all"
+          style={{ width: `${pct}%`, background: color }}
+        />
+      </div>
+    </div>
+  )
+}
+
 // ─── Check-in status block ───────────────────────────────────────────────────
 
 function CheckinStatusBlock({
@@ -922,7 +943,7 @@ function CheckinStatusBlock({
   isMorningTime: boolean
   isEveningTime: boolean
 }) {
-  // If both done — show combined summary
+  // If both done — show combined summary with bars
   if (morningDone && eveningDone) {
     return (
       <div
@@ -932,15 +953,18 @@ function CheckinStatusBlock({
           border: '1px solid rgba(34,197,94,0.2)',
         }}
       >
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-3">
           <span className="text-green-400 text-sm font-semibold">✓ Оба чекапа выполнены</span>
+          {morningFocus && (
+            <span className="text-xs text-white/40 ml-auto">слово: {morningFocus}</span>
+          )}
         </div>
-        <div className="flex gap-4 text-xs text-white/50">
-          {morningEnergy && <span>⚡ Утро: {morningEnergy}/10{morningFocus ? ` · ${morningFocus}` : ''}</span>}
-          {eveningRating && <span>🌙 Вечер: {eveningRating}/10</span>}
+        <div className="space-y-2">
+          {morningEnergy && <EnergyBar value={morningEnergy} label="Утренняя энергия" emoji="⚡" />}
+          {eveningRating && <EnergyBar value={eveningRating} label="Оценка дня" emoji="🌙" />}
         </div>
         {eveningWin && (
-          <div className="mt-2 text-xs text-white/60 italic">🏆 {eveningWin}</div>
+          <div className="mt-2 text-xs text-white/60 italic border-t border-white/10 pt-2">🏆 {eveningWin}</div>
         )}
       </div>
     )
@@ -1003,11 +1027,12 @@ function CheckinStatusBlock({
           border: '1px solid rgba(34,197,94,0.15)',
         }}
       >
-        <div className="flex items-center gap-2 text-xs text-white/50">
-          <span className="text-green-400">✓</span>
-          <span>Утро: ⚡{morningEnergy}/10{morningFocus ? ` · ${morningFocus}` : ''}</span>
-          <span className="ml-auto text-white/30">Вечерний чекап после 18:00</span>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-green-400 text-xs">✓ Утро выполнено</span>
+          {morningFocus && <span className="text-xs text-white/30">· {morningFocus}</span>}
+          <span className="ml-auto text-white/25 text-[10px]">вечер после 18:00</span>
         </div>
+        {morningEnergy && <EnergyBar value={morningEnergy} label="Утренняя энергия" emoji="⚡" />}
       </div>
     )
   }
