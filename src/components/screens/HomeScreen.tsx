@@ -628,7 +628,7 @@ export function HomeScreen() {
       {/* Monthly report shortcut */}
       <Card
         className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors"
-        onClick={() => setScreen('monthly-report' as Screen)}
+        onClick={() => setScreen('monthly-report')}
       >
         <CardContent className="pt-4 pb-4">
           <div className="flex items-center justify-between">

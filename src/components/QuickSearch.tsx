@@ -177,7 +177,7 @@ export function QuickSearch({ open, onClose }: QuickSearchProps) {
     {
       id: 'monthly-report', label: 'Месячный отчёт', emoji: '📈',
       keywords: ['месяц', 'monthly', 'месячный', 'отчёт месяц', 'глубокий анализ'],
-      type: 'navigate', screen: 'monthly-report' as Screen,
+      type: 'navigate', screen: 'monthly-report',
     },
   ]
 
