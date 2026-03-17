@@ -402,31 +402,44 @@ export function HabitsScreen() {
                           <CheckCircle2 className="w-4 h-4 text-primary" />
                         )}
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Flame className="w-3 h-3 text-orange-400" />
-                        <span>{habit.streak} дней</span>
-                        <span>•</span>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground mt-0.5">
                         <span>{habit.completed}/{habit.target}</span>
+                        {habit.streak > 0 && (
+                          <span className="flex items-center gap-0.5 font-medium text-orange-400">
+                            <Flame className="w-3 h-3" />
+                            {habit.streak}
+                          </span>
+                        )}
                       </div>
                       {habit.target > 1 && (
-                        <Progress value={progress} className="h-1 mt-2" />
+                        <Progress value={progress} className="h-1 mt-1.5" />
                       )}
-                      {/* 7-day heatmap */}
+                      {/* 7-day dots: ● ● ○ ● ● ● ○ */}
                       {habit.last7Days && (
-                        <div className="flex gap-0.5 mt-2">
-                          {habit.last7Days.map(({ date, completed: done }) => (
-                            <div
-                              key={date}
-                              className="w-3.5 h-3.5 rounded-sm"
-                              title={date}
-                              style={{
-                                background: done
-                                  ? (habit.color || '#10b981')
-                                  : 'rgba(255,255,255,0.08)',
-                                opacity: done ? 0.9 : 1,
-                              }}
-                            />
-                          ))}
+                        <div className="flex gap-1 mt-2 items-end">
+                          {habit.last7Days.map(({ date, completed: done }, idx) => {
+                            const dayLetters = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
+                            const dow = new Date(date).getDay()
+                            const label = dayLetters[(dow + 6) % 7]
+                            const isToday = idx === 6
+                            return (
+                              <div key={date} className="flex flex-col items-center gap-0.5">
+                                <div
+                                  className={`w-3 h-3 rounded-full transition-all ${isToday ? 'ring-1 ring-offset-1 ring-offset-background' : ''}`}
+                                  title={date}
+                                  style={{
+                                    backgroundColor: done
+                                      ? (habit.color || '#10b981')
+                                      : 'rgba(255,255,255,0.1)',
+                                    ringColor: habit.color,
+                                  }}
+                                />
+                                <span className="text-[9px] text-muted-foreground/60 leading-none">
+                                  {label}
+                                </span>
+                              </div>
+                            )
+                          })}
                         </div>
                       )}
                     </div>
