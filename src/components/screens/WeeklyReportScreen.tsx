@@ -153,6 +153,29 @@ export function WeeklyReportScreen() {
       {/* Mood & Energy mini-chart */}
       <MoodEnergyChart days={report.days} />
 
+      {/* Best day highlight */}
+      {report.summary.bestDay && (report.summary.bestDay.mood !== null || report.summary.bestDay.energy !== null) && (
+        <Card style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)' }}>
+          <CardContent className="pt-3 pb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🌟</span>
+              <div className="flex-1">
+                <span className="text-sm font-medium text-emerald-300">Лучший день: </span>
+                <span className="text-sm text-white/70">{report.summary.bestDay.dayOfWeek}</span>
+                <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+                  {report.summary.bestDay.mood !== null && <span>🎭 {report.summary.bestDay.mood}/10</span>}
+                  {report.summary.bestDay.energy !== null && <span>⚡ {report.summary.bestDay.energy}/10</span>}
+                  {report.summary.bestDay.hadGym && <span>💪 зал</span>}
+                  {report.summary.bestDay.ritualsCompleted > 0 && (
+                    <span>🔥 {report.summary.bestDay.ritualsCompleted}/{report.summary.bestDay.ritualsTotal}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Leak hints — most important block */}
       {report.leakHints.length > 0 && (
         <Card
