@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { normalizeToDate } from '@/lib/date-utils'
+import { analyzeLeakWithAI } from '@/lib/ai-analyze-leak'
+import { formatLeakAnalysisForTelegram } from '@/lib/ai-leak-prompts'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET
@@ -725,56 +727,23 @@ async function handleCommand(userId: string, text: string): Promise<{ reply: str
       }
     }
 
-    // Отправляем сообщение-заглушку пока AI думает
-    const thinkingMsg =
-      '🤖 <b>Анализирую лик...</b>\n\n' +
-      `"${userText.slice(0, 80)}${userText.length > 80 ? '…' : ''}"\n\n` +
-      '<i>Это занимает 5–15 секунд</i>'
-
-    // Определяем тип лика по ключевым словам (простая классификация)
     const leakType = classifyLeakFromText(userText)
-    const severity = 'warning'
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_VERCEL_URL
-        ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-        : process.env.APP_BASE_URL ?? 'http://localhost:3000'
-
-      const res = await fetch(`${baseUrl}/api/ai/analyze-leak`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, leakType, leakMessage: userText, severity }),
-      })
-
-      const data = (await res.json()) as {
-        success: boolean
-        analysis?: {
-          cause: string
-          solutions: { text: string; deadline: string; priority: string }[]
-          personalizedInsight: string
-          urgency: string
-        }
-        provider?: string
-        error?: string
-      }
-
-      if (!data.success || !data.analysis) {
-        return { reply: `🤖 ${thinkingMsg}\n\n❌ ${data.error ?? 'Ошибка анализа'}` }
-      }
-
-      const { formatLeakAnalysisForTelegram } = await import('@/lib/ai-leak-prompts')
-      const reply = formatLeakAnalysisForTelegram(
+      // Прямой вызов функции — никаких self-referential HTTP запросов
+      const { analysis, provider } = await analyzeLeakWithAI({
+        userId,
         leakType,
-        data.analysis as Parameters<typeof formatLeakAnalysisForTelegram>[1],
-        data.provider ?? 'groq'
-      )
+        leakMessage: userText,
+        severity: 'warning',
+        callType: 'telegram-leak',
+      })
+      const reply = formatLeakAnalysisForTelegram(leakType, analysis, provider)
       return { reply, keyboard: backBtn() }
     } catch (err) {
       console.error('[Telegram /лик] AI error:', err)
       return {
-        reply:
-          '❌ AI-анализ временно недоступен.\n\n' +
-          'Убедись что добавлены <code>GROQ_API_KEY</code> и <code>GEMINI_API_KEY</code> в Vercel ENV.',
+        reply: '❌ AI-анализ не ответил. Попробуй чуть позже.',
       }
     }
   }

@@ -48,11 +48,14 @@ src/
 │       ├── constants.ts
 │       └── components/ (QuickAccess.tsx, DonateCard.tsx)
 ├── lib/
-│   ├── db.ts             # Prisma client
-│   ├── store.ts          # Zustand (Screen type здесь)
-│   ├── network-utils.ts  # showSuccessToast, showErrorToast
-│   ├── streak-utils.ts   # calculateStreak, calculateHabitStreak
-│   └── mood-utils.ts     # getMoodStatus, getMoodStatusText
+│   ├── db.ts               # Prisma client
+│   ├── store.ts            # Zustand (Screen type здесь)
+│   ├── network-utils.ts    # showSuccessToast, showErrorToast
+│   ├── streak-utils.ts     # calculateStreak, calculateHabitStreak
+│   ├── mood-utils.ts       # getMoodStatus, getMoodStatusText
+│   ├── ai-provider.ts      # Groq + Gemini fallback, логирует в ai_logs
+│   ├── ai-leak-prompts.ts  # Промпт-билдер, парсер JSON-ответа, Telegram-форматтер
+│   └── ai-analyze-leak.ts  # Shared функция analyzeLeakWithAI() — используется API + Telegram
 └── prisma/schema.prisma
 ```
 
@@ -63,12 +66,13 @@ src/
 - Zustand (state), Prisma ORM, Supabase PostgreSQL
 - shadcn/ui компоненты
 - React.lazy + Suspense (code splitting)
+- **AI**: Groq (`llama-3.3-70b-versatile`) primary + Gemini 2.5 Flash-Lite fallback
 
 ## Команды
 ```bash
 bun run lint          # проверка линтера (0 ошибок!)
 bun run build         # сборка
-bun prisma generate   # после изменений schema.prisma
+bun run db:generate   # после изменений schema.prisma
 ```
 
 ## ENV переменные
@@ -80,6 +84,8 @@ DATABASE_URL           # pooler :6543
 DIRECT_DATABASE_URL    # direct :5432
 TELEGRAM_BOT_TOKEN
 CRON_SECRET            # Bearer-токен для защиты cron endpoints
+GROQ_API_KEY           # console.groq.com — первичный AI провайдер
+GEMINI_API_KEY         # aistudio.google.com — fallback AI провайдер
 ```
 
 ---
@@ -111,7 +117,7 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Текущее состояние (2026-03-17, сессия 9)
+## Текущее состояние (2026-03-17, сессия 10)
 
 ### Что реализовано (полный список)
 
@@ -161,6 +167,20 @@ export function GymWorkoutDetailDialog() {
 - ✅ Поиск по еде в HealthScreen (фильтр по имени)
 - ✅ Export данных + готовый AI-промпт
 
+**AI-анализ ликов (сессия 10)**
+- ✅ `src/lib/ai-provider.ts` — Groq primary + Gemini fallback, таймауты, логирование каждого вызова в `ai_logs`
+- ✅ `src/lib/ai-leak-prompts.ts` — системный промпт, билдер пользовательского контекста (7 дней статистики + паттерны), JSON-парсер ответа, Telegram-форматтер
+- ✅ `src/lib/ai-analyze-leak.ts` — shared функция `analyzeLeakWithAI()`, используется и в API-роуте и в Telegram напрямую
+- ✅ `POST /api/ai/analyze-leak` — собирает контекст юзера, вызывает AI, сохраняет в `user_ai_patterns`
+- ✅ `GET /api/ai/analyze-leak` — возвращает кешированный анализ без нового AI-вызова
+- ✅ `src/components/LeakAiAnalysisCard.tsx` — кнопка «🤖 Разобрать с ИИ» + карточка (причина / 3 решения с дедлайнами / персональное наблюдение)
+- ✅ WeeklyReportScreen — `LeakAiAnalysisCard` под каждым ликом
+- ✅ MonthlyReportScreen — `LeakAiAnalysisCard` под каждым глубоким ликом
+- ✅ Telegram команда `лик [текст]` — keyword-классификатор + прямой вызов AI (без self-referential HTTP)
+- ✅ `ai_logs` таблица — логирует промпт/ответ/модель/юзер/латентность/провайдер/ошибки
+- ✅ `user_ai_patterns` таблица — хранит историю анализов, tried solutions, whatWorked по каждому типу лика
+- ✅ Прокси-архитектура: ключи только на сервере, фронт не знает ни ключей, ни провайдера
+
 **Telegram bot (сессии 6–9)**
 - ✅ `POST /api/telegram/webhook` — 13 текстовых команд: вода/вес/настроение/энергия/ел/зал/задача/ритуалы/сон/сводка/доход/расход/помощь
 - ✅ Верификация через `TELEGRAM_WEBHOOK_SECRET`, GET → healthcheck
@@ -186,37 +206,56 @@ export function GymWorkoutDetailDialog() {
 | `prisma/migrations/20260317_emotion_logs.sql` | `emotion_logs` | ✅ применена |
 | `prisma/migrations/20260317_fleeting_thoughts.sql` | `fleeting_thoughts` | ✅ применена |
 | `prisma/migrations/20260317_hidden_widgets.sql` | `user_settings.hidden_widgets` | ✅ применена |
+| `prisma/migrations/20260317_user_ai_patterns.sql` | `user_ai_patterns` | ✅ применена |
+| `prisma/migrations/20260317_ai_logs.sql` | `ai_logs` | ✅ применена |
 
 ---
 
-## Следующие задачи (приоритет, сессия 10)
+## Следующие задачи (приоритет, сессия 11)
 
-### 1. 🔴 Supplement reminder — отдельный флаг (30 мин)
+### 1. 🔴 AI-рекомендации — внедрение в приложение (все три уровня за раз, ~4 часа)
+
+**Уровень 1 — Кнопка «📋 Добавить в задачи»** в `LeakAiAnalysisCard`
+- После получения AI-анализа появляется кнопка → каждое из 3 решений становится `Task` с дедлайном
+- `POST /api/tasks` с `text = solution.text`, `dueDate = now + deadline`
+- Показать тост «✅ 3 задачи добавлены»
+
+**Уровень 2 — Виджет «💡 AI Рекомендации» на HomeScreen**
+- Показывать если есть `UserAiPattern` с `lastAnalysis` созданным < 7 дней назад
+- Карточка: тип лика + одна главная рекомендация + кнопка «Посмотреть все»
+- Скрыть виджет через `hiddenWidgets` (ключ `'ai_recommendations'`)
+
+**Уровень 3 — Фидбек «✅ Сработало» / «❌ Не помогло»** под каждым решением
+- `PATCH /api/ai/analyze-leak/feedback` `{ userId, leakType, solutionText, worked: bool }`
+- Пишет в `UserAiPattern.whatWorked` (если `worked: true`) / `triedSolutions[].worked = false`
+- Следующий AI-анализ этого лика видит историю → более точные советы
+
+### 2. 🟡 Supplement reminder — отдельный флаг (30 мин)
 Сейчас `/api/notifications/send-supplement-reminder` проверяет `ritualReminders`. Нужен отдельный флаг.
 - `prisma/schema.prisma`: добавить `supplementReminders Boolean @default(true)`
-- `prisma/migrations/20260317_supplement_reminders.sql` + применить в Supabase
+- `prisma/migrations/YYYYMMDD_supplement_reminders.sql` + применить в Supabase
 - `SettingsScreen.tsx`: Switch «Напоминание о БАДах»
 - `send-supplement-reminder/route.ts`: заменить `ritualReminders` → `supplementReminders`
 
-### 2. 🟡 StatsScreen — выбор периода 7д/14д/30д/90д (1 час)
+### 3. 🟡 StatsScreen — выбор периода 7д/14д/30д/90д (1 час)
 Сейчас `?days=30` и `last14Days` жёстко захардкожено.
 - State `periodDays: 7 | 14 | 30 | 90` + кнопки-переключатели в UI
 - API: передавать `?days=N`, пересчёт всех chart и averages
 - Файлы: `src/components/screens/StatsScreen.tsx`, `src/app/api/stats/history/route.ts`
 
-### 3. 🟡 Ачивменты за оценку дня (2 часа)
+### 4. 🟡 Ачивменты за оценку дня (2 часа)
 Таблица `Achievement` уже есть. Нужны badge-триггеры в DailySummaryScreen:
 - Первый раз получить 80+ → badge «Отличный день»
 - 7 дней подряд 70+ → badge «Неделя качества»
 - API: `POST /api/achievements/check` → проверка условий и запись
 - UI: показывать popup при выдаче, список в ProfileScreen
 
-### 4. 🟢 Telegram bot — inline ввод данных через ForceReply (1.5 часа)
+### 5. 🟢 Telegram bot — inline ввод данных через ForceReply (1.5 часа)
 Сейчас кнопки «Сон», «Вес», «Настроение», «Энергия» только показывают текущее значение.
-Добавить flow: нажал кнопку → бот спрашивает значение (ForceReply) → пользователь отвечает → записывается.
-Хранить `pendingAction` в кэше/Redis или временной note.
+- Flow: нажал кнопку → бот спрашивает значение (ForceReply) → пользователь отвечает → записывается
+- Хранить `pendingAction` в `UserAiPattern` или временной Note
 
-### 5. 🟢 DailySummaryScreen — кнопка «Поделиться» оценкой (30 мин)
+### 6. 🟢 DailySummaryScreen — кнопка «Поделиться» оценкой (30 мин)
 Кнопка рядом со score формирует текст:
 `📊 Мой день: 83/100 — Отличный! 💧100% 🍽️1800ккал ✅4/5 ритуалов`
 → `navigator.clipboard.writeText()` или `window.open('tg://...')`
@@ -423,6 +462,47 @@ export function GymWorkoutDetailDialog() {
 - Transaction: нет поля `type`, знак amount определяет доход/расход (+ = доход, − = расход)
 - Оценка дня: взвешенная формула `(score/weight)*100`, отображается только если `weight > 0`
 - Supplement reminder использует флаг `ritualReminders` (отдельного флага нет в схеме)
+
+---
+
+## Что делали в сессии 2026-03-17 (сессия 10)
+
+### AI-анализ ликов — полная реализация
+
+**Новые файлы:**
+- `src/lib/ai-provider.ts` — Groq + Gemini с fallback, таймауты (15с/20с), логирует каждый вызов в `ai_logs` (включая ошибки и фолбеки). Принимает `AiCallOptions { userId, callType, leakType }`
+- `src/lib/ai-leak-prompts.ts` — системный промпт-коуч, `buildLeakAnalysisMessage()` собирает контекст (профиль + 7 дней статистики + прошлые паттерны), `parseLeakAnalysis()` достаёт JSON из ответа с graceful fallback, `formatLeakAnalysisForTelegram()` для бота
+- `src/lib/ai-analyze-leak.ts` — shared `analyzeLeakWithAI()`: загружает контекст из БД, вызывает AI, сохраняет в `user_ai_patterns`. Используется и в API-роуте и в Telegram напрямую (без HTTP)
+- `src/app/api/ai/analyze-leak/route.ts` — тонкая обёртка над shared функцией. GET — кеш без AI
+- `src/components/LeakAiAnalysisCard.tsx` — кнопка «🤖 Разобрать с ИИ», lazy-fetch, показывает urgency badge + причину + 3 решения с дедлайнами + персональное наблюдение + провайдер
+
+**Изменённые файлы:**
+- `WeeklyReportScreen.tsx` — `LeakAiAnalysisCard` встроена в каждый лик-хинт
+- `MonthlyReportScreen.tsx` — `LeakAiAnalysisCard` встроена в каждый глубокий лик
+- `telegram/webhook/route.ts` — команда `лик [текст]` + keyword-классификатор `classifyLeakFromText()`
+
+**Новые таблицы в БД:**
+- `user_ai_patterns` — `@@unique(userId, leakType)`, хранит `lastAnalysis JSON`, `triedSolutions JSON[]`, `whatWorked JSON[]`, `analysisCount`, `lastProvider`
+- `ai_logs` — аудит всех AI-вызовов: `callType`, `leakType`, `provider`, `model`, `system_prompt` (≤2000), `user_message` (≤4000), `response` (≤4000), `success`, `error_msg`, `latency_ms`
+
+### Принятые решения (важно для следующих сессий)
+
+- **Прокси**: ключи `GROQ_API_KEY` / `GEMINI_API_KEY` только на сервере. Фронт вызывает `/api/ai/analyze-leak`, никогда не AI-провайдеров напрямую.
+- **Telegram `лик`**: не делаем self-referential HTTP fetch (ненадёжно в serverless). Импортируем `analyzeLeakWithAI()` напрямую из `@/lib/ai-analyze-leak`.
+- **`NEXT_PUBLIC_VERCEL_URL` не существует** — Vercel ставит только `VERCEL_URL` (без NEXT_PUBLIC_). В serverless-коде нет смысла использовать NEXT_PUBLIC_ переменные.
+- **ai_logs**: логирование не должно ломать основной флоу — всё в `try/catch`, ошибка логируется в console но не бросается дальше.
+- **Персонализация**: контекст для промпта собирается каждый раз из живых данных (7 дней), а не кешируется отдельно.
+
+### Баги исправлены в этой сессии
+
+- **Telegram `лик` → «AI временно недоступен»**: причина — self-referential fetch с `NEXT_PUBLIC_VERCEL_URL` (пустая на сервере). Исправлено: прямой импорт `analyzeLeakWithAI()`.
+
+### Ручные шаги (уже выполнены пользователем)
+
+- ✅ `user_ai_patterns` миграция применена в Supabase
+- ✅ `ai_logs` миграция применена в Supabase
+- ✅ `GROQ_API_KEY` добавлен в Vercel ENV
+- ✅ `GEMINI_API_KEY` добавлен в Vercel ENV
 
 ---
 
