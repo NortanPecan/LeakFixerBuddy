@@ -37,6 +37,7 @@ interface Habit {
   streak: number
   completed: number
   isCompleted: boolean
+  last7Days?: { date: string; completed: boolean }[]
 }
 
 interface WeeklyStat {
@@ -409,6 +410,24 @@ export function HabitsScreen() {
                       </div>
                       {habit.target > 1 && (
                         <Progress value={progress} className="h-1 mt-2" />
+                      )}
+                      {/* 7-day heatmap */}
+                      {habit.last7Days && (
+                        <div className="flex gap-0.5 mt-2">
+                          {habit.last7Days.map(({ date, completed: done }) => (
+                            <div
+                              key={date}
+                              className="w-3.5 h-3.5 rounded-sm"
+                              title={date}
+                              style={{
+                                background: done
+                                  ? (habit.color || '#10b981')
+                                  : 'rgba(255,255,255,0.08)',
+                                opacity: done ? 0.9 : 1,
+                              }}
+                            />
+                          ))}
+                        </div>
                       )}
                     </div>
 

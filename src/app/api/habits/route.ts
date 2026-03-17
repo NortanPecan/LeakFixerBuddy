@@ -117,6 +117,17 @@ export async function GET(request: NextRequest) {
       // Find today's log
       const todayLog = todayLogs.find(l => l.habitId === habit.id)
 
+      // Build last 7 days completion map
+      const today7 = new Date()
+      today7.setHours(0, 0, 0, 0)
+      const last7Days = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(today7)
+        d.setDate(d.getDate() - (6 - i))
+        const dateStr = d.toISOString().split('T')[0]
+        const log = logs.find(l => l.date.toISOString().split('T')[0] === dateStr)
+        return { date: dateStr, completed: log?.completed || false }
+      })
+
       return {
         id: habit.id,
         name: habit.name,
@@ -125,7 +136,8 @@ export async function GET(request: NextRequest) {
         target: habit.target || 1,
         streak: streakResult.streak,
         completed: todayLog?.count || 0,
-        isCompleted: todayLog?.completed || false
+        isCompleted: todayLog?.completed || false,
+        last7Days,
       }
     }))
 
