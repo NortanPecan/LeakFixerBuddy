@@ -388,7 +388,25 @@ export function HomeScreen() {
       result = '💊 Открываю раздел БАДов...'
     }
 
-    if (!result) result = '🤔 Не понял. Попробуй: "вода 300", "вес 74.5", "настроение 7", "ел"'
+    // Gym: "зал", "тренировка", "gym"
+    if (!result && (raw === 'зал' || raw === 'тренировка' || raw === 'gym' || raw.startsWith('зал ') || raw.startsWith('трен'))) {
+      setScreen('gym' as Screen)
+      result = '🏋️ Открываю тренировки...'
+    }
+
+    // Rituals: "ритуалы", "привычки"
+    if (!result && (raw === 'ритуалы' || raw === 'привычки' || raw === 'ритуал')) {
+      setScreen('rituals' as Screen)
+      result = '🎯 Открываю ритуалы...'
+    }
+
+    // Finance: "расходы", "трата", "финансы"
+    if (!result && (raw === 'расходы' || raw === 'финансы' || raw === 'деньги' || raw.startsWith('расход') || raw.startsWith('трат'))) {
+      setScreen('finance' as Screen)
+      result = '💰 Открываю финансы...'
+    }
+
+    if (!result) result = '🤔 Не понял. Попробуй: "вода 300", "вес 74.5", "настроение 7", "зал", "ел"'
 
     setQuickResult(result)
     setQuickInput('')
