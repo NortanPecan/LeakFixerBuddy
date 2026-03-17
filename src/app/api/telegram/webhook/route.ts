@@ -45,6 +45,7 @@ const GYM_RE = /^(?:зал|gym|трен(?:ировка)?)\s*(?:(\d+(?:[.,]\d+)?)
 const TASK_RE = /^(?:задача|задание|task)\s+(.+)$/i
 const RITUALS_RE = /^(?:ритуалы|ритуал|rituals?)$/i
 const SLEEP_RE = /^(?:сон|sleep)\s+(\d+(?:[.,]\d+)?)\s*(?:ч|ч\.|часов?|час|hour|h)?$/i
+const SUMMARY_RE = /^(?:сводка|отчёт|отчет|report|summary|итог|итоги)$/i
 
 // ─── Send Telegram message ────────────────────────────────────────────────
 
@@ -284,6 +285,46 @@ async function handleCommand(
     return `${emoji} Сон <b>${hours} ч</b> записан!`
   }
 
+  // — Summary (today's mini-report) ————————————————————————
+  if (SUMMARY_RE.test(t)) {
+    const startOfDay = new Date(today)
+    startOfDay.setHours(0, 0, 0, 0)
+    const endOfDay = new Date(today)
+    endOfDay.setHours(23, 59, 59, 999)
+
+    const [fitnessDaily, dailyState, foodEntries, ritualCompletions, activeRituals, checkins] = await Promise.all([
+      db.fitnessDaily.findFirst({ where: { userId, date: startOfDay } }),
+      db.dailyState.findFirst({ where: { userId, date: startOfDay } }),
+      db.foodEntry.findMany({ where: { userId, date: { gte: startOfDay, lt: endOfDay } }, select: { calories: true } }),
+      db.ritualCompletion.findMany({ where: { userId, date: startOfDay, completed: true } }),
+      db.ritual.findMany({ where: { userId, status: 'active' } }),
+      db.dailyCheckin.findMany({ where: { userId, date: startOfDay } }).catch(() => []),
+    ])
+
+    const water = fitnessDaily?.water ?? 0
+    const waterTarget = fitnessDaily?.waterTarget ?? 2000
+    const waterPct = Math.round((water / waterTarget) * 100)
+    const calories = foodEntries.reduce((s, f) => s + (f.calories || 0), 0)
+    const ritualsTotal = activeRituals.length
+    const ritualsDone = ritualCompletions.length
+    const morningDone = checkins.some(c => c.type === 'morning')
+    const eveningDone = checkins.some(c => c.type === 'evening')
+
+    const waterBar = waterPct >= 100 ? '🔵🔵🔵🔵🔵' : waterPct >= 80 ? '🔵🔵🔵🔵⚪' : waterPct >= 60 ? '🔵🔵🔵⚪⚪' : waterPct >= 40 ? '🔵🔵⚪⚪⚪' : waterPct >= 20 ? '🔵⚪⚪⚪⚪' : '⚪⚪⚪⚪⚪'
+    const todayStr = today.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })
+
+    let msg = `📊 <b>Сводка за ${todayStr}</b>\n\n`
+    msg += `💧 Вода: <b>${water}/${waterTarget} мл</b> ${waterBar}\n`
+    if (calories > 0) msg += `🍽️ Калории: <b>${calories} ккал</b>\n`
+    if (ritualsTotal > 0) msg += `✅ Ритуалы: <b>${ritualsDone}/${ritualsTotal}</b>\n`
+    if (dailyState?.mood) msg += `😊 Настроение: <b>${dailyState.mood}/10</b>\n`
+    if (dailyState?.energy) msg += `⚡ Энергия: <b>${dailyState.energy}/10</b>\n`
+    if (dailyState?.sleepHours) msg += `😴 Сон: <b>${dailyState.sleepHours} ч</b>\n`
+    msg += `\n${morningDone ? '☀️' : '○'} Утро  ${eveningDone ? '🌙' : '○'} Вечер`
+
+    return msg
+  }
+
   // — Help / unknown ————————————————————————————————————————
   if (/^(?:помощь|help|старт|start|команды)$/i.test(t)) {
     return (
@@ -296,14 +337,15 @@ async function handleCommand(
       '💪 <b>зал 60</b> — тренировка (мин, опционально)\n' +
       '✅ <b>задача купить хлеб</b> — добавить задачу\n' +
       '🙌 <b>ритуалы</b> — отметить все ритуалы выполненными\n' +
-      '😴 <b>сон 8</b> — записать часы сна\n\n' +
+      '😴 <b>сон 8</b> — записать часы сна\n' +
+      '📊 <b>сводка</b> — итоги дня\n\n' +
       'Открой <b>LeakFixer Buddy</b> для полного трекинга.'
     )
   }
 
   return (
     '🤔 Не понял команду. Напиши <b>помощь</b> для списка команд.\n\n' +
-    'Примеры: <code>вода 500</code>, <code>вес 74.5</code>, <code>настроение 8</code>, <code>ел пицца 800</code>, <code>зал 60</code>, <code>задача текст</code>, <code>ритуалы</code>, <code>сон 8</code>'
+    'Примеры: <code>вода 500</code>, <code>вес 74.5</code>, <code>настроение 8</code>, <code>ел пицца 800</code>, <code>зал 60</code>, <code>задача текст</code>, <code>ритуалы</code>, <code>сон 8</code>, <code>сводка</code>'
   )
 }
 
