@@ -111,7 +111,7 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Текущее состояние (2026-03-17, сессия 6)
+## Текущее состояние (2026-03-17, сессия 8)
 
 ### Что реализовано (полный список)
 
@@ -151,8 +151,8 @@ export function GymWorkoutDetailDialog() {
 - ✅ "Ранняя пташка" бейдж ⚡ при входе до 9:00
 
 **Уведомления**
-- ✅ Telegram push: утро (06:00 UTC), вечер (17:00 UTC), ритуалы (16:00 UTC)
-- ✅ Vercel Cron расписание
+- ✅ Telegram push: утро (06:00 UTC), вечер (17:00 UTC), ритуалы (16:00 UTC), БАДы (08:00 UTC)
+- ✅ Vercel Cron расписание (5 cron jobs)
 
 **Прочее UX**
 - ✅ Рефрейминг при срыве еды (DailySummaryScreen) + "Умные замены" (5.2)
@@ -183,29 +183,29 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Следующие задачи (приоритет)
+## Следующие задачи (приоритет, сессия 9)
 
-### 1. 🔴 Расширить настраиваемый HomeScreen (7.2 продолжение)
-Сейчас переключаются только «Вес» и «Велнес». Добавить переключатели для остальных блоков:
-вода, еда, ритуалы, настроение/энергия, быстрый ввод.
-Реализация: массив `WIDGET_CONFIG` в ProfileScreen, цикл через него.
-
-### 2. 🔴 Зарегистрировать Telegram webhook
-Одноразовый вызов для активации бота:
+### 1. 🔴 Зарегистрировать Telegram webhook (ручной шаг, 1 команда)
+```bash
+curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
+  -d "url=https://leak-fixer-buddy.vercel.app/api/telegram/webhook" \
+  -d "secret_token=LeakFixer2026Secret"
 ```
-https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<domain>/api/telegram/webhook&secret_token=<TELEGRAM_WEBHOOK_SECRET>
-```
-Добавить `TELEGRAM_WEBHOOK_SECRET` в Vercel ENV. Проверить, что бот отвечает.
+Vercel ENV: `TELEGRAM_WEBHOOK_SECRET=LeakFixer2026Secret`.
+**Важно:** токен бота попал в открытый чат — перевыпусти через @BotFather `/revoke` сначала!
 
-### 3. 🟡 Расширить парсер Telegram-бота (6.1)
-Добавить команды: `сон 8` (логировать в DailyState.sleepHours если поле есть), `задача купить хлеб` → создать Task, `ритуалы` → отметить все ритуалы дня выполненными.
+### 2. 🟡 Supplement reminder — добавить отдельный флаг в UserSettings
+Сейчас supplement reminder использует `ritualReminders`. Добавить `supplementReminders Boolean @default(true)` в schema.prisma, миграцию, переключатель в SettingsScreen.
+Файлы: `prisma/schema.prisma`, `prisma/migrations/YYYYMMDD_supplement_reminders.sql`, `src/components/screens/SettingsScreen.tsx`, `src/app/api/notifications/send-supplement-reminder/route.ts`.
 
-### 4. 🟡 Экспорт в MD + AI-промпт (7.8)
-Доделать ExportScreen: добавить данные за месяц (замеры, PR, финансы) + готовый структурированный промпт для вставки в ChatGPT/Claude.
-Файл: `src/components/screens/ExportScreen.tsx`
+### 3. 🟡 Ачивменты за оценку дня
+В DailySummaryScreen отображается оценка 0–100. Можно добавить badge-награды при достижении порогов: первый день 80+, 7 дней подряд 70+, и т.д. Хранить в таблице `Achievement`.
 
-### 5. 🟢 Прогрессивный онбординг — расширить (7.1)
-Сейчас всё открывается на день 8. Сделать двухуровнево: день 8 — аналитика, день 15 — финансы и buddy matching. Логика: один массив `{ widgetId, unlockDay }[]`.
+### 4. 🟢 Stripe/платёж или Export расширить
+ExportScreen уже экспортирует данные. Добавить кнопку «Отправить на email» (простой mailto: с данными) или PDF export через window.print().
+
+### 5. 🟢 StatsScreen — добавить сводку за выбранный период
+Сейчас период 14/30 дней фиксирован. Добавить кнопки 7д/14д/30д/90д и пересчёт статистики (averages, totals) для выбранного диапазона.
 
 ---
 
@@ -291,8 +291,75 @@ https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<domain>/api/telegram
 
 ### Что НЕ успели / осталось
 - Регистрация webhook в Telegram (нужен ручной `setWebhook` вызов с правильным `secret_token`)
-- Больше виджетов в настройках HomeScreen (вода, еда, ритуалы, настроение)
-- Двухуровневый онбординг (день 15 для финансов/buddy)
+
+---
+
+## Что делали в сессии 2026-03-17 (сессия 7)
+
+### Автономная работа ~2 часа — большой пакет фич
+
+**7.2 — Настраиваемый HomeScreen расширен**
+- ProfileScreen: 7 переключателей: Вес, Велнес, Настроение/Энергия, Вода, Еда, Ритуалы, Быстрый ввод
+- HomeScreen: динамическая сетка сводки (`style.gridTemplateColumns`) — нет пустых ячеек
+
+**6.1 — Telegram-парсер расширен (+3 команды)**
+- `задача [текст]` → `db.task.create`
+- `ритуалы` → `db.ritualCompletion.upsert` (все активные ритуалы)
+- `сон 8` → `db.dailyState.upsert({ sleepHours })`
+
+**7.8 — ExportScreen: данные за месяц + AI-промпт**
+- +3 entity: замеры тела, тренировки/PR, финансы
+- AI-промпты переписаны для 4 провайдеров (Claude/GPT/Gemini/Generic)
+
+**7.1 — Двухуровневый онбординг**
+- `ONBOARDING_UNLOCKS[]` с `{id, unlockDay}`, хелпер `isUnlocked()`
+- День 8: аналитика. День 15: финансы и buddy (шорткаты на HomeScreen)
+
+**Buddy UX + Telegram персонализация + Journey UX + sleep корреляция**
+- BuddyScreen: фильтр по категории, badge % совместимости
+- Telegram notify: персональный текст с именем, стриком, ритуалами
+- JourneyScreen: кнопки назад, ACHIEVEMENT_LABELS
+- Фикс ritual reminder: `r.name` → `r.title`
+- WeeklyReport: корреляции сон→энергия и зал→настроение следующего дня
+
+---
+
+## Что делали в сессии 2026-03-17 (сессия 8)
+
+### Автономная работа — доработки и новые фичи
+
+**DailySummaryScreen**
+- `sleepHours` отображается в сетке статистики (3 колонки: настроение/энергия/сон)
+- Оценка дня 0–100 в заголовке: ритуалы 25%, вода 20%, настроение 20%, энергия 15%, чекапы по 10%
+- Цветовая кодировка: зелёный ≥75, жёлтый ≥50, красный <50
+
+**StatsScreen — новые графики**
+- `/api/stats/history` расширен: калории, вода (мл), вес (кг) в день
+- Три новых chart: AreaChart калорий, AreaChart воды, LineChart веса (последние 14 дней)
+
+**Telegram бот — 3 новые команды**
+- `сводка` / `отчёт` — мини-итоги дня: вода/ккал/ритуалы/настроение/сон/чекапы
+- `доход 5000 зарплата` → `db.transaction.create({ amount: +N })`
+- `расход 500 кофе` → `db.transaction.create({ amount: -N })`
+- Итого 12 команд в боте
+
+**WeeklyReport — мини-бар качества еды**
+- API: `foodGood / foodNeutral / foodBad` в DayData
+- DayRow: цветная полоска зелёный/жёлтый/красный (пропорционально кол-ву записей)
+
+**Уведомления**
+- Новый endpoint `/api/notifications/send-supplement-reminder`
+- Vercel cron 08:00 UTC → 11:00 MSK: напоминает о непринятых БАДах
+- Кому: пользователи с `ritualReminders: true` у которых есть `isActive` supplements
+
+**HomeScreen — БАДы в настройках виджетов**
+- ProfileScreen: `{ id: 'supplements', label: 'БАДы (в сводке)' }` в WIDGET_CONFIG
+- HomeScreen: supplements карточка теперь оборачивается `{showSupplements && ...}`
+
+### Решения (важно)
+- Transaction: нет поля `type`, знак amount определяет доход/расход (+ = доход, − = расход)
+- Оценка дня: взвешенная формула `(score/weight)*100`, отображается только если `weight > 0`
+- Supplement reminder использует флаг `ritualReminders` (отдельного флага нет в схеме)
 
 ---
 
@@ -302,6 +369,7 @@ https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<domain>/api/telegram
 |------|-----|-----|-----------|
 | `0 3 * * *` | 03:00 | 06:00 | Очистка истёкших fleeting thoughts |
 | `0 6 * * *` | 06:00 | 09:00 | Утренний checkin reminder |
+| `0 8 * * *` | 08:00 | 11:00 | Supplement reminder (новый) |
 | `0 16 * * *` | 16:00 | 19:00 | Ritual reminder |
 | `0 17 * * *` | 17:00 | 20:00 | Вечерний checkin reminder |
 
