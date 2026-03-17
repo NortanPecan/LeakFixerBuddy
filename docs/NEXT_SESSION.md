@@ -1,55 +1,64 @@
 # Next Session — Текущее состояние и задачи
 
-> Обновлено: 2026-03-17 (сессия 6)
-> Ветка: `claude/buddy-matching-v2-jyJbK`
+> Обновлено: 2026-03-17 (сессия 7)
+> Ветка: `claude/telegram-webhook-setup-sCxHz`
 
 ---
 
-## Последняя сессия (2026-03-17, сессия 6)
+## Последняя сессия (2026-03-17, сессия 7)
 
 ### ✅ Сделано
 
 | # | Задача | Детали |
 |---|--------|--------|
-| 6.1 | **Telegram webhook** | `POST /api/telegram/webhook` — regex-парсер 6 команд: вода N, вес N, настроение N, энергия N, ел [name] N ккал, зал [N мин]. Авто-ответы, привязка по telegramId, /help. `GET` — healthcheck |
-| 2.4 | **Прогресс от первого дня** | `firstByType` в `/api/measurements` (первый замер по каждому типу). В ProfileScreen карточка «За X дней» теперь показывает: `первый вес → текущий вес (+/- delta)` |
-| 7.1 | **Прогрессивный онбординг** | На HomeScreen скрыты до дня 8: EmotionWidget, FleetingThoughtsWidget, «Фокус недели», «Лики недели», «Месячный анализ», WellbeingWidget. Показывается баннер «🔓 Аналитика откроется на 8-й день (ещё X дн.)» |
-| 7.2/7.3 | **Настраиваемый HomeScreen** | Новое поле `hiddenWidgets Json` в UserSettings. В ProfileScreen раздел «Виджеты главного экрана» с переключателями (Вес, Велнес). HomeScreen читает настройки и скрывает виджеты |
-
-### ⚠️ Миграции — ПРИМЕНИТЬ в Supabase!
-
-| Файл | Таблица |
-|------|---------|
-| `prisma/migrations/20260317_gym_stretching.sql` | `gym_workouts.stretching_done` |
-| `prisma/migrations/20260317_emotion_logs.sql` | `emotion_logs` |
-| `prisma/migrations/20260317_fleeting_thoughts.sql` | `fleeting_thoughts` |
-| `prisma/migrations/20260317_hidden_widgets.sql` | `user_settings.hidden_widgets` |
+| 7.2 | **Настраиваемый HomeScreen — расширен** | +5 новых переключателей: Настроение/Энергия, Вода, Еда, Ритуалы, Быстрый ввод. Рефакторинг на массив в ProfileScreen. Динамическая сетка сводки (`style.gridTemplateColumns`) — нет пустых ячеек |
+| 6.1 | **Telegram-парсер расширен** | +3 команды: `задача [текст]` → Task, `ритуалы` → отметить все активные ритуалы выполненными (upsert), `сон 8` → DailyState.sleepHours. Обновлён /help |
+| 7.8 | **ExportScreen — данные за месяц + AI-промпт** | +3 entity: замеры тела (first→last+delta), тренировки (кол-во, время, топ PR), финансы (доходы/расходы/топ категорий). AI-промпты переписаны под 5 областей: здоровье, финансы, привычки, тело, психология |
+| 7.1 | **Двухуровневый онбординг** | `ONBOARDING_UNLOCKS[]` с `{id, unlockDay}`. День 8 — аналитика (как раньше). День 15 — финансы и buddy matching (новые шорткаты + баннер-тизер для дней 8–14). `isUnlocked()` хелпер вместо `>= 8` |
 
 ---
 
-## Telegram webhook — регистрация
+## ⚠️ Telegram webhook — ЗАРЕГИСТРИРОВАТЬ вручную
 
-Чтобы активировать webhook, нужно один раз зарегистрировать URL:
+```bash
+curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
+  -d "url=https://leak-fixer-buddy.vercel.app/api/telegram/webhook" \
+  -d "secret_token=LeakFixer2026Secret"
 ```
-https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://<domain>/api/telegram/webhook&secret_token=<TELEGRAM_WEBHOOK_SECRET>
-```
-ENV: добавить `TELEGRAM_WEBHOOK_SECRET` (произвольная строка, опционально).
+
+Затем в Vercel ENV добавить `TELEGRAM_WEBHOOK_SECRET=LeakFixer2026Secret`.
+
+> **Важно:** токен бота попал в открытый чат — перевыпусти его через @BotFather (`/revoke`).
+
+---
+
+## ⚠️ Миграции — ПРИМЕНИТЬ в Supabase (если ещё не)
+
+| Файл | Таблица | Статус |
+|------|---------|--------|
+| `prisma/migrations/20260317_gym_stretching.sql` | `gym_workouts.stretching_done` | применить |
+| `prisma/migrations/20260317_emotion_logs.sql` | `emotion_logs` | применить |
+| `prisma/migrations/20260317_fleeting_thoughts.sql` | `fleeting_thoughts` | применить |
+| `prisma/migrations/20260317_hidden_widgets.sql` | `user_settings.hidden_widgets` | применить |
 
 ---
 
 ## Задачи — следующая сессия (по приоритету)
 
-### 1. Больше виджетов для скрытия (7.2 продолжение) 🟡 СРЕДНИЙ
-**Что нужно**: добавить в настройки переключатели для остальных блоков HomeScreen: вода, еда, ритуалы, настроение/энергия, быстрый ввод.
+### 1. 🔴 Зарегистрировать Telegram webhook (вручную, 1 curl)
+Файл уже готов. Нужен только разовый `setWebhook` вызов после перевыпуска токена.
 
-### 2. Применить pending миграции 🔴 КРИТИЧНО (вручную в Supabase)
-Без этого emotion_logs и fleeting_thoughts не работают.
+### 2. 🟡 Buddy Matching — доработки UX
+Экран `BuddyScreen`: улучшить карточки матчей, добавить фильтр по категории (здоровье/деньги/продуктивность).
 
-### 3. Telegram webhook — расширить парсер (6.1) 🟡 СРЕДНИЙ
-Добавить: "сон 8", "задача [текст]", "ритуалы выполнены".
+### 3. 🟡 Streak Protection — показывать щит на HomeScreen
+Отображать badge «🛡 щит» рядом со стриком если streak shield активен (`shieldUsedAt != null && cooldown`).
 
-### 4. Прогрессивный онбординг — тонкая настройка (7.1) 🟢 НИЗКИЙ
-Возможно, часть блоков открывать не на 8-й, а на 14-й и 21-й день.
+### 4. 🟢 Уведомления — персонализация
+Сейчас Telegram push одинаковый для всех. Добавить имя пользователя + данные из последнего чекапа в текст уведомления.
+
+### 5. 🟢 Journey Screen — доработки
+Экран прогресса пользователя (уже есть кнопка на HomeScreen). Проверить и улучшить UX.
 
 ---
 
@@ -58,24 +67,22 @@ ENV: добавить `TELEGRAM_WEBHOOK_SECRET` (произвольная стр
 | Тема | Правило |
 |------|---------|
 | **БД** | Только Supabase PostgreSQL, Prisma ORM |
-| **Ветка** | `claude/buddy-matching-v2-jyJbK` |
+| **Ветка** | `claude/telegram-webhook-setup-sCxHz` |
 | **Lint** | `bun run lint` перед коммитом (0 ошибок) |
 | **Миграции** | Вручную в Supabase SQL Editor |
-| **API** | ~91 endpoints в `src/app/api/` |
 
-## Vercel Cron (актуальное расписание)
+## Vercel Cron
 
 | Cron | UTC | MSK | Что делает |
 |------|-----|-----|-----------|
-| `0 3 * * *` | 03:00 | 06:00 | Очистка истёкших fleeting thoughts |
+| `0 3 * * *` | 03:00 | 06:00 | Очистка fleeting thoughts |
 | `0 6 * * *` | 06:00 | 09:00 | Утренний checkin reminder |
 | `0 16 * * *` | 16:00 | 19:00 | Ritual reminder |
 | `0 17 * * *` | 17:00 | 20:00 | Вечерний checkin reminder |
 
-## API endpoints (новые)
+## API endpoints (новые в сессии 7)
 
 ```
-POST /api/telegram/webhook        — Telegram bot quick input (6.1)
-GET  /api/telegram/webhook        — healthcheck
-GET  /api/measurements?userId=xxx — теперь возвращает firstByType + latestByType + measurements
+POST /api/telegram/webhook  — +3 команды: задача, ритуалы, сон
+GET  /api/export            — +3 секции: measurements, gym, finances
 ```
