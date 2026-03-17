@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     startDate.setHours(0, 0, 0, 0)
 
     // Get daily stats for the period
-    const [ritualCompletions, habitLogs, dailyStates, tasks] = await Promise.all([
+    const [ritualCompletions, habitLogs, dailyStates, tasks, checkins] = await Promise.all([
       // Ritual completions
       db.ritualCompletion.findMany({
         where: {
@@ -72,7 +72,21 @@ export async function GET(request: NextRequest) {
           date: true,
           updatedAt: true
         }
-      })
+      }),
+
+      // Daily checkins (morning energy + evening rating)
+      db.dailyCheckin.findMany({
+        where: {
+          userId,
+          date: { gte: startDate }
+        },
+        select: {
+          date: true,
+          type: true,
+          energy: true,
+          dayRating: true,
+        }
+      }).catch(() => [] as { date: Date; type: string; energy: number | null; dayRating: number | null }[])
     ])
 
     // Group by date
@@ -87,6 +101,8 @@ export async function GET(request: NextRequest) {
       energy: number | null
       stress: number | null
       sleepHours: number | null
+      morningEnergy: number | null
+      eveningRating: number | null
     }>()
 
     // Initialize all dates
@@ -104,7 +120,9 @@ export async function GET(request: NextRequest) {
         mood: null,
         energy: null,
         stress: null,
-        sleepHours: null
+        sleepHours: null,
+        morningEnergy: null,
+        eveningRating: null,
       })
     }
 
@@ -137,6 +155,16 @@ export async function GET(request: NextRequest) {
         entry.energy = ds.energy
         entry.stress = ds.stress
         entry.sleepHours = ds.sleepHours
+      }
+    })
+
+    // Process checkins
+    checkins.forEach(c => {
+      const dateStr = c.date.toISOString().split('T')[0]
+      const entry = dateMap.get(dateStr)
+      if (entry) {
+        if (c.type === 'morning' && c.energy !== null) entry.morningEnergy = c.energy
+        if (c.type === 'evening' && c.dayRating !== null) entry.eveningRating = c.dayRating
       }
     })
 
@@ -199,6 +227,8 @@ export async function GET(request: NextRequest) {
       energy: entry.energy,
       stress: entry.stress,
       sleepHours: entry.sleepHours,
+      morningEnergy: entry.morningEnergy,
+      eveningRating: entry.eveningRating,
       overallScore: calculateOverallScore(entry)
     }))
 
@@ -217,7 +247,9 @@ export async function GET(request: NextRequest) {
         totalHabits: history.reduce((sum, h) => sum + h.habitsCompleted, 0),
         totalTasks: history.reduce((sum, h) => sum + h.tasksCompleted, 0),
         avgMood: calculateAvg(history.map(h => h.mood).filter(Boolean)),
-        avgEnergy: calculateAvg(history.map(h => h.energy).filter(Boolean))
+        avgEnergy: calculateAvg(history.map(h => h.energy).filter(Boolean)),
+        avgMorningEnergy: calculateAvg(history.map(h => h.morningEnergy).filter(Boolean)),
+        avgEveningRating: calculateAvg(history.map(h => h.eveningRating).filter(Boolean))
       }
     })
   } catch (error) {

@@ -46,6 +46,8 @@ interface HistoryEntry {
   energy: number | null
   stress: number | null
   sleepHours: number | null
+  morningEnergy: number | null
+  eveningRating: number | null
   overallScore: number
 }
 
@@ -69,6 +71,8 @@ interface StatsData {
     totalTasks: number
     avgMood: number | null
     avgEnergy: number | null
+    avgMorningEnergy: number | null
+    avgEveningRating: number | null
   }
 }
 
@@ -300,10 +304,10 @@ export function StatsScreen() {
             <CardContent>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={last14Days.filter(d => d.mood || d.energy)}>
+                  <LineChart data={last14Days.filter(d => d.mood || d.energy || d.morningEnergy || d.eveningRating)}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis 
-                      dataKey="date" 
+                    <XAxis
+                      dataKey="date"
                       tickFormatter={formatDate}
                       tick={{ fontSize: 10, fill: '#9ca3af' }}
                     />
@@ -327,10 +331,34 @@ export function StatsScreen() {
                       dot={{ fill: '#10b981', r: 3 }}
                       connectNulls
                     />
+                    {last14Days.some(d => d.morningEnergy) && (
+                      <Line
+                        type="monotone"
+                        dataKey="morningEnergy"
+                        name="Утр. энергия"
+                        stroke="#6366f1"
+                        strokeWidth={1.5}
+                        strokeDasharray="4 2"
+                        dot={false}
+                        connectNulls
+                      />
+                    )}
+                    {last14Days.some(d => d.eveningRating) && (
+                      <Line
+                        type="monotone"
+                        dataKey="eveningRating"
+                        name="Оценка дня"
+                        stroke="#ec4899"
+                        strokeWidth={1.5}
+                        strokeDasharray="4 2"
+                        dot={false}
+                        connectNulls
+                      />
+                    )}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-              <div className="flex justify-center gap-6 mt-2">
+              <div className="flex flex-wrap justify-center gap-4 mt-2">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-amber-500" />
                   <span className="text-xs text-muted-foreground">Настроение</span>
@@ -339,6 +367,18 @@ export function StatsScreen() {
                   <div className="w-3 h-3 rounded-full bg-emerald-500" />
                   <span className="text-xs text-muted-foreground">Энергия</span>
                 </div>
+                {last14Days.some(d => d.morningEnergy) && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-indigo-500" />
+                    <span className="text-xs text-muted-foreground">Утр. энергия</span>
+                  </div>
+                )}
+                {last14Days.some(d => d.eveningRating) && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-pink-500" />
+                    <span className="text-xs text-muted-foreground">Оценка дня</span>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
