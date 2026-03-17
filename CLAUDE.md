@@ -111,7 +111,7 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Текущее состояние (2026-03-17, сессия 5)
+## Текущее состояние (2026-03-17, сессия 6)
 
 ### Что реализовано (полный список)
 
@@ -161,36 +161,51 @@ export function GymWorkoutDetailDialog() {
 - ✅ Поиск по еде в HealthScreen (фильтр по имени)
 - ✅ Export данных + готовый AI-промпт
 
-### ⚠️ Миграции — ПРИМЕНИТЬ в Supabase!
+**Telegram quick input (сессия 6)**
+- ✅ `POST /api/telegram/webhook` — regex-парсер 6 команд: вода N, вес N, настроение N, энергия N, ел [name] [N ккал], зал [N мин]
+- ✅ Верификация через `TELEGRAM_WEBHOOK_SECRET` (заголовок `X-Telegram-Bot-Api-Secret-Token`)
+- ✅ Поиск пользователя по `telegramId`, ответы с результатом, `/help` → список команд
 
-| Файл | Таблица |
-|------|---------|
-| `prisma/migrations/20260317_gym_stretching.sql` | `gym_workouts.stretching_done` |
-| `prisma/migrations/20260317_emotion_logs.sql` | `emotion_logs` |
-| `prisma/migrations/20260317_fleeting_thoughts.sql` | `fleeting_thoughts` |
+**Онбординг и персонализация (сессия 6)**
+- ✅ Прогрессивный онбординг (7.1): до дня 8 скрыты EmotionWidget, FleetingThoughts, Wellbeing, «Лики недели», «Месячный анализ», «Фокус недели»; показывается баннер «🔓 ещё X дн.»
+- ✅ Карточка «За X дней»: показывает изменение веса (первый → текущий замер, дельта кг)
+- ✅ Настраиваемый HomeScreen (7.2/7.3): `hiddenWidgets Json` в `UserSettings`, переключатели в ProfileScreen → Настройки (Вес, Велнес)
+
+### ⚠️ Миграции — статус
+
+| Файл | Таблица | Статус |
+|------|---------|--------|
+| `prisma/migrations/20260317_gym_period_schedule.sql` | `gym_periods`, `gym_workouts` | ✅ применена |
+| `prisma/migrations/20260317_gym_stretching.sql` | `gym_workouts.stretching_done` | ✅ применена |
+| `prisma/migrations/20260317_emotion_logs.sql` | `emotion_logs` | ✅ применена |
+| `prisma/migrations/20260317_fleeting_thoughts.sql` | `fleeting_thoughts` | ✅ применена |
+| `prisma/migrations/20260317_hidden_widgets.sql` | `user_settings.hidden_widgets` | ✅ применена |
 
 ---
 
 ## Следующие задачи (приоритет)
 
-### 1. 🔴 Telegram-бот: быстрый ввод (6.1)
-Пишешь боту "зал 45 минут" или "съел пиццу 800 ккал" → regex/LLM парсит → записывает в БД.
-**Нужно обсудить**: TELEGRAM_BOT_TOKEN уже есть в ENV, нужен сценарий использования.
-Реализация: webhook `/api/telegram/webhook`, простой regex-парсер (без LLM для начала).
+### 1. 🔴 Расширить настраиваемый HomeScreen (7.2 продолжение)
+Сейчас переключаются только «Вес» и «Велнес». Добавить переключатели для остальных блоков:
+вода, еда, ритуалы, настроение/энергия, быстрый ввод.
+Реализация: массив `WIDGET_CONFIG` в ProfileScreen, цикл через него.
 
-### 2. 🟡 Прогресс от первого дня — расширить (2.4)
-Добавить в карточку "За X дней" изменение веса: первый замер vs последний.
-Данные уже есть в `/api/measurements`, нужно добавить `firstByType` в ответ.
+### 2. 🔴 Зарегистрировать Telegram webhook
+Одноразовый вызов для активации бота:
+```
+https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<domain>/api/telegram/webhook&secret_token=<TELEGRAM_WEBHOOK_SECRET>
+```
+Добавить `TELEGRAM_WEBHOOK_SECRET` в Vercel ENV. Проверить, что бот отвечает.
 
-### 3. 🟡 Прогрессивный онбординг (7.1)
-Первые 7 дней — только базовые блоки. На 8+ день открываются продвинутые фичи.
-Реализация: `user.day` уже есть в AppUser, нужна логика показа/скрытия.
+### 3. 🟡 Расширить парсер Telegram-бота (6.1)
+Добавить команды: `сон 8` (логировать в DailyState.sleepHours если поле есть), `задача купить хлеб` → создать Task, `ритуалы` → отметить все ритуалы дня выполненными.
 
-### 4. 🟢 Настраиваемый HomeScreen (7.2/7.3)
-Пользователь скрывает/показывает блоки. Настройки в `UserSettings` (новое поле `hiddenWidgets`).
+### 4. 🟡 Экспорт в MD + AI-промпт (7.8)
+Доделать ExportScreen: добавить данные за месяц (замеры, PR, финансы) + готовый структурированный промпт для вставки в ChatGPT/Claude.
+Файл: `src/components/screens/ExportScreen.tsx`
 
-### 5. 🟢 Экспорт в MD + AI-промпт (7.8)
-Доделать ExportScreen: включить данные за месяц + готовый структурированный промпт для анализа.
+### 5. 🟢 Прогрессивный онбординг — расширить (7.1)
+Сейчас всё открывается на день 8. Сделать двухуровнево: день 8 — аналитика, день 15 — финансы и buddy matching. Логика: один массив `{ widgetId, unlockDay }[]`.
 
 ---
 
@@ -243,6 +258,44 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
+## Что делали в сессии 2026-03-17 (сессия 6)
+
+### Telegram webhook + онбординг + персонализация
+
+**6.1 — Telegram webhook быстрый ввод** (`src/app/api/telegram/webhook/route.ts`)
+- Принимает Telegram updates (POST), находит пользователя по `telegramId`
+- Regex-парсер 6 команд: `вода N`, `вес N`, `настроение N`, `энергия N`, `ел [name] [N ккал]`, `зал [N мин]`
+- Вода: получает текущий остаток и прибавляет (не перезаписывает)
+- Зал: если есть активный GymPeriod с тренировкой на сегодня — отмечает completed, иначе создаёт Note
+- Ответы с emoji-подтверждением, команда `помощь` → список
+- `TELEGRAM_WEBHOOK_SECRET` — опциональная верификация через заголовок
+- GET → healthcheck `{ ok, configured }`
+- Исправлен баг: `earlyBird` не деструктурировался в `CheckinStatusBlock` → ReferenceError на продакшне
+
+**2.4 — Прогресс веса от первого дня**
+- `/api/measurements` теперь возвращает `firstByType` (первый замер каждого типа, `orderBy: date asc`)
+- ProfileScreen карточка «За X дней»: строка `75.0 → 72.5 кг (−2.5 кг)` ниже трёх плиток, цвет зелёный если снизил, оранжевый если набрал
+
+**7.1 — Прогрессивный онбординг**
+- HomeScreen: `user.day < 8` скрывает EmotionWidget, FleetingThoughtsWidget, WellbeingWidget, «Фокус недели», «Лики недели», «Месячный анализ»
+- Баннер «🔓 Аналитика откроется на 8-й день (ещё X дн.)» виден на днях 1–7
+- Решение: простые inline условия `(user?.day ?? 1) >= 8`, без нового стейта
+
+**7.2/7.3 — Настраиваемый HomeScreen**
+- Prisma schema: `hiddenWidgets Json @default("[]")` в `UserSettings`
+- Миграция: `prisma/migrations/20260317_hidden_widgets.sql` (применена)
+- `UserSettings` interface расширен полем `hiddenWidgets?: string[]`
+- HomeScreen: грузит настройки при монтировании, скрывает виджеты `weight` и `wellbeing` если они в массиве
+- ProfileScreen → Настройки: раздел «Виджеты главного экрана» с двумя Switch (Вес / Велнес), PATCH `/api/settings`
+- Решение: хранить как JSON массив строк-идентификаторов, а не булевы поля (проще расширять)
+
+### Что НЕ успели / осталось
+- Регистрация webhook в Telegram (нужен ручной `setWebhook` вызов с правильным `secret_token`)
+- Больше виджетов в настройках HomeScreen (вода, еда, ритуалы, настроение)
+- Двухуровневый онбординг (день 15 для финансов/buddy)
+
+---
+
 ## Vercel Cron (актуальное расписание)
 
 | Cron | UTC | MSK | Что делает |
@@ -251,3 +304,12 @@ export function GymWorkoutDetailDialog() {
 | `0 6 * * *` | 06:00 | 09:00 | Утренний checkin reminder |
 | `0 16 * * *` | 16:00 | 19:00 | Ritual reminder |
 | `0 17 * * *` | 17:00 | 20:00 | Вечерний checkin reminder |
+
+## Telegram webhook — активация (разовая)
+
+```bash
+curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
+  -d url=https://<vercel-domain>/api/telegram/webhook \
+  -d secret_token=<TELEGRAM_WEBHOOK_SECRET>
+```
+ENV Vercel: добавить `TELEGRAM_WEBHOOK_SECRET` (любая строка ≥ 16 символов).
