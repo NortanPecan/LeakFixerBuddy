@@ -19,6 +19,10 @@ interface DayData {
   hadGym: boolean
   morningCheckinDone: boolean
   eveningCheckinDone: boolean
+  ritualsCompleted: number
+  ritualsTotal: number
+  habitsCompleted: number
+  expenses: number
 }
 
 interface LeakHint {
@@ -37,6 +41,9 @@ interface Summary {
   checkinDays: number
   totalCalories: number
   avgCaloriesPerDay: number
+  totalRitualsCompleted: number
+  totalHabitsCompleted: number
+  totalExpenses: number
   bestDay: DayData
 }
 
@@ -125,6 +132,13 @@ export function WeeklyReportScreen() {
         <StatBadge label="Энергия" value={report.summary.avgEnergy} emoji="⚡" />
         <StatBadge label="Зал" value={report.summary.gymDays} emoji="💪" suffix="д" />
         <StatBadge label="Чекапы" value={report.summary.checkinDays} emoji="✓" suffix="/7" />
+      </div>
+      {/* Second row of stats */}
+      <div className="grid grid-cols-4 gap-2">
+        <StatBadge label="Ритуалы" value={report.summary.totalRitualsCompleted} emoji="🔥" />
+        <StatBadge label="Привычки" value={report.summary.totalHabitsCompleted} emoji="🔄" />
+        <StatBadge label="Оценка дня" value={report.summary.avgEveningRating} emoji="🌙" />
+        <StatBadge label="Расходы" value={report.summary.totalExpenses} emoji="💰" suffix="₽" />
       </div>
 
       {/* Leak hints — most important block */}
@@ -223,7 +237,10 @@ function StatBadge({ label, value, emoji, suffix = '' }: {
     >
       <div className="text-lg">{emoji}</div>
       <div className="text-base font-bold text-white">
-        {value > 0 ? value.toFixed(value % 1 === 0 ? 0 : 1) : '—'}{suffix}
+        {value > 0
+          ? (value >= 10000 ? `${(value / 1000).toFixed(0)}k` : value.toFixed(value % 1 === 0 ? 0 : 1))
+          : '—'
+        }{value > 0 ? suffix : ''}
       </div>
       <div className="text-[10px] text-white/40">{label}</div>
     </div>
@@ -254,6 +271,20 @@ function DayRow({ day }: { day: DayData }) {
 
       {/* Gym */}
       <div className="w-5 text-center text-sm">{day.hadGym ? '💪' : ''}</div>
+
+      {/* Rituals */}
+      {day.ritualsTotal > 0 && (
+        <div
+          className="w-5 text-center text-[10px] font-bold"
+          style={{
+            color: day.ritualsCompleted / day.ritualsTotal >= 0.8 ? '#22c55e'
+              : day.ritualsCompleted / day.ritualsTotal >= 0.5 ? '#f59e0b' : '#ef4444',
+          }}
+          title={`Ритуалы: ${day.ritualsCompleted}/${day.ritualsTotal}`}
+        >
+          🔥
+        </div>
+      )}
 
       {/* Energy bar */}
       <div className="flex-1">

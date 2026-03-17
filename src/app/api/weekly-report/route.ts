@@ -37,6 +37,9 @@ export async function GET(request: NextRequest) {
       checkins,
       foodEntries,
       gymWorkouts,
+      ritualCompletions,
+      habitLogs,
+      transactions,
     ] = await Promise.all([
       db.dailyState.findMany({
         where: { userId, date: { gte: weekStart, lt: weekEnd } },
@@ -60,6 +63,18 @@ export async function GET(request: NextRequest) {
             select: { date: true, completed: true, status: true },
           }).catch(() => [] as { date: Date; completed: boolean; status: string | null }[])
         : Promise.resolve([] as { date: Date; completed: boolean; status: string | null }[]),
+      db.ritualCompletion.findMany({
+        where: { userId, date: { gte: weekStart, lt: weekEnd } },
+        select: { date: true, completed: true, ritualId: true },
+      }).catch(() => [] as { date: Date; completed: boolean; ritualId: string }[]),
+      db.habitLog.findMany({
+        where: { userId, date: { gte: weekStart, lt: weekEnd } },
+        select: { date: true, value: true, habitId: true },
+      }).catch(() => [] as { date: Date; value: number; habitId: string }[]),
+      db.transaction.findMany({
+        where: { userId, date: { gte: weekStart, lt: weekEnd } },
+        select: { date: true, amount: true, type: true },
+      }).catch(() => [] as { date: Date; amount: number; type: string }[]),
     ])
 
     // Build per-day map
@@ -77,6 +92,11 @@ export async function GET(request: NextRequest) {
         const wd = w.date.toISOString().split('T')[0]
         return wd === dateStr && (w.completed || w.status === 'completed')
       })
+      const dayRituals = ritualCompletions.filter(r => r.date.toISOString().split('T')[0] === dateStr)
+      const dayHabits = habitLogs.filter(h => h.date.toISOString().split('T')[0] === dateStr)
+      const dayExpenses = transactions
+        .filter(t => t.date.toISOString().split('T')[0] === dateStr && t.type === 'expense')
+        .reduce((s, t) => s + Math.abs(Number(t.amount)), 0)
 
       days.push({
         date: dateStr,
@@ -90,6 +110,10 @@ export async function GET(request: NextRequest) {
         hadGym,
         morningCheckinDone: !!morningCheckin,
         eveningCheckinDone: !!eveningCheckin,
+        ritualsCompleted: dayRituals.filter(r => r.completed).length,
+        ritualsTotal: dayRituals.length,
+        habitsCompleted: dayHabits.length,
+        expenses: dayExpenses,
       })
     }
 
@@ -105,6 +129,9 @@ export async function GET(request: NextRequest) {
       checkinDays: days.filter(d => d.morningCheckinDone).length,
       totalCalories: days.reduce((s, d) => s + d.totalCalories, 0),
       avgCaloriesPerDay: avg(days.filter(d => d.foodCount > 0).map(d => d.totalCalories)),
+      totalRitualsCompleted: days.reduce((s, d) => s + d.ritualsCompleted, 0),
+      totalHabitsCompleted: days.reduce((s, d) => s + d.habitsCompleted, 0),
+      totalExpenses: days.reduce((s, d) => s + d.expenses, 0),
       bestDay: days.reduce((best, d) => {
         const score = (d.mood || 0) + (d.eveningRating || 0)
         const bestScore = (best?.mood || 0) + (best?.eveningRating || 0)
@@ -138,6 +165,10 @@ interface DayData {
   hadGym: boolean
   morningCheckinDone: boolean
   eveningCheckinDone: boolean
+  ritualsCompleted: number
+  ritualsTotal: number
+  habitsCompleted: number
+  expenses: number
 }
 
 interface LeakHint {
@@ -244,6 +275,51 @@ function detectLeaks(days: DayData[]): LeakHint[] {
         message: `${highDays.length} дня с резким скачком калорий (>${Math.round(avgCals * 1.4)} ккал при среднем ${Math.round(avgCals)}). Проверь триггеры.`,
         days: highDays.map(d => d.dayOfWeek),
       })
+    }
+  }
+
+  // Hint 7: Ritual consistency leak
+  const daysWithRituals = days.filter(d => d.ritualsTotal > 0)
+  if (daysWithRituals.length >= 3) {
+    const lowRitualDays = daysWithRituals.filter(d => d.ritualsTotal > 0 && (d.ritualsCompleted / d.ritualsTotal) < 0.5)
+    if (lowRitualDays.length >= 3) {
+      hints.push({
+        type: 'ritual_consistency',
+        severity: lowRitualDays.length >= 5 ? 'critical' : 'warning',
+        emoji: '🔥',
+        message: `${lowRitualDays.length} дней из ${daysWithRituals.length} — ритуалы выполнены менее чем на 50%. Системная утечка в привычках.`,
+        days: lowRitualDays.map(d => d.dayOfWeek),
+      })
+    }
+  }
+
+  // Hint 8: Habits not tracked
+  const totalHabitLogs = days.reduce((s, d) => s + d.habitsCompleted, 0)
+  if (totalHabitLogs === 0 && days.some(d => new Date(d.date) < new Date())) {
+    hints.push({
+      type: 'no_habits',
+      severity: 'info',
+      emoji: '🔄',
+      message: 'Привычки на этой неделе не отмечались. Трекинг привычек помогает выявлять паттерны.',
+    })
+  }
+
+  // Hint 9: Rituals → day quality correlation
+  const daysWithRitualsAndRating = days.filter(d => d.ritualsTotal > 0 && d.eveningRating !== null)
+  if (daysWithRitualsAndRating.length >= 3) {
+    const highRitualDays = daysWithRitualsAndRating.filter(d => d.ritualsTotal > 0 && (d.ritualsCompleted / d.ritualsTotal) >= 0.8)
+    const lowRitualDays2 = daysWithRitualsAndRating.filter(d => d.ritualsTotal > 0 && (d.ritualsCompleted / d.ritualsTotal) < 0.5)
+    if (highRitualDays.length > 0 && lowRitualDays2.length > 0) {
+      const avgHighRating = avg(highRitualDays.map(d => d.eveningRating!))
+      const avgLowRating = avg(lowRitualDays2.map(d => d.eveningRating!))
+      if (avgHighRating > avgLowRating + 1.5) {
+        hints.push({
+          type: 'rituals_quality',
+          severity: 'info',
+          emoji: '🔥',
+          message: `В дни когда ритуалы выполнены на 80%+ — день оценивается на ${(avgHighRating - avgLowRating).toFixed(1)} балла выше. Ритуалы работают!`,
+        })
+      }
     }
   }
 

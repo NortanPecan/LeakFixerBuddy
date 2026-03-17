@@ -130,6 +130,8 @@ function ScreenRouter({ screen, contentId }: { screen: Screen; contentId?: strin
             return <HabitsScreen />
           case 'weekly-report' as Screen:
             return <WeeklyReportScreen />
+          case 'note-detail' as Screen:
+            return <NotesScreen />
           default:
             return <HomeScreen />
         }

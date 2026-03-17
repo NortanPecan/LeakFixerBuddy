@@ -335,7 +335,12 @@ export function ChallengesScreen() {
       )}
 
       {/* Create Challenge Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+      <Dialog open={showCreateDialog} onOpenChange={(open) => {
+        setShowCreateDialog(open)
+        if (!open) {
+          setNewChallenge({ name: '', type: 'ritual', zone: 'general', duration: '14', targetDays: '', targetSteps: '', targetCount: '', periodDays: '30', actionType: 'actions' })
+        }
+      }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Новый челендж</DialogTitle>
