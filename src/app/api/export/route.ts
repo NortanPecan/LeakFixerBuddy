@@ -248,6 +248,56 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Leak Engine — weekly analysis section
+    if (entities.includes('leaks')) {
+      markdown += `## 🔍 Лики (найденные паттерны за неделю)\n\n`
+      try {
+        // Get Monday of current week from start date
+        const refDate = new Date(start)
+        const day = refDate.getDay()
+        const diff = day === 0 ? -6 : 1 - day
+        refDate.setDate(refDate.getDate() + diff)
+        refDate.setHours(0, 0, 0, 0)
+
+        // Build per-day data for leak detection
+        const weekEnd = new Date(refDate)
+        weekEnd.setDate(weekEnd.getDate() + 7)
+
+        const [wDailyStates, wCheckins, wRituals] = await Promise.all([
+          db.dailyState.findMany({ where: { userId, date: { gte: refDate, lt: weekEnd } } }),
+          db.dailyCheckin.findMany({ where: { userId, date: { gte: refDate, lt: weekEnd } } }),
+          db.ritualCompletion.findMany({ where: { userId, date: { gte: refDate, lt: weekEnd } } }),
+        ])
+
+        const lowEnergyDays = wCheckins.filter(c => c.type === 'morning' && c.energy !== null && c.energy <= 4).length
+        const missedCheckins = 7 - wCheckins.filter(c => c.type === 'morning').length
+        const lowRitualDays = (() => {
+          const byDate = new Map<string, { total: number; done: number }>()
+          wRituals.forEach(r => {
+            const d = r.date.toISOString().split('T')[0]
+            const entry = byDate.get(d) || { total: 0, done: 0 }
+            entry.total++
+            if (r.completed) entry.done++
+            byDate.set(d, entry)
+          })
+          return Array.from(byDate.values()).filter(v => v.total > 0 && v.done / v.total < 0.5).length
+        })()
+        const avgMood = (() => {
+          const moods = wDailyStates.filter(s => s.mood !== null).map(s => s.mood as number)
+          return moods.length > 0 ? (moods.reduce((a, b) => a + b, 0) / moods.length).toFixed(1) : null
+        })()
+
+        if (lowEnergyDays >= 2) markdown += `- ⚠️ Низкая утренняя энергия: ${lowEnergyDays} дней (≤4/10)\n`
+        if (missedCheckins >= 3) markdown += `- ⚠️ Пропущено чекапов: ${missedCheckins}/7\n`
+        if (lowRitualDays >= 3) markdown += `- ⚠️ Ритуалы выполнены <50% в ${lowRitualDays} из 7 дней\n`
+        if (avgMood && parseFloat(avgMood) < 6) markdown += `- ⚠️ Среднее настроение низкое: ${avgMood}/10\n`
+        if (lowEnergyDays < 2 && missedCheckins < 3 && lowRitualDays < 3) markdown += `- ✅ Критических ликов не обнаружено\n`
+      } catch {
+        markdown += `- Нет данных для анализа ликов\n`
+      }
+      markdown += `\n`
+    }
+
     // Add footer
     markdown += `---\n`
     markdown += `_Сгенерировано LeakFixer Buddy ${formatDate(new Date())}_\n`
