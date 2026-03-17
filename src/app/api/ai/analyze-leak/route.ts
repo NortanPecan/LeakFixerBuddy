@@ -151,7 +151,11 @@ export async function POST(request: NextRequest) {
 
   let aiResult: { text: string; provider: 'groq' | 'gemini' }
   try {
-    aiResult = await callAI(systemPrompt, userMessage)
+    aiResult = await callAI(systemPrompt, userMessage, {
+      userId,
+      callType: 'analyze-leak',
+      leakType,
+    })
   } catch (err) {
     console.error('[analyze-leak] AI call failed:', err)
     return NextResponse.json(
