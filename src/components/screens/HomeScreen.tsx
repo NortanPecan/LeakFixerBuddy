@@ -382,25 +382,43 @@ export function HomeScreen() {
       <Card className="bg-gradient-to-br from-slate-900/80 to-slate-800/50 border-white/10 backdrop-blur-xl">
         <CardContent className="p-4">
           <div className="flex items-center gap-4">
-            {/* Left: Vertical Scale */}
-            <div className="flex flex-col items-center">
-              <div className="text-[10px] text-orange-400 font-medium tracking-wide mb-1">
-                ПИК 🔥
+            {/* Left: Dual vertical scales (mood + energy) */}
+            <div className="flex gap-2 items-center">
+              {/* Mood bar */}
+              <div className="flex flex-col items-center">
+                <div className="text-[9px] text-orange-400 font-medium mb-1">ПИК 🔥</div>
+                <div className="relative w-8 h-36 bg-slate-900/60 rounded-xl border border-white/20 p-1 flex flex-col justify-between overflow-hidden">
+                  {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map((level) => (
+                    <div
+                      key={level}
+                      className={`h-2.5 mx-0.5 rounded transition-colors ${
+                        globalState && level <= globalState.mood
+                          ? getMoodColor(globalState.mood)
+                          : 'bg-slate-800'
+                      }`}
+                    />
+                  ))}
+                </div>
+                <div className="text-[9px] text-muted-foreground mt-1">😊</div>
               </div>
-              <div className="relative w-10 h-36 bg-slate-900/60 rounded-xl border border-white/20 p-1 flex flex-col justify-between overflow-hidden">
-                {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map((level) => (
-                  <div
-                    key={level}
-                    className={`h-2.5 mx-0.5 rounded transition-colors ${
-                      globalState && level <= globalState.mood
-                        ? getMoodColor(globalState.mood)
-                        : 'bg-slate-800'
-                    }`}
-                  />
-                ))}
-              </div>
-              <div className="text-[10px] text-red-400 font-medium tracking-wide mt-1">
-                КРИЗИС 💀
+
+              {/* Energy bar */}
+              <div className="flex flex-col items-center">
+                <div className="text-[9px] text-yellow-400 font-medium mb-1">⚡</div>
+                <div className="relative w-8 h-36 bg-slate-900/60 rounded-xl border border-white/20 p-1 flex flex-col justify-between overflow-hidden">
+                  {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map((level) => {
+                    const energy = globalState?.energy ?? checkinStatus.morningEnergy ?? 0
+                    const filled = energy > 0 && level <= energy
+                    const color = energy >= 7 ? 'bg-yellow-400' : energy >= 5 ? 'bg-amber-500' : 'bg-orange-700'
+                    return (
+                      <div
+                        key={level}
+                        className={`h-2.5 mx-0.5 rounded transition-colors ${filled ? color : 'bg-slate-800'}`}
+                      />
+                    )
+                  })}
+                </div>
+                <div className="text-[9px] text-muted-foreground mt-1">🔋</div>
               </div>
             </div>
 
