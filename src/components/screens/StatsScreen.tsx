@@ -113,6 +113,21 @@ export function StatsScreen() {
   const last14Days = allDays.slice(-14)
   const last7Days = allDays.slice(-7)
 
+  // Trend arrows: compare first half vs second half of the period
+  const avgField = (days: HistoryEntry[], key: 'mood' | 'energy') => {
+    const vals = days.map(d => d[key]).filter((v): v is number => v !== null)
+    return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null
+  }
+  const half = Math.floor(allDays.length / 2)
+  const firstHalf = allDays.slice(0, half)
+  const secondHalf = allDays.slice(half)
+  const moodTrend = allDays.length >= 4
+    ? (() => { const f = avgField(firstHalf, 'mood'); const s = avgField(secondHalf, 'mood'); return f !== null && s !== null ? s - f : null })()
+    : null
+  const energyTrend = allDays.length >= 4
+    ? (() => { const f = avgField(firstHalf, 'energy'); const s = avgField(secondHalf, 'energy'); return f !== null && s !== null ? s - f : null })()
+    : null
+
   // Format date for display
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
@@ -312,6 +327,16 @@ export function StatsScreen() {
               <CardTitle className="text-base flex items-center gap-2">
                 <Brain className="w-5 h-5" />
                 Настроение и энергия
+                {moodTrend !== null && Math.abs(moodTrend) >= 0.3 && (
+                  <span className={`text-xs font-normal ml-1 ${moodTrend > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    😊{moodTrend > 0 ? '↑' : '↓'}{Math.abs(moodTrend).toFixed(1)}
+                  </span>
+                )}
+                {energyTrend !== null && Math.abs(energyTrend) >= 0.3 && (
+                  <span className={`text-xs font-normal ml-1 ${energyTrend > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    ⚡{energyTrend > 0 ? '↑' : '↓'}{Math.abs(energyTrend).toFixed(1)}
+                  </span>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>

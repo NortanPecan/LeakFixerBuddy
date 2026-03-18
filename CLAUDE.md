@@ -7,7 +7,7 @@ Self-improvement social network. Next.js 14 App Router + TypeScript + Prisma + S
 
 ## КРИТИЧЕСКИЕ правила
 
-- **ВЕТКА**: только `claude/ai-weekly-summary-rmF6Y` — никогда не пушить в main/master без разрешения
+- **ВЕТКА**: только `claude/telegram-add-exercise-RCu1y` — никогда не пушить в main/master без разрешения
 - **БД**: только Supabase PostgreSQL через Prisma ORM (локальной БД нет!)
 - **Язык UI**: русский
 - **Lint**: `bun run lint` перед каждым коммитом (0 ошибок!)
@@ -117,7 +117,7 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Текущее состояние (2026-03-18, сессия 16)
+## Текущее состояние (2026-03-18, сессия 17)
 
 ### Что реализовано (полный список)
 
@@ -195,26 +195,35 @@ export function GymWorkoutDetailDialog() {
 - ✅ `GET /api/ai/patterns` — список всех UserAiPattern пользователя
 - ✅ ProfileScreen: секция «История AI-анализов» — тип лика, кол-во анализов, сколько сработало, дата
 
-**Telegram bot (сессии 6–9, 12–13, 16)**
+**Telegram bot (сессии 6–9, 12–13, 16–17)**
 - ✅ `POST /api/telegram/webhook` — 15 текстовых команд: вода/вес/настроение/энергия/еда/зал/задача/ритуалы/сон/сводка/доход/расход/ачивменты/тренер/помощь
 - ✅ Верификация через `TELEGRAM_WEBHOOK_SECRET`, GET → healthcheck
-- ✅ Inline keyboard: главное меню с 13 кнопками (💪🍽️💧✅😴⚖️😊⚡💰📊📋🔍🏅)
+- ✅ Inline keyboard: главное меню с **14 кнопками** (💪🍽️💧✅😴⚖️😊⚡💰📊📋🔍🏅🏋️)
 - ✅ Callback handlers для каждого модуля — сводки прямо в боте
 - ✅ GYM сводка: упражнения в формате `Жим — 4х12х50кг(55) 🏆`, кнопка «Отметить выполненной»
 - ✅ GYM: кнопки `➕ Сет → Название` под каждым упражнением → ForceReply → `75x8` / `75 8` / `75` → `gymExerciseSet.create`
+- ✅ **GYM: кнопка `➕ Упражнение`** → ForceReply «Жим 4x12 75кг» → `parseNewExercise()` → `gymExercise.create` + первый сет
 - ✅ Вода: live-обновление без нового сообщения, кнопки +200/+350/+500 мл
 - ✅ Ритуалы: список с ✅/⬜, кнопка «Отметить все выполненными»
 - ✅ ⚙️ Настройки кнопок: каждую кнопку можно вкл/выкл прямо в боте, хранится в `hidden_widgets` (префикс `tg_`)
 - ✅ Webhook зарегистрирован, токен перевыпущен через @BotFather
-- ✅ ForceReply для Сон/Вес/Настроение/Энергия/GymSet: кнопка → бот спрашивает значение → пользователь отвечает → записывается
+- ✅ ForceReply для Сон/Вес/Настроение/Энергия/GymSet/GymExercise/Тренер: кнопка → бот спрашивает → записывается
 - ✅ 🔍 Лики в боте: кнопка показывает список UserAiPattern с причинами и топ-решениями
 - ✅ AI-адаптация неизвестных сообщений: Groq классифицирует тип → подтверждение ✅/❌ → сохранение + обучение regex-паттерна
 - ✅ Кнопка 🏅 Достижения + команда `ачивменты` — список с датами или подсказка как получить
 - ✅ Расширенный парсер еды: `ел {name} {вес} {ккал/100г} [Б Ж У]` → автопересчёт на порцию
 - ✅ Дедупликация по update_id (zone=`__tg_dedup`) — защита от Telegram retry loop при медленном AI
 - ✅ `тренер [вопрос]` — AI Coach: 30 дней данных → Groq → конкретный ответ по числам, логируется в `ai_logs (callType='tg_coach')`
+- ✅ **Кнопка 🏋️ Тренер в меню**: `btn_trainer` → ForceReply → `runCoach()` (shared функция, DRY)
 - ✅ AI-резюме недели: `GET /api/ai/weekly-digest?userId=` + batch-рассылка `GET /api/telegram/send-weekly-digest`
 - ✅ Cron `0 7 * * 1` в `vercel.json` — понедельник 07:00 UTC = 10:00 МСК
+
+**AI трансформация (сессия 17)**
+- ✅ `GET /api/ai/transformation?userId=` — первые 30 дней vs последние 30 дней: mood/energy/gym/rituals/calories/weight → AI-нарратив «Как я изменился», кеш 7 дней
+- ✅ ProfileScreen: карточка «✨ Как я изменился» при `day >= 30`, ленивая загрузка, fallback при ошибке
+
+**Аналитика StatsScreen (сессии 16–17)**
+- ✅ Стрелки трендов ↑↓ в карточке «Настроение и энергия» — сравнение первой vs второй половины периода, порог ≥ 0.3, зелёные/красные
 
 **Онбординг и персонализация (сессия 6)**
 - ✅ Прогрессивный онбординг (7.1): до дня 8 скрыты EmotionWidget, FleetingThoughts, Wellbeing, «Лики недели», «Месячный анализ», «Фокус недели»; показывается баннер «🔓 ещё X дн.»
@@ -236,42 +245,92 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Следующие задачи (приоритет, сессия 17)
+## Следующие задачи (приоритет, сессия 18)
 
-### 1. 🔴 Telegram: «+ Упражнение» в сводке зала
-Дополнение к уже реализованному «+ Сет» — добавить возможность добавить новое упражнение прямо из бота.
-- Кнопка `[➕ Упражнение]` в конце gym summary
-- callback `gym_addex_{workoutId}` → ForceReply «Введи: Жим 4x12 75кг»
-- Парсить формат «Название [sets]x[reps] [weight]кг» → `db.gymExercise.create` + первый сет
-- Это дополняет уже готовый «+ Сет» — вместе они дают полный контроль над тренировкой из TG
-
-### 2. 🔴 AI-нарратив «Как я изменился» (2.4)
-За 90 дней — один AI-текст вместо набора графиков.
-- `GET /api/ai/transformation?userId=` — сравнивает первые 30 дней vs последние 30 дней
-- Метрики: ритуалы %, настроение avg, тренировки count, вес дельта, стрик max
-- AI формирует нарратив: «За 90 дней: ритуалы выросли с 40% до 73%, срывов в 2 раза меньше…»
-- Показывать в ProfileScreen рядом с карточкой «За X дней»
-- Кешировать в `ai_logs (callType='transformation')` на 7 дней
-
-### 3. 🟡 Telegram: кнопка «🏋️ Тренер» в главном меню
-Добавить `тренер` как постоянную кнопку в `TG_BUTTONS`.
-- Сейчас `/тренер` работает только текстом — нет кнопки в меню
-- Добавить `{ id: 'trainer', emoji: '🏋️', label: 'Тренер' }` в `TG_BUTTONS`
-- callback `btn_trainer` → спрашивает вопрос через ForceReply вместо открытия сводки
+### 1. 🔴 Telegram: редактирование существующего упражнения
+Сейчас можно добавить упражнение и сет, но нельзя изменить имя/схему уже записанного упражнения.
+- Кнопка `✏️ Изменить` рядом с каждым упражнением в gym summary
+- callback `gym_editex_{exerciseId}` → ForceReply «Введи новое: 4x10 80кг»
+- Парсит только NxM и/или вес (имя не меняем) → `gymExercise.update(targetSets, targetReps, weight)`
 - Файл: `src/app/api/telegram/webhook/route.ts`
 
-### 4. 🟡 StatsScreen — тренды за период
-Сейчас StatsScreen показывает графики за 7/14/30/90 дней, но нет сводки «стало лучше/хуже».
-- В cards «Итого»: цветные стрелки тренда (↑/↓) рядом с avg mood, avg energy
-- Сравнивать первую половину периода vs вторую половину
+### 2. 🔴 ProfileScreen: переключатель «Как я изменился» в виджетах
+Карточка трансформации (сессия 17) всегда видна при day >= 30 — нет кнопки скрыть.
+- Добавить `{ id: 'transformation', label: 'AI-нарратив «Как я изменился»' }` в `WIDGET_CONFIG` в ProfileScreen
+- HomeScreen/ProfileScreen: если `hiddenWidgets.includes('transformation')` — не грузить и не показывать
+- Файл: `src/components/screens/ProfileScreen.tsx`
+
+### 3. 🟡 Telegram: сводка недели по команде «неделя» / «итоги»
+Пользователи часто хотят краткие итоги недели прямо в боте, не ждать понедельника.
+- Regex `WEEK_RE = /^(?:неделя|итоги недели|week|summary week)$/i`
+- Обработчик: вызывает `generateWeeklyDigest(userId, firstName)` (уже есть в `send-weekly-digest`)
+- Ответ: тот же формат что и ponedel'nik-рассылка
+- Файл: `src/app/api/telegram/webhook/route.ts`
+
+### 4. 🟡 StatsScreen: тренды в карточке «Итого»
+Стрелки ↑↓ добавлены только в заголовок «Настроение и энергия» (сессия 17).
+Нужно то же самое в карточке «Итого за N дней» — рядом с avg mood/energy.
+- Добавить вычисление `avgMoodTotal` и `avgEnergyTotal` из `allDays`
+- В блок карточки «Итого» добавить строку «😊 avg X.X ↑/↓» / «⚡ avg X.X ↑/↓»
 - Файл: `src/components/screens/StatsScreen.tsx`
 
-### 5. 🟢 WeeklyDigest — проверить первую рассылку
-Технически готово (сессия 16), но нужно убедиться что всё работает:
-- Проверить `vercel.json` — cron `0 7 * * 1` добавлен
-- Убедиться что `CRON_SECRET` защищает `/api/telegram/send-weekly-digest`
-- Протестировать вручную: `GET /api/ai/weekly-digest?userId=...`
-- Проверить что digest не шлётся если `telegramId` не привязан
+### 5. 🟢 Достижения: дозаполнить 4 заблокированных бейджа
+ProfileScreen показывает 4 плитки «заблокировано» (STREAK_7, STREAK_30, WATER_WEEK, GYM_10).
+Бэкенд уже проверяет их в `/api/achievements/check` (сессия 13).
+- Убедиться что при каждом `POST /api/achievements/check` все 4 условия реально вычисляются
+- Проверить: `STREAK_7` смотрит `user.streak >= 7`, `GYM_10` смотрит `gymWorkout.count >= 10`
+- Файл: `src/app/api/achievements/check/route.ts`
+
+---
+
+## Что делали в сессии 2026-03-18 (сессия 17)
+
+### 5 задач — полная реализация
+
+**Изменённые файлы:**
+- `src/app/api/telegram/webhook/route.ts` — расширения (+350 строк чистого добавления):
+  - **+ Упражнение**: кнопка `[➕ Упражнение]` в конце gym summary
+  - `gym_addex_{workoutId}` callback → `sendForceReply` с форматами ввода
+  - `PendingGymExercise { __type: 'gymExercise', workoutId }` добавлен в `PendingPayload` union
+  - ForceReply-обработчик: `parseNewExercise()` → `gymExercise.create(order, targetSets, targetReps, weight)` + `gymExerciseSet.create` если вес указан
+  - **Кнопка 🏋️ Тренер**: добавлена в `TG_BUTTONS` (14-я кнопка), `btn_trainer` callback → `sendForceReply`
+  - `PendingTrainer { __type: 'trainerQuestion' }` добавлен в `PendingPayload` union
+  - ForceReply-обработчик: `runCoach(userId, question)` → ответ
+  - **DRY-рефакторинг**: `COACH_SYSTEM` и data-gathering вынесены в shared `runCoach()` — убрано дублирование с `TRAINER_RE` handler
+- `src/components/screens/ProfileScreen.tsx`:
+  - State `transformation` + `transformationLoading`
+  - `useEffect`: при `day >= 30` загружает `/api/ai/transformation`
+  - Карточка «✨ Как я изменился» с нарративом, анимированным плейсхолдером, пометкой кеша
+- `src/components/screens/StatsScreen.tsx`:
+  - Вычисление `moodTrend` и `energyTrend` — первая vs вторая половина `allDays`
+  - Стрелки `😊↑0.8` / `⚡↓0.4` в заголовке карточки, порог ≥ 0.3, зелёные/красные
+
+**Новые файлы:**
+- `src/app/api/ai/transformation/route.ts` — `GET /api/ai/transformation?userId=`
+  - Проверяет `user.day >= 30`, иначе 422 `insufficient_data`
+  - Сравнивает первые 30 дней (с `user.createdAt`) vs последние 30 дней
+  - Метрики: mood avg, energy avg, gym count, rituals %, calories avg, weight delta
+  - `TRANSFORMATION_SYSTEM` промпт — «нарратив 3-5 предложений, конкретные цифры»
+  - Кеш 7 дней в `ai_logs (callType='transformation')`
+  - Возвращает `{ narrative, cached, createdAt, metrics }` (metrics для будущих графиков)
+
+**Smoke test Weekly Digest (задача 5):**
+- `vercel.json`: `"schedule": "0 7 * * 1"` для `/api/telegram/send-weekly-digest` ✅
+- `CRON_SECRET` проверяется через `Authorization: Bearer` ✅
+- GET + POST оба поддерживаются ✅
+- Пользователи без `telegramId` автоматически пропускаются ✅
+
+### Принятые решения (важно для следующих сессий)
+
+- **`runCoach()` как shared функция**: и `TRAINER_RE` в `handleCommand`, и `btn_trainer` ForceReply, и `trainerQuestion` в `reply_to_message` — все вызывают один `runCoach(userId, question)`. Никакого дублирования.
+- **`parseNewExercise()` — только имя + NxM + вес**: не пытаемся парсить мышечные группы или заметки. Формат «Жим» / «Жим 4x12» / «Жим 75кг» / «Жим 4x12 75кг». Разделители x/х/X/Х/×/*.
+- **`gymExercise.create` без `templateId`**: новые упражнения из TG создаются как свободные (без привязки к шаблону), `order = existingCount + 1`.
+- **Первый сет только при наличии веса**: если пользователь ввёл только имя или NxM — упражнение создаётся без сета. Пользователь может добавить сет кнопкой `➕ Сет`.
+- **Трансформация 422 без паники**: API возвращает 422 (не 500) при `day < 30` — фронт просто не показывает карточку, без ошибок в консоли.
+- **Тренд порог 0.3**: меньше 0.3 пункта разницы между половинами — стрелка не показывается (шум данных).
+
+### Ничего не осталось незакончено
+Все 5 задач завершены, линтер чистый (0 ошибок), коммит запушен в `claude/telegram-add-exercise-RCu1y`.
 
 ---
 

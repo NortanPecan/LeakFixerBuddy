@@ -61,6 +61,7 @@ const TG_BUTTONS = [
   { id: 'tasks',    emoji: '📋', label: 'Задачи' },
   { id: 'leaks',        emoji: '🔍', label: 'Лики' },
   { id: 'achievements', emoji: '🏅', label: 'Достижения' },
+  { id: 'trainer',      emoji: '🏋️', label: 'Тренер' },
 ] as const
 
 // ─── Regex commands ─────────────────────────────────────────────────────────
@@ -172,7 +173,16 @@ interface PendingGymSet {
   exerciseName: string
 }
 
-type PendingPayload = PendingForceReply | PendingAiConfirm | PendingGymSet
+interface PendingGymExercise {
+  __type: 'gymExercise'
+  workoutId: string
+}
+
+interface PendingTrainer {
+  __type: 'trainerQuestion'
+}
+
+type PendingPayload = PendingForceReply | PendingAiConfirm | PendingGymSet | PendingGymExercise | PendingTrainer
 
 async function storePending(userId: string, payload: PendingPayload): Promise<void> {
   // Store one pending per user — upsert via delete+create since no unique key on text
@@ -374,6 +384,9 @@ async function getGymSummary(userId: string, today: Date): Promise<{ text: strin
   for (const ex of source.exercises) {
     keyboard.push([{ text: `➕ Сет → ${ex.name}`, callback_data: `gym_addset_${ex.id}` }])
   }
+
+  // "+ Упражнение" button
+  keyboard.push([{ text: '➕ Упражнение', callback_data: `gym_addex_${source.id}` }])
 
   if (isToday && source.status !== 'completed') {
     keyboard.push([{ text: '✅ Отметить выполненной', callback_data: `gym_done_${source.id}` }])
@@ -1005,6 +1018,95 @@ function parseFoodEntry(text: string): FoodParseResult | null {
   }
 }
 
+// ─── New exercise parser ───────────────────────────────────────────────────
+//
+// Supported formats:
+//   Жим 4x12 75кг  → name=Жим, sets=4, reps=12, weight=75
+//   Жим 4x12       → name=Жим, sets=4, reps=12, weight=null
+//   Жим 75кг       → name=Жим, sets=null, reps=null, weight=75
+//   Жим            → name=Жим, sets=null, reps=null, weight=null
+
+function parseNewExercise(text: string): { name: string; targetSets: number | null; targetReps: number | null; weight: number | null } | null {
+  const trimmed = text.trim()
+  if (!trimmed) return null
+
+  // Name + NxM + weight[кг]
+  let m = trimmed.match(/^(.+?)\s+(\d+)\s*[xхXХ×*]\s*(\d+)\s+(\d+(?:[.,]\d+)?)\s*(?:кг|kg)?\s*$/i)
+  if (m) return { name: m[1].trim(), targetSets: parseInt(m[2]), targetReps: parseInt(m[3]), weight: parseFloat(m[4].replace(',', '.')) }
+
+  // Name + NxM only
+  m = trimmed.match(/^(.+?)\s+(\d+)\s*[xхXХ×*]\s*(\d+)\s*$/i)
+  if (m) return { name: m[1].trim(), targetSets: parseInt(m[2]), targetReps: parseInt(m[3]), weight: null }
+
+  // Name + weight with explicit кг unit
+  m = trimmed.match(/^(.+?)\s+(\d+(?:[.,]\d+)?)\s*(?:кг|kg)\s*$/i)
+  if (m) return { name: m[1].trim(), targetSets: null, targetReps: null, weight: parseFloat(m[2].replace(',', '.')) }
+
+  // Just a name
+  return { name: trimmed, targetSets: null, targetReps: null, weight: null }
+}
+
+// ─── AI Coach helper ────────────────────────────────────────────────────────
+
+const COACH_SYSTEM = `Ты персональный коуч по саморазвитию в приложении LeakFixer Buddy.
+Тебе дают вопрос пользователя и его реальные данные за последние 30 дней.
+Отвечай КОНКРЕТНО, опираясь на числа из данных — не общими фразами.
+Ответ: 3-5 предложений, на русском языке, без markdown, эмодзи допустимы.
+Если данных мало — честно скажи об этом и дай общий совет.`
+
+async function runCoach(userId: string, question: string): Promise<string> {
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+  thirtyDaysAgo.setHours(0, 0, 0, 0)
+
+  const [userRec, dailyStates, gymWorkouts, ritualCompletions, activeRituals, fitnessDays, topLeak] =
+    await Promise.all([
+      db.user.findUnique({ where: { id: userId }, select: { streak: true, day: true, firstName: true } }),
+      db.dailyState.findMany({ where: { userId, date: { gte: thirtyDaysAgo } } }),
+      db.gymWorkout.findMany({ where: { userId, date: { gte: thirtyDaysAgo }, status: 'completed' } }),
+      db.ritualCompletion.findMany({ where: { userId, date: { gte: thirtyDaysAgo }, completed: true } }),
+      db.ritual.count({ where: { userId, status: 'active' } }),
+      db.fitnessDaily.findMany({ where: { userId, date: { gte: thirtyDaysAgo } } }),
+      db.userAiPattern.findFirst({
+        where: { userId, NOT: { leakType: 'tg_input_patterns' } },
+        orderBy: { updatedAt: 'desc' },
+        select: { leakType: true, lastAnalysis: true },
+      }),
+    ])
+
+  const avgMood = dailyStates.length
+    ? (dailyStates.reduce((s, d) => s + (d.mood ?? 5), 0) / dailyStates.length).toFixed(1)
+    : null
+  const avgEnergy = dailyStates.length
+    ? (dailyStates.reduce((s, d) => s + (d.energy ?? 5), 0) / dailyStates.length).toFixed(1)
+    : null
+  const avgSleep = dailyStates.filter(d => d.sleepHours).length
+    ? (dailyStates.reduce((s, d) => s + (d.sleepHours ?? 0), 0) / dailyStates.filter(d => d.sleepHours).length).toFixed(1)
+    : null
+  const ritualRate = activeRituals > 0
+    ? Math.round((ritualCompletions.length / (activeRituals * 30)) * 100)
+    : null
+  const avgCalories = fitnessDays.length
+    ? Math.round(fitnessDays.reduce((s, d) => s + (d.calories ?? 0), 0) / fitnessDays.length)
+    : null
+
+  const context = [
+    `Пользователь: ${userRec?.firstName ?? 'Аноним'}, стрик ${userRec?.streak ?? 0} дней`,
+    `Вопрос: ${question}`,
+    `--- Данные за 30 дней ---`,
+    avgMood !== null ? `Среднее настроение: ${avgMood}/10` : null,
+    avgEnergy !== null ? `Средняя энергия: ${avgEnergy}/10` : null,
+    avgSleep !== null ? `Средний сон: ${avgSleep} ч` : null,
+    `Тренировок: ${gymWorkouts.length}`,
+    ritualRate !== null ? `Ритуалы: ${ritualRate}%` : null,
+    avgCalories !== null ? `Среднее ккал/день: ${avgCalories}` : null,
+    topLeak?.leakType ? `Основная проблемная зона: ${topLeak.leakType.replace(/_/g, ' ')}` : null,
+  ].filter(Boolean).join('\n')
+
+  const result = await callAI(COACH_SYSTEM, context, { userId, callType: 'tg_coach' })
+  return result.text
+}
+
 // ─── Text command handler ──────────────────────────────────────────────────
 
 async function handleCommand(userId: string, text: string): Promise<{ reply: string; keyboard?: InlineKeyboard }> {
@@ -1299,65 +1401,9 @@ async function handleCommand(userId: string, text: string): Promise<{ reply: str
           '<code>тренер как улучшить сон?</code>',
       }
     }
-
-    const COACH_SYSTEM = `Ты персональный коуч по саморазвитию в приложении LeakFixer Buddy.
-Тебе дают вопрос пользователя и его реальные данные за последние 30 дней.
-Отвечай КОНКРЕТНО, опираясь на числа из данных — не общими фразами.
-Ответ: 3-5 предложений, на русском языке, без markdown, эмодзи допустимы.
-Если данных мало — честно скажи об этом и дай общий совет.`
-
     try {
-      // Collect 30-day context
-      const thirtyDaysAgo = new Date()
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-      thirtyDaysAgo.setHours(0, 0, 0, 0)
-
-      const [userRec, dailyStates, gymWorkouts, ritualCompletions, activeRituals, fitnessDays, topLeak] =
-        await Promise.all([
-          db.user.findUnique({ where: { id: userId }, select: { streak: true, day: true, firstName: true } }),
-          db.dailyState.findMany({ where: { userId, date: { gte: thirtyDaysAgo } } }),
-          db.gymWorkout.findMany({ where: { userId, date: { gte: thirtyDaysAgo }, status: 'completed' } }),
-          db.ritualCompletion.findMany({ where: { userId, date: { gte: thirtyDaysAgo }, completed: true } }),
-          db.ritual.count({ where: { userId, status: 'active' } }),
-          db.fitnessDaily.findMany({ where: { userId, date: { gte: thirtyDaysAgo } } }),
-          db.userAiPattern.findFirst({
-            where: { userId, NOT: { leakType: 'tg_input_patterns' } },
-            orderBy: { updatedAt: 'desc' },
-            select: { leakType: true, lastAnalysis: true },
-          }),
-        ])
-
-      const avgMood = dailyStates.length
-        ? (dailyStates.reduce((s, d) => s + (d.mood ?? 5), 0) / dailyStates.length).toFixed(1)
-        : null
-      const avgEnergy = dailyStates.length
-        ? (dailyStates.reduce((s, d) => s + (d.energy ?? 5), 0) / dailyStates.length).toFixed(1)
-        : null
-      const avgSleep = dailyStates.filter(d => d.sleepHours).length
-        ? (dailyStates.reduce((s, d) => s + (d.sleepHours ?? 0), 0) / dailyStates.filter(d => d.sleepHours).length).toFixed(1)
-        : null
-      const ritualRate = activeRituals > 0
-        ? Math.round((ritualCompletions.length / (activeRituals * 30)) * 100)
-        : null
-      const avgCalories = fitnessDays.length
-        ? Math.round(fitnessDays.reduce((s, d) => s + (d.calories ?? 0), 0) / fitnessDays.length)
-        : null
-
-      const context = [
-        `Пользователь: ${userRec?.firstName ?? 'Аноним'}, стрик ${userRec?.streak ?? 0} дней`,
-        `Вопрос: ${question}`,
-        `--- Данные за 30 дней ---`,
-        avgMood !== null ? `Среднее настроение: ${avgMood}/10` : null,
-        avgEnergy !== null ? `Средняя энергия: ${avgEnergy}/10` : null,
-        avgSleep !== null ? `Средний сон: ${avgSleep} ч` : null,
-        `Тренировок: ${gymWorkouts.length}`,
-        ritualRate !== null ? `Ритуалы: ${ritualRate}%` : null,
-        avgCalories !== null ? `Среднее ккал/день: ${avgCalories}` : null,
-        topLeak?.leakType ? `Основная проблемная зона: ${topLeak.leakType.replace(/_/g, ' ')}` : null,
-      ].filter(Boolean).join('\n')
-
-      const result = await callAI(COACH_SYSTEM, context, { userId, callType: 'tg_coach' })
-      return { reply: `🏋️ <b>AI Тренер</b>\n\n${result.text}`, keyboard: backBtn() }
+      const answer = await runCoach(userId, question)
+      return { reply: `🏋️ <b>AI Тренер</b>\n\n${answer}`, keyboard: backBtn() }
     } catch (err) {
       console.error('[TG /тренер]', err)
       return { reply: '❌ AI-тренер временно недоступен. Попробуй через минуту.' }
@@ -1484,6 +1530,23 @@ async function handleCallback(
     return
   }
 
+  // Add new exercise to workout via ForceReply
+  if (data.startsWith('gym_addex_')) {
+    const workoutId = data.replace('gym_addex_', '')
+    const workout = await db.gymWorkout.findUnique({ where: { id: workoutId }, select: { name: true } })
+    if (!workout) { await answerCallback(cbQueryId, '❌ Тренировка не найдена'); return }
+    await sendForceReply(
+      chatId,
+      '💪 <b>Новое упражнение</b>\n\nВведи в формате:\n' +
+      '<code>Жим 4x12 75кг</code> — подходы × повт × вес\n' +
+      '<code>Жим 4x12</code> — без веса\n' +
+      '<code>Жим 75кг</code> — только вес\n' +
+      '<code>Жим</code> — только название'
+    )
+    await storePending(userId, { __type: 'gymExercise', workoutId })
+    return
+  }
+
   // Add set to exercise via ForceReply
   if (data.startsWith('gym_addset_')) {
     const exerciseId = data.replace('gym_addset_', '')
@@ -1522,6 +1585,13 @@ async function handleCallback(
       console.error('[ai_confirm] error:', err)
       await answerCallback(cbQueryId, '❌ Ошибка сохранения')
     }
+    return
+  }
+
+  // Trainer button → ForceReply
+  if (data === 'btn_trainer') {
+    await sendForceReply(chatId, '🏋️ <b>AI Тренер</b>\n\nЗадай любой вопрос о своих данных и прогрессе:')
+    await storePending(userId, { __type: 'trainerQuestion' })
     return
   }
 
@@ -1642,6 +1712,58 @@ export async function POST(request: NextRequest) {
     if (message.reply_to_message) {
       const pending = await getPendingForUserId(user.id)
       const today = normalizeToDate(new Date())
+
+      // Gym exercise ForceReply
+      if (pending && pending.__type === 'gymExercise') {
+        await clearPendingForUserId(user.id)
+        const parsed = parseNewExercise(text.trim())
+        if (!parsed) {
+          await sendMessage(chatId, '❌ Не понял формат. Попробуй: <code>Жим 4x12 75кг</code>')
+          return NextResponse.json({ ok: true })
+        }
+        const exerciseCount = await db.gymExercise.count({ where: { workoutId: pending.workoutId } })
+        const exercise = await db.gymExercise.create({
+          data: {
+            workoutId: pending.workoutId,
+            name: parsed.name,
+            order: exerciseCount + 1,
+            targetSets: parsed.targetSets ?? 4,
+            ...(parsed.targetReps !== null && { targetReps: parsed.targetReps }),
+            ...(parsed.weight !== null && { weight: parsed.weight }),
+          },
+        })
+        let reply = `💪 <b>${parsed.name}</b> добавлено в тренировку!`
+        if (parsed.targetSets && parsed.targetReps) reply += `\n📋 Схема: ${parsed.targetSets}×${parsed.targetReps}`
+        if (parsed.weight !== null) {
+          reply += `\n⚖️ Вес: ${parsed.weight} кг`
+          await db.gymExerciseSet.create({
+            data: {
+              exerciseId: exercise.id,
+              setNum: 1,
+              weight: parsed.weight,
+              ...(parsed.targetReps !== null && { reps: parsed.targetReps }),
+              isWarmup: false,
+              completed: true,
+            },
+          })
+          reply += '\n✅ Первый сет записан'
+        }
+        await sendMessage(chatId, reply)
+        return NextResponse.json({ ok: true })
+      }
+
+      // Trainer question ForceReply
+      if (pending && pending.__type === 'trainerQuestion') {
+        await clearPendingForUserId(user.id)
+        try {
+          const answer = await runCoach(user.id, text.trim())
+          await sendMessage(chatId, `🏋️ <b>AI Тренер</b>\n\n${answer}`)
+        } catch (err) {
+          console.error('[TG trainer ForceReply]', err)
+          await sendMessage(chatId, '❌ AI-тренер временно недоступен. Попробуй через минуту.')
+        }
+        return NextResponse.json({ ok: true })
+      }
 
       // Gym set ForceReply
       if (pending && pending.__type === 'gymSet') {
