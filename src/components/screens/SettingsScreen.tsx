@@ -13,6 +13,7 @@ interface UserSettings {
   ritualReminders: boolean
   checkinReminders: boolean
   taskReminders: boolean
+  supplementReminders: boolean
   zoneHealthEnabled: boolean
   zoneLeakfixerEnabled: boolean
   zoneAiEnabled: boolean
@@ -29,6 +30,7 @@ export function SettingsScreen() {
     ritualReminders: true,
     checkinReminders: true,
     taskReminders: true,
+    supplementReminders: true,
     zoneHealthEnabled: true,
     zoneLeakfixerEnabled: true,
     zoneAiEnabled: true,
@@ -48,6 +50,7 @@ export function SettingsScreen() {
             ritualReminders: data.settings.ritualReminders ?? true,
             checkinReminders: data.settings.checkinReminders ?? true,
             taskReminders: data.settings.taskReminders ?? true,
+            supplementReminders: data.settings.supplementReminders ?? true,
             zoneHealthEnabled: data.settings.zoneHealthEnabled ?? true,
             zoneLeakfixerEnabled: data.settings.zoneLeakfixerEnabled ?? true,
             zoneAiEnabled: data.settings.zoneAiEnabled ?? true,
@@ -162,6 +165,17 @@ export function SettingsScreen() {
             <Switch
               checked={settings.taskReminders}
               onCheckedChange={v => updateSetting('taskReminders', v)}
+              disabled={savingSettings}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Напоминание о БАДах</p>
+              <p className="text-xs text-muted-foreground">Утром в 11:00 МСК, если добавки не отмечены</p>
+            </div>
+            <Switch
+              checked={settings.supplementReminders}
+              onCheckedChange={v => updateSetting('supplementReminders', v)}
               disabled={savingSettings}
             />
           </div>

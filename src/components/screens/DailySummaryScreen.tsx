@@ -21,7 +21,9 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
-  Moon
+  Moon,
+  Share2,
+  X
 } from 'lucide-react'
 
 interface CheckinData {
@@ -89,17 +91,26 @@ interface DailySummaryData {
   }
 }
 
+interface NewAchievement {
+  code: string
+  label: string
+  emoji: string
+  desc: string
+}
+
 export function DailySummaryScreen() {
   const { user, profile, selectedDate, setScreen } = useAppStore()
   const [summary, setSummary] = useState<DailySummaryData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [markingAte, setMarkingAte] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [newAchievements, setNewAchievements] = useState<NewAchievement[]>([])
+  const [shareClicked, setShareClicked] = useState(false)
 
   useEffect(() => {
     const loadSummary = async () => {
       if (!user?.id) return
-      
+
       setIsLoading(true)
       setError(null)
       try {
@@ -110,6 +121,22 @@ export function DailySummaryScreen() {
         const data = await response.json()
         if (data.success) {
           setSummary(data.summary)
+          // Check achievements for today only (not historical dates)
+          const todayStr = new Date().toISOString().split('T')[0]
+          if (selectedDate === todayStr) {
+            fetch('/api/achievements/check', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: user.id }),
+            })
+              .then(r => r.json())
+              .then(result => {
+                if (result.newAchievements?.length > 0) {
+                  setNewAchievements(result.newAchievements)
+                }
+              })
+              .catch(() => { /* non-critical */ })
+          }
         }
       } catch (err) {
         console.error('Failed to load daily summary:', err)
@@ -245,8 +272,57 @@ export function DailySummaryScreen() {
     : dayScore >= 40 ? 'Средний день'
     : 'Сложный день'
 
+  const handleShare = async () => {
+    if (!summary || dayScore === null) return
+    const waterPct = summary.water.percentage
+    const cals = summary.food.calories
+    const ritDone = summary.rituals.completed
+    const ritTotal = summary.rituals.total
+    const parts: string[] = []
+    if (waterPct > 0) parts.push(`💧${waterPct}%`)
+    if (cals > 0) parts.push(`🍽️${cals}ккал`)
+    if (ritTotal > 0) parts.push(`✅${ritDone}/${ritTotal} ритуалов`)
+    const shareText = `📊 Мой день: ${dayScore}/100 — ${scoreLabel} ${parts.join(' ')}`
+    try {
+      await navigator.clipboard.writeText(shareText)
+      setShareClicked(true)
+      setTimeout(() => setShareClicked(false), 2000)
+    } catch {
+      window.open(`tg://msg?text=${encodeURIComponent(shareText)}`)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4 pb-20">
+      {/* Achievement popup */}
+      {newAchievements.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-in fade-in zoom-in">
+            <button
+              className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"
+              onClick={() => setNewAchievements([])}
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <div className="text-center mb-4">
+              <p className="text-4xl mb-2">{newAchievements[0].emoji}</p>
+              <p className="text-lg font-bold">Новое достижение!</p>
+            </div>
+            <div className="space-y-3">
+              {newAchievements.map(a => (
+                <div key={a.code} className="bg-primary/10 border border-primary/30 rounded-xl p-3 text-center">
+                  <p className="font-semibold text-primary">{a.emoji} {a.label}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{a.desc}</p>
+                </div>
+              ))}
+            </div>
+            <Button className="w-full mt-4" onClick={() => setNewAchievements([])}>
+              Отлично!
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Header with back button */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" onClick={() => setScreen('home')}>
@@ -254,16 +330,31 @@ export function DailySummaryScreen() {
         </Button>
         <h1 className="text-xl font-bold">Дневная сводка</h1>
         {dayScore !== null && (
-          <div className="ml-auto flex items-baseline gap-1">
-            <span className={`text-2xl font-bold ${scoreColor}`}>{dayScore}</span>
-            <span className="text-xs text-muted-foreground">/100</span>
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={handleShare}
+              title="Поделиться результатом"
+            >
+              {shareClicked ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              ) : (
+                <Share2 className="w-4 h-4" />
+              )}
+            </Button>
+            <div className="flex items-baseline gap-1">
+              <span className={`text-2xl font-bold ${scoreColor}`}>{dayScore}</span>
+              <span className="text-xs text-muted-foreground">/100</span>
+            </div>
           </div>
         )}
       </div>
 
       {/* Day score label */}
       {dayScore !== null && (
-        <div className={`text-center text-sm font-medium ${scoreColor}`}>{scoreLabel}</div>
+        <div className={`text-center text-sm font-medium ${scoreColor}`}>{shareClicked ? '✅ Скопировано!' : scoreLabel}</div>
       )}
 
       {/* Date Picker */}

@@ -756,6 +756,7 @@ model UserSettings {
   ritualReminders       Boolean  @default(true) @map("ritual_reminders")
   checkinReminders      Boolean  @default(true) @map("checkin_reminders")
   taskReminders         Boolean  @default(true) @map("task_reminders")
+  supplementReminders   Boolean  @default(true) @map("supplement_reminders")
   buddyPrivacy          String   @default("full") @map("buddy_privacy") // "full" | "partial" | "streak"
   zoneSteamEnabled      Boolean  @default(true) @map("zone_steam_enabled")
   zoneLeakfixerEnabled  Boolean  @default(true) @map("zone_leakfixer_enabled")

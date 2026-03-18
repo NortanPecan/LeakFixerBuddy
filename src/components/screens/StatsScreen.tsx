@@ -86,7 +86,7 @@ export function StatsScreen() {
   const { user, setScreen } = useAppStore()
   const [data, setData] = useState<StatsData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [period, setPeriod] = useState<7 | 14 | 30>(14)
+  const [period, setPeriod] = useState<7 | 14 | 30 | 90>(14)
 
   useEffect(() => {
     const loadData = async () => {
@@ -106,9 +106,11 @@ export function StatsScreen() {
     loadData()
   }, [user?.id, period])
 
-  // Prepare chart data
-  const last14Days = data?.history.slice(-14) || []
-  const last7Days = data?.history.slice(-7) || []
+  // Prepare chart data — show all loaded days, limit mood/rituals charts to avoid crowding
+  const allDays = data?.history || []
+  const chartDays = period > 30 ? allDays.slice(-30) : allDays  // max 30 bars for readability
+  const last14Days = allDays.slice(-14)
+  const last7Days = allDays.slice(-7)
 
   // Format date for display
   const formatDate = (dateStr: string) => {
@@ -150,15 +152,15 @@ export function StatsScreen() {
 
       {/* Period selector */}
       <div className="flex gap-1">
-        {[7, 14, 30].map(days => (
+        {([7, 14, 30, 90] as const).map(days => (
           <Button
             key={days}
             size="sm"
             variant={period === days ? 'default' : 'outline'}
-            onClick={() => setPeriod(days as 7 | 14 | 30)}
-            className="flex-1"
+            onClick={() => setPeriod(days)}
+            className="flex-1 text-xs"
           >
-            {days} дней
+            {days}д
           </Button>
         ))}
       </div>
@@ -230,7 +232,7 @@ export function StatsScreen() {
             <CardContent>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={last7Days}>
+                  <AreaChart data={chartDays}>
                     <defs>
                       <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
@@ -238,8 +240,8 @@ export function StatsScreen() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis 
-                      dataKey="date" 
+                    <XAxis
+                      dataKey="date"
                       tickFormatter={formatDate}
                       tick={{ fontSize: 10, fill: '#9ca3af' }}
                     />
@@ -270,10 +272,10 @@ export function StatsScreen() {
             <CardContent>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={last7Days}>
+                  <BarChart data={chartDays}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis 
-                      dataKey="date" 
+                    <XAxis
+                      dataKey="date"
                       tickFormatter={formatDate}
                       tick={{ fontSize: 10, fill: '#9ca3af' }}
                     />
@@ -308,7 +310,7 @@ export function StatsScreen() {
             <CardContent>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={last14Days.filter(d => d.mood || d.energy || d.morningEnergy || d.eveningRating)}>
+                  <LineChart data={chartDays.filter(d => d.mood || d.energy || d.morningEnergy || d.eveningRating)}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis
                       dataKey="date"
@@ -335,7 +337,7 @@ export function StatsScreen() {
                       dot={{ fill: '#10b981', r: 3 }}
                       connectNulls
                     />
-                    {last14Days.some(d => d.morningEnergy) && (
+                    {chartDays.some(d => d.morningEnergy) && (
                       <Line
                         type="monotone"
                         dataKey="morningEnergy"
@@ -347,7 +349,7 @@ export function StatsScreen() {
                         connectNulls
                       />
                     )}
-                    {last14Days.some(d => d.eveningRating) && (
+                    {chartDays.some(d => d.eveningRating) && (
                       <Line
                         type="monotone"
                         dataKey="eveningRating"
@@ -371,13 +373,13 @@ export function StatsScreen() {
                   <div className="w-3 h-3 rounded-full bg-emerald-500" />
                   <span className="text-xs text-muted-foreground">Энергия</span>
                 </div>
-                {last14Days.some(d => d.morningEnergy) && (
+                {chartDays.some(d => d.morningEnergy) && (
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-indigo-500" />
                     <span className="text-xs text-muted-foreground">Утр. энергия</span>
                   </div>
                 )}
-                {last14Days.some(d => d.eveningRating) && (
+                {chartDays.some(d => d.eveningRating) && (
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-pink-500" />
                     <span className="text-xs text-muted-foreground">Оценка дня</span>
@@ -398,10 +400,10 @@ export function StatsScreen() {
             <CardContent>
               <div className="h-32">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={last7Days}>
+                  <BarChart data={chartDays}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis 
-                      dataKey="date" 
+                    <XAxis
+                      dataKey="date"
                       tickFormatter={formatDate}
                       tick={{ fontSize: 10, fill: '#9ca3af' }}
                     />
@@ -415,7 +417,7 @@ export function StatsScreen() {
           </Card>
 
           {/* Sleep chart if data available */}
-          {last14Days.some(d => d.sleepHours) && (
+          {chartDays.some(d => d.sleepHours) && (
             <Card className="bg-card/50 backdrop-blur">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -426,7 +428,7 @@ export function StatsScreen() {
               <CardContent>
                 <div className="h-32">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={last14Days.filter(d => d.sleepHours)}>
+                    <AreaChart data={chartDays.filter(d => d.sleepHours)}>
                       <defs>
                         <linearGradient id="colorSleep" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
@@ -457,17 +459,17 @@ export function StatsScreen() {
           )}
 
           {/* Calories chart */}
-          {last14Days.some(d => d.calories) && (
+          {chartDays.some(d => d.calories) && (
             <Card className="bg-card/50 backdrop-blur">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
-                  🍽️ Калории (14 дней)
+                  🍽️ Калории ({period > 30 ? 30 : period} дней)
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-32">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={last14Days}>
+                    <AreaChart data={chartDays}>
                       <defs>
                         <linearGradient id="colorCal" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
@@ -487,17 +489,17 @@ export function StatsScreen() {
           )}
 
           {/* Water chart */}
-          {last14Days.some(d => d.water) && (
+          {chartDays.some(d => d.water) && (
             <Card className="bg-card/50 backdrop-blur">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
-                  💧 Вода (мл, 14 дней)
+                  💧 Вода (мл, {period > 30 ? 30 : period} дней)
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-32">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={last14Days}>
+                    <AreaChart data={chartDays}>
                       <defs>
                         <linearGradient id="colorWater" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3}/>
@@ -517,17 +519,17 @@ export function StatsScreen() {
           )}
 
           {/* Weight chart */}
-          {last14Days.some(d => d.weight) && (
+          {chartDays.some(d => d.weight) && (
             <Card className="bg-card/50 backdrop-blur">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
-                  ⚖️ Вес (кг, 14 дней)
+                  ⚖️ Вес (кг, {period > 30 ? 30 : period} дней)
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-32">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={last14Days.filter(d => d.weight)}>
+                    <LineChart data={chartDays.filter(d => d.weight)}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                       <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 10, fill: '#9ca3af' }} />
                       <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} domain={['dataMin - 1', 'dataMax + 1']} />
