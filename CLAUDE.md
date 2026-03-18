@@ -117,7 +117,7 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Текущее состояние (2026-03-18, сессия 17)
+## Текущее состояние (2026-03-18, сессия 18)
 
 ### Что реализовано (полный список)
 
@@ -155,6 +155,7 @@ export function GymWorkoutDetailDialog() {
 - ✅ Стрики, очки, "X дней с приложением"
 - ✅ Streak Protection (щит, кулдаун 7 дней)
 - ✅ "Ранняя пташка" бейдж ⚡ при входе до 9:00
+- ✅ Челленджи: личные + AI-генерируемые против ликов, 6 типов трекеров, лимит 3 активных
 
 **Уведомления**
 - ✅ Telegram push: утро (06:00 UTC), вечер (17:00 UTC), ритуалы (16:00 UTC), БАДы (08:00 UTC)
@@ -245,41 +246,95 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Следующие задачи (приоритет, сессия 18)
+## Следующие задачи (приоритет, сессия 19)
 
-### 1. 🔴 Telegram: редактирование существующего упражнения
-Сейчас можно добавить упражнение и сет, но нельзя изменить имя/схему уже записанного упражнения.
-- Кнопка `✏️ Изменить` рядом с каждым упражнением в gym summary
-- callback `gym_editex_{exerciseId}` → ForceReply «Введи новое: 4x10 80кг»
-- Парсит только NxM и/или вес (имя не меняем) → `gymExercise.update(targetSets, targetReps, weight)`
+### 1. 🔴 Челленджи: ChallengeDetailScreen — детальный экран
+ChallengesScreen открывает `challenge-detail` при клике, но экрана нет (или минимальный).
+- `GET /api/challenges?id=XXX` уже возвращает полные данные + linkedRituals/Skills/Traits
+- Нужен полноценный экран: прогресс-бар, история по дням, кнопка «Завершить досрочно», описание
+- Для tracker-челленджей показать подходящие метрики (последние 7 дней из трекера)
+- Файл: `src/components/screens/ChallengeDetailScreen.tsx` (создать или обновить)
+
+### 2. 🔴 Челленджи: Telegram — создание нового через бота
+Сейчас `вызовы` показывает список, но нельзя начать новый прямо в боте.
+- После `getChallengesSummary` добавить кнопки быстрого запуска топ-3 tracker-шаблонов
+- callback `challenge_start_{metric}_{target}_{duration}` → `db.challenge.create`
+- Ответ: подтверждение с именем и сроком
 - Файл: `src/app/api/telegram/webhook/route.ts`
 
-### 2. 🔴 ProfileScreen: переключатель «Как я изменился» в виджетах
-Карточка трансформации (сессия 17) всегда видна при day >= 30 — нет кнопки скрыть.
-- Добавить `{ id: 'transformation', label: 'AI-нарратив «Как я изменился»' }` в `WIDGET_CONFIG` в ProfileScreen
-- HomeScreen/ProfileScreen: если `hiddenWidgets.includes('transformation')` — не грузить и не показывать
-- Файл: `src/components/screens/ProfileScreen.tsx`
+### 3. 🟡 Достижения: CHALLENGE_COMPLETE бейдж
+Первый завершённый челлендж = новое достижение.
+- Добавить `CHALLENGE_FIRST` в `ACHIEVEMENT_DEFS` в `achievements/check/route.ts`
+- При `calculateChallengeProgress()` когда `newStatus = 'completed'` → вызвать POST `/api/achievements/check`
+- Или: вызывать check при каждом GET /api/challenges (ленивая проверка уже сделана)
+- Файл: `src/app/api/challenges/route.ts` + `src/app/api/achievements/check/route.ts`
 
-### 3. 🟡 Telegram: сводка недели по команде «неделя» / «итоги»
-Пользователи часто хотят краткие итоги недели прямо в боте, не ждать понедельника.
-- Regex `WEEK_RE = /^(?:неделя|итоги недели|week|summary week)$/i`
-- Обработчик: вызывает `generateWeeklyDigest(userId, firstName)` (уже есть в `send-weekly-digest`)
-- Ответ: тот же формат что и ponedel'nik-рассылка
-- Файл: `src/app/api/telegram/webhook/route.ts`
+### 4. 🟡 HomeScreen: виджет «Активные челленджи»
+Если есть активные челленджи — показывать мини-карточку на HomeScreen.
+- Загружает `/api/challenges?userId=X&status=active` при монтировании
+- Показывает до 2-х карточек: имя + прогресс-бар + %
+- Скрывается через `hiddenWidgets['challenges']`
+- Добавить переключатель «Челленджи» в ProfileScreen → Виджеты
 
-### 4. 🟡 StatsScreen: тренды в карточке «Итого»
-Стрелки ↑↓ добавлены только в заголовок «Настроение и энергия» (сессия 17).
-Нужно то же самое в карточке «Итого за N дней» — рядом с avg mood/energy.
-- Добавить вычисление `avgMoodTotal` и `avgEnergyTotal` из `allDays`
-- В блок карточки «Итого» добавить строку «😊 avg X.X ↑/↓» / «⚡ avg X.X ↑/↓»
-- Файл: `src/components/screens/StatsScreen.tsx`
+### 5. 🟢 Telegram: completion popup → уведомление в бот
+Когда `calculateChallengeProgress()` переводит статус в `completed` — отправить TG-уведомление.
+- При смене `newStatus === 'completed'` загрузить `user.telegramId` и отправить поздравление
+- Формат: `🏆 Челлендж завершён!\n\n<b>{name}</b>\n\n{motivation_text}`
+- Файл: `src/app/api/challenges/route.ts`
 
-### 5. 🟢 Достижения: дозаполнить 4 заблокированных бейджа
-ProfileScreen показывает 4 плитки «заблокировано» (STREAK_7, STREAK_30, WATER_WEEK, GYM_10).
-Бэкенд уже проверяет их в `/api/achievements/check` (сессия 13).
-- Убедиться что при каждом `POST /api/achievements/check` все 4 условия реально вычисляются
-- Проверить: `STREAK_7` смотрит `user.streak >= 7`, `GYM_10` смотрит `gymWorkout.count >= 10`
-- Файл: `src/app/api/achievements/check/route.ts`
+---
+
+## Что делали в сессии 2026-03-18 (сессия 18)
+
+### 10 задач — полная реализация
+
+**Часть A — 5 задач из плана сессии 17→18:**
+
+**Изменённые файлы:**
+- `src/app/api/telegram/webhook/route.ts`:
+  - **✏️ Редактирование упражнения**: кнопка рядом с `➕ Сет` в gym summary, callback `gym_editex_{id}` → ForceReply → `parseNewExercise()` → `gymExercise.update(targetSets, targetReps, weight)`
+  - **«неделя» / «итоги»**: `WEEK_RE` + `__WEEKLY_DIGEST__` sentinel → `generateWeeklyDigest()` из shared lib
+  - `generateWeeklyDigest` вынесен в `src/lib/ai-weekly-digest.ts` (DRY между webhook и send-weekly-digest)
+- `src/components/screens/ProfileScreen.tsx`:
+  - Переключатель `transformation` в `WIDGET_CONFIG` — карточка «Как я изменился» управляется через `hiddenWidgets`
+  - Загрузка трансформации только если `!hiddenWidgets.includes('transformation')`
+- `src/components/screens/StatsScreen.tsx`:
+  - Строка «😊 X.X ↑/↓» / «⚡ X.X ↑/↓» в карточке «Итого за N дней» (moodTrend / energyTrend)
+- `src/app/api/achievements/check/route.ts`:
+  - Фикс GYM_10: `where: { userId }` → `where: { period: { userId } }` (GymWorkout не имеет прямого userId!)
+
+**Новые файлы:**
+- `src/lib/ai-weekly-digest.ts` — `generateWeeklyDigest(userId, firstName)`: кеш по ISO-неделе в `ai_logs`, 7 дней данных, Groq промпт, фикс gym query через `period: { userId }`
+
+**Часть Б — Челленджи (фича 2.9):**
+
+**Изменённые файлы:**
+- `src/app/api/challenges/route.ts`:
+  - Тип `tracker` в `calculateChallengeProgress()` — 6 метрик: `water_streak`, `gym_count`, `ritual_rate`, `no_food_bad`, `sleep_avg`, `mood_avg`
+  - Лимит 3 активных в POST: `db.challenge.count` → 400 + `code: 'LIMIT_REACHED'`
+- `src/app/api/challenges/ai-generate/route.ts`:
+  - Лимит 3 в POST
+  - Обновлены `LEAK_TEMPLATES`: 8 типов ликов → tracker (gym_count, sleep_avg, no_food_bad, mood_avg, water_streak), 2 → ritual, 2 → custom
+- `src/components/screens/ChallengesScreen.tsx`:
+  - `BarChart2` иконка для tracker
+  - 9 шаблонов (5 tracker + 2 ritual + 2 custom)
+  - `getProgressLabel()` — умные подписи прогресса по метрике
+  - `trackerConfig` в форме + `applyTemplate` + `handleCreate` для tracker
+  - Нотис «⚠️ лимит 3» + кнопка «Новый» disabled при >= 3
+  - Обработка `LIMIT_REACHED` из API (showErrorToast без throw)
+- `src/app/api/telegram/webhook/route.ts`:
+  - `CHALLENGES_RE` + `getChallengesSummary()` → команды «вызовы»/«челленджи» — список с прогресс-баром
+
+### Принятые решения (важно для следующих сессий)
+
+- **`ai-weekly-digest.ts` shared lib**: оба потребителя (`send-weekly-digest` и `webhook`) импортируют из одного файла. Кеш по ISO-неделе через `ai_logs (callType='weekly_digest')`.
+- **GymWorkout.userId не существует**: всегда запрашивать через `period: { userId }`. Это затронуло GYM_10, gymWorkout в weekly-digest и aiCoach — все исправлены.
+- **tracker тип без UI-ввода**: tracker-метрика задаётся только через шаблоны/`ai-generate`, не через кастомную форму. Форма поддерживает тип через `trackerConfig`, но не показывает поля ввода метрики.
+- **daysCompleted семантика для tracker**: для count-метрик = кол-во (тренировок/дней), для avg-метрик = текущее среднее (с плавающей точкой). `getProgressLabel()` знает это и отображает корректно.
+- **LIMIT_REACHED**: API возвращает `{ error, code: 'LIMIT_REACHED' }` при 3+ активных. Фронт показывает error-тост без пробрасывания исключения.
+
+### Ничего не осталось незакончено
+Все 10 задач завершены, линтер чистый (0 ошибок), оба коммита запушены в `claude/review-and-plan-nYKwH`.
 
 ---
 
