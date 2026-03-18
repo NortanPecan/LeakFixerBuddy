@@ -240,6 +240,30 @@ export function StatsScreen() {
                   </div>
                 )}
               </div>
+              {(data.totals.avgMood !== null || data.totals.avgEnergy !== null) && (
+                <div className="flex gap-4 mt-3 pt-3 border-t border-border/30">
+                  {data.totals.avgMood !== null && (
+                    <span className="text-sm text-muted-foreground">
+                      😊 {data.totals.avgMood.toFixed(1)}
+                      {moodTrend !== null && Math.abs(moodTrend) >= 0.3 && (
+                        <span className={`ml-1 font-medium ${moodTrend > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {moodTrend > 0 ? '↑' : '↓'}{Math.abs(moodTrend).toFixed(1)}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                  {data.totals.avgEnergy !== null && (
+                    <span className="text-sm text-muted-foreground">
+                      ⚡ {data.totals.avgEnergy.toFixed(1)}
+                      {energyTrend !== null && Math.abs(energyTrend) >= 0.3 && (
+                        <span className={`ml-1 font-medium ${energyTrend > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {energyTrend > 0 ? '↑' : '↓'}{Math.abs(energyTrend).toFixed(1)}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 

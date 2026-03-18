@@ -4,6 +4,7 @@ import { normalizeToDate } from '@/lib/date-utils'
 import { analyzeLeakWithAI } from '@/lib/ai-analyze-leak'
 import { formatLeakAnalysisForTelegram } from '@/lib/ai-leak-prompts'
 import { callAI } from '@/lib/ai-provider'
+import { generateWeeklyDigest } from '@/lib/ai-weekly-digest'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET
@@ -83,6 +84,7 @@ const HELP_RE     = /^(?:помощь|help|старт|start|команды)$/i
 const LEAK_RE         = /^(?:лик|leak|утечка)\s+(.+)$/i
 const ACHIEVEMENTS_RE = /^(?:ачивменты|ачивмент|достижения|достижение|achievement|badge|бейдж)$/i
 const TRAINER_RE      = /^(?:\/тренер|тренер)(?:\s+(.+))?$/i
+const WEEK_RE         = /^(?:неделя|итоги недели|дайджест недели|week summary)$/i
 
 // ─── Telegram API ──────────────────────────────────────────────────────────
 
@@ -182,7 +184,13 @@ interface PendingTrainer {
   __type: 'trainerQuestion'
 }
 
-type PendingPayload = PendingForceReply | PendingAiConfirm | PendingGymSet | PendingGymExercise | PendingTrainer
+interface PendingGymEditExercise {
+  __type: 'gymEditExercise'
+  exerciseId: string
+  exerciseName: string
+}
+
+type PendingPayload = PendingForceReply | PendingAiConfirm | PendingGymSet | PendingGymExercise | PendingTrainer | PendingGymEditExercise
 
 async function storePending(userId: string, payload: PendingPayload): Promise<void> {
   // Store one pending per user — upsert via delete+create since no unique key on text
@@ -380,9 +388,12 @@ async function getGymSummary(userId: string, today: Date): Promise<{ text: strin
 
   const keyboard: InlineKeyboard = []
 
-  // "+ Сет" button for each exercise
+  // "+Сет" and "✏️ Изменить" buttons for each exercise
   for (const ex of source.exercises) {
-    keyboard.push([{ text: `➕ Сет → ${ex.name}`, callback_data: `gym_addset_${ex.id}` }])
+    keyboard.push([
+      { text: `➕ Сет → ${ex.name}`, callback_data: `gym_addset_${ex.id}` },
+      { text: `✏️`, callback_data: `gym_editex_${ex.id}` },
+    ])
   }
 
   // "+ Упражнение" button
@@ -1347,6 +1358,11 @@ async function handleCommand(userId: string, text: string): Promise<{ reply: str
     return { reply, keyboard: backBtn() }
   }
 
+  // Weekly digest on demand
+  if (WEEK_RE.test(t)) {
+    return { reply: '__WEEKLY_DIGEST__' }
+  }
+
   // Лик — AI-анализ произвольной проблемы
   const leakMatch = t.match(LEAK_RE)
   if (leakMatch) {
@@ -1547,6 +1563,27 @@ async function handleCallback(
     return
   }
 
+  // Edit existing exercise via ForceReply
+  if (data.startsWith('gym_editex_')) {
+    const exerciseId = data.replace('gym_editex_', '')
+    const exercise = await db.gymExercise.findUnique({
+      where: { id: exerciseId },
+      select: { name: true, targetSets: true, targetReps: true, weight: true },
+    })
+    if (!exercise) { await answerCallback(cbQueryId, '❌ Упражнение не найдено'); return }
+    const currentStr = `${exercise.targetSets}×${exercise.targetReps ?? '?'}${exercise.weight ? ` · ${exercise.weight}кг` : ''}`
+    await sendForceReply(
+      chatId,
+      `✏️ <b>${exercise.name}</b>\n\nВведи новую схему:\n` +
+      `<code>4x10 80кг</code> — подходы × повт × вес\n` +
+      `<code>4x10</code> — только схема\n` +
+      `<code>80кг</code> — только вес\n\n` +
+      `Сейчас: ${currentStr}`
+    )
+    await storePending(userId, { __type: 'gymEditExercise', exerciseId, exerciseName: exercise.name })
+    return
+  }
+
   // Add set to exercise via ForceReply
   if (data.startsWith('gym_addset_')) {
     const exerciseId = data.replace('gym_addset_', '')
@@ -1713,6 +1750,26 @@ export async function POST(request: NextRequest) {
       const pending = await getPendingForUserId(user.id)
       const today = normalizeToDate(new Date())
 
+      // Edit exercise ForceReply
+      if (pending && pending.__type === 'gymEditExercise') {
+        await clearPendingForUserId(user.id)
+        const parsed = parseNewExercise(text.trim())
+        if (!parsed || (parsed.targetSets === null && parsed.weight === null)) {
+          await sendMessage(chatId, '❌ Не понял. Введи схему: <code>4x10</code> или <code>80кг</code> или <code>4x10 80кг</code>')
+          return NextResponse.json({ ok: true })
+        }
+        const updateData: Record<string, number | null> = {}
+        if (parsed.targetSets !== null) updateData.targetSets = parsed.targetSets
+        if (parsed.targetReps !== null) updateData.targetReps = parsed.targetReps
+        if (parsed.weight !== null) updateData.weight = parsed.weight
+        await db.gymExercise.update({ where: { id: pending.exerciseId }, data: updateData })
+        let reply = `✏️ <b>${pending.exerciseName}</b> обновлено!`
+        if (parsed.targetSets && parsed.targetReps) reply += `\n📋 Схема: ${parsed.targetSets}×${parsed.targetReps}`
+        if (parsed.weight !== null) reply += `\n⚖️ Вес: ${parsed.weight} кг`
+        await sendMessage(chatId, reply)
+        return NextResponse.json({ ok: true })
+      }
+
       // Gym exercise ForceReply
       if (pending && pending.__type === 'gymExercise') {
         await clearPendingForUserId(user.id)
@@ -1831,6 +1888,26 @@ export async function POST(request: NextRequest) {
     }
 
     const { reply, keyboard } = await handleCommand(user.id, text)
+
+    // ── Weekly digest on demand ───────────────────────────────────────────
+    if (reply === '__WEEKLY_DIGEST__') {
+      const firstName = user.telegramFirstName || 'друг'
+      try {
+        const digest = await generateWeeklyDigest(user.id, firstName)
+        if (digest) {
+          await sendMessage(
+            chatId,
+            `📊 <b>AI-резюме недели, ${firstName}!</b>\n\n${digest}\n\n<i>Открой LeakFixer Buddy, чтобы увидеть полный отчёт.</i>`
+          )
+        } else {
+          await sendMessage(chatId, '📊 Пока мало данных для резюме. Возвращайся после нескольких дней использования!')
+        }
+      } catch (err) {
+        console.error('[TG /неделя]', err)
+        await sendMessage(chatId, '❌ AI-резюме временно недоступно. Попробуй позже.')
+      }
+      return NextResponse.json({ ok: true })
+    }
 
     // ── AI classification for unknown messages ────────────────────────────
     if (reply === '__AI_CLASSIFY__') {
