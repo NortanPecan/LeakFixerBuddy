@@ -59,7 +59,8 @@ const TG_BUTTONS = [
   { id: 'finance',  emoji: '💰', label: 'Финансы' },
   { id: 'summary',  emoji: '📊', label: 'Сводка' },
   { id: 'tasks',    emoji: '📋', label: 'Задачи' },
-  { id: 'leaks',    emoji: '🔍', label: 'Лики' },
+  { id: 'leaks',        emoji: '🔍', label: 'Лики' },
+  { id: 'achievements', emoji: '🏅', label: 'Достижения' },
 ] as const
 
 // ─── Regex commands ─────────────────────────────────────────────────────────
@@ -78,7 +79,8 @@ const INCOME_RE   = /^(?:доход|income|заработал|заработал
 const EXPENSE_RE  = /^(?:расход|расходы|потратил|потратила|купил|купила|expense)\s+(\d+(?:[.,]\d+)?)(?:\s+(.+))?$/i
 const MENU_RE     = /^(?:меню|menu|\/start|\/menu)$/i
 const HELP_RE     = /^(?:помощь|help|старт|start|команды)$/i
-const LEAK_RE     = /^(?:лик|leak|утечка)\s+(.+)$/i
+const LEAK_RE         = /^(?:лик|leak|утечка)\s+(.+)$/i
+const ACHIEVEMENTS_RE = /^(?:ачивменты|ачивмент|достижения|достижение|achievement|badge|бейдж)$/i
 
 // ─── Telegram API ──────────────────────────────────────────────────────────
 
@@ -619,6 +621,44 @@ async function getLeaksSummary(userId: string): Promise<{ text: string; keyboard
   return { text, keyboard: backBtn() }
 }
 
+// ACHIEVEMENTS
+
+const ACHIEVEMENT_LABELS_TG: Record<string, { emoji: string; label: string }> = {
+  GREAT_DAY_FIRST: { emoji: '🌟', label: 'Отличный день!' },
+  QUALITY_WEEK:    { emoji: '🏆', label: 'Неделя качества' },
+  STREAK_7:        { emoji: '🔥', label: '7 дней подряд' },
+  STREAK_30:       { emoji: '💎', label: 'Месяц силы' },
+  WATER_WEEK:      { emoji: '💧', label: 'Водный марафон' },
+  GYM_10:          { emoji: '💪', label: 'Железный' },
+}
+
+async function getAchievementsSummary(userId: string): Promise<{ text: string; keyboard: InlineKeyboard }> {
+  const achievements = await db.achievement.findMany({
+    where: { userId },
+    orderBy: { obtainedAt: 'desc' },
+  })
+
+  if (achievements.length === 0) {
+    return {
+      text:
+        '🏅 <b>Достижения</b>\n\nПока пусто — продолжай и они придут!\n\n' +
+        '💡 Как получить первые:\n' +
+        '• <b>🌟 Отличный день!</b> — набери 80+ баллов за день\n' +
+        '• <b>🏆 Неделя качества</b> — 7 дней подряд 70+ баллов',
+      keyboard: backBtn(),
+    }
+  }
+
+  let text = `🏅 <b>Твои достижения — ${achievements.length}</b>\n\n`
+  for (const a of achievements) {
+    const def = ACHIEVEMENT_LABELS_TG[a.code] ?? { emoji: '🎯', label: a.code }
+    const date = a.obtainedAt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+    text += `${def.emoji} <b>${def.label}</b>\n  📅 ${date}\n\n`
+  }
+
+  return { text, keyboard: backBtn() }
+}
+
 // ─── AI Input Classification ───────────────────────────────────────────────────
 
 const AI_CLASSIFY_SYSTEM = `Ты анализируешь сообщения пользователя фитнес-приложения.
@@ -639,11 +679,30 @@ const AI_CLASSIFY_SYSTEM = `Ты анализируешь сообщения п�
 - expense: {"amount":число,"desc":"описание или null"}
 - unknown: {}
 
-Примеры:
+Примеры (еда — разговорные формы):
 "яблоко 500 грамм 300 калорий" → {"type":"food","data":{"name":"яблоко","calories":300,"weight_g":500},"display":"🍽️ яблоко (300 ккал, 500г)","confidence":0.95}
-"бегал 40 минут" → {"type":"gym","data":{"duration_min":40},"display":"💪 Тренировка 40 мин","confidence":0.9}
+"скушал яблоко" → {"type":"food","data":{"name":"яблоко","calories":null,"weight_g":null},"display":"🍽️ яблоко","confidence":0.9}
+"съел гречку с курицей 400 ккал" → {"type":"food","data":{"name":"гречка с курицей","calories":400,"weight_g":null},"display":"🍽️ гречка с курицей (400 ккал)","confidence":0.95}
+"выпил кофе" → {"type":"food","data":{"name":"кофе","calories":null,"weight_g":null},"display":"🍽️ кофе","confidence":0.85}
+"выпил протеиновый коктейль 300 ккал" → {"type":"food","data":{"name":"протеиновый коктейль","calories":300,"weight_g":null},"display":"🍽️ протеиновый коктейль (300 ккал)","confidence":0.95}
+"поел и выпил воды" → {"type":"food","data":{"name":"приём пищи","calories":null,"weight_g":null},"display":"🍽️ приём пищи","confidence":0.7}
+
+Примеры (вода):
 "выпил стакан воды" → {"type":"water","data":{"amount_ml":250},"display":"💧 +250 мл воды","confidence":0.85}
-"купил кофе 150 руб" → {"type":"expense","data":{"amount":150,"desc":"кофе"},"display":"💸 Расход −150₽ (кофе)","confidence":0.9}`
+"выпил литр воды" → {"type":"water","data":{"amount_ml":1000},"display":"💧 +1000 мл воды","confidence":0.9}
+"попил воды 500мл" → {"type":"water","data":{"amount_ml":500},"display":"💧 +500 мл воды","confidence":0.95}
+
+Примеры (активность):
+"бегал 40 минут" → {"type":"gym","data":{"duration_min":40},"display":"💪 Тренировка 40 мин","confidence":0.9}
+"побегал 30 минут" → {"type":"gym","data":{"duration_min":30},"display":"💪 Пробежка 30 мин","confidence":0.9}
+"сходил в зал на час" → {"type":"gym","data":{"duration_min":60},"display":"💪 Тренировка 60 мин","confidence":0.9}
+"покачался" → {"type":"gym","data":{"duration_min":null},"display":"💪 Тренировка","confidence":0.85}
+"поплавал 45 минут" → {"type":"gym","data":{"duration_min":45},"display":"💪 Плавание 45 мин","confidence":0.9}
+
+Примеры (финансы):
+"купил кофе 150 руб" → {"type":"expense","data":{"amount":150,"desc":"кофе"},"display":"💸 Расход −150₽ (кофе)","confidence":0.9}
+"заплатил за такси 500" → {"type":"expense","data":{"amount":500,"desc":"такси"},"display":"💸 Расход −500₽ (такси)","confidence":0.9}
+"получил зп 50000" → {"type":"income","data":{"amount":50000,"desc":"зп"},"display":"💚 Доход +50000₽ (зп)","confidence":0.9}`
 
 interface AiClassifyResult {
   type: string
@@ -1033,6 +1092,12 @@ async function handleCommand(userId: string, text: string): Promise<{ reply: str
     }
   }
 
+  // Achievements
+  if (ACHIEVEMENTS_RE.test(t)) {
+    const { text: achText, keyboard: achKeyboard } = await getAchievementsSummary(userId)
+    return { reply: achText, keyboard: achKeyboard }
+  }
+
   // Unknown — try AI classification
   return { reply: '__AI_CLASSIFY__' }
 }
@@ -1187,7 +1252,8 @@ async function handleCallback(
     btn_finance: () => getFinanceSummary(userId, today),
     btn_tasks:   () => getTasksSummary(userId, today),
     btn_summary: async () => ({ text: await buildFullSummary(userId, today), keyboard: backBtn() }),
-    btn_leaks:   () => getLeaksSummary(userId),
+    btn_leaks:        () => getLeaksSummary(userId),
+    btn_achievements: () => getAchievementsSummary(userId),
   }
 
   const handler = moduleHandlers[data]

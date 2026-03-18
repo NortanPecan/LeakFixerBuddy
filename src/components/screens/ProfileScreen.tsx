@@ -73,6 +73,34 @@ import {
 } from '@/features/profile'
 import { QuickAccess, DonateCard } from '@/features/profile'
 
+// ─── All achievement definitions (earned + locked for motivation) ─────────────
+const ALL_ACHIEVEMENT_DEFS = [
+  { code: 'GREAT_DAY_FIRST', emoji: '🌟', label: 'Отличный день!', desc: 'Набрать 80+ баллов за день' },
+  { code: 'QUALITY_WEEK',    emoji: '🏆', label: 'Неделя качества', desc: '7 дней подряд 70+ баллов' },
+  { code: 'STREAK_7',        emoji: '🔥', label: '7 дней подряд',   desc: 'Серия из 7 дней' },
+  { code: 'STREAK_30',       emoji: '💎', label: 'Месяц силы',      desc: 'Серия из 30 дней' },
+  { code: 'WATER_WEEK',      emoji: '💧', label: 'Водный марафон',  desc: '7 дней норма воды' },
+  { code: 'GYM_10',          emoji: '💪', label: 'Железный',        desc: '10 тренировок выполнено' },
+]
+
+const LEAK_TYPE_LABELS_PROFILE: Record<string, string> = {
+  low_energy:        'Низкая энергия',
+  chronic_low_energy:'Хроническая усталость',
+  no_gym:            'Мало тренировок',
+  gym_dropout:       'Бросил зал',
+  ritual_consistency:'Непостоянство ритуалов',
+  ritual_erosion:    'Эрозия ритуалов',
+  missed_checkins:   'Пропуск чек-инов',
+  calorie_spikes:    'Скачки калорий',
+  no_habits:         'Нет привычек',
+  weekend_ritual_drop:'Срыв в выходные',
+  high_stress:       'Высокий стресс',
+  sleep_deficit:     'Дефицит сна',
+  expense_spike:     'Скачок расходов',
+  tracking_dropout:  'Не ввожу данные',
+  low_tracking:      'Мало трекинга',
+}
+
 function WeightSparkline({ data }: { data: Array<{ date: string; weight: number }> }) {
   if (data.length < 2) return null
   const W = 120, H = 24, PAD = 2
@@ -121,6 +149,12 @@ export function ProfileScreen() {
 
   // Community percentile (3.10)
   const [communityStats, setCommunityStats] = useState<{ streakPercentile: number; pointsPercentile: number; totalUsers: number } | null>(null)
+
+  // Achievements
+  const [achievements, setAchievements] = useState<Array<{ code: string; obtainedAt: string }>>([])
+
+  // AI patterns history
+  const [aiPatterns, setAiPatterns] = useState<Array<{ leakType: string; analysisCount: number; whatWorked: unknown[]; updatedAt: string }>>([])
 
   // New state
   const [bio, setBio] = useState('')
@@ -226,6 +260,18 @@ export function ProfileScreen() {
         fetch(`/api/stats/community?userId=${user.id}`)
           .then(r => r.ok ? r.json() : null)
           .then(d => { if (d?.success) setCommunityStats({ streakPercentile: d.streakPercentile, pointsPercentile: d.pointsPercentile, totalUsers: d.totalUsers }) })
+          .catch(() => {/* silent */})
+
+        // Load achievements
+        fetch(`/api/achievements/check?userId=${user.id}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d?.achievements) setAchievements(d.achievements) })
+          .catch(() => {/* silent */})
+
+        // Load AI patterns history
+        fetch(`/api/ai/patterns?userId=${user.id}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d?.patterns) setAiPatterns(d.patterns) })
           .catch(() => {/* silent */})
 
         // Set bio from profile
@@ -570,6 +616,81 @@ export function ProfileScreen() {
                 )
               })}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Achievements */}
+      <Card className="bg-card/50 backdrop-blur">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Star className="w-5 h-5 text-yellow-400" />
+            Достижения
+            {achievements.length > 0 && (
+              <Badge className="ml-auto bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-xs">
+                {achievements.length} / {ALL_ACHIEVEMENT_DEFS.length}
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 gap-2">
+            {ALL_ACHIEVEMENT_DEFS.map((def) => {
+              const earned = achievements.find(a => a.code === def.code)
+              const date = earned
+                ? new Date(earned.obtainedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+                : null
+              return (
+                <div
+                  key={def.code}
+                  className={`flex flex-col items-center text-center p-3 rounded-lg gap-1 transition-all ${
+                    earned
+                      ? 'bg-yellow-500/10 border border-yellow-500/20'
+                      : 'bg-muted/20 opacity-40 grayscale'
+                  }`}
+                >
+                  <span className="text-2xl">{def.emoji}</span>
+                  <span className="text-[11px] font-medium leading-tight">{def.label}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {earned && date ? date : def.desc}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* AI Patterns History */}
+      {aiPatterns.filter(p => p.leakType !== 'tg_input_patterns').length > 0 && (
+        <Card className="bg-card/50 backdrop-blur">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Brain className="w-5 h-5 text-purple-400" />
+              История AI-анализов
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {aiPatterns
+              .filter(p => p.leakType !== 'tg_input_patterns')
+              .slice(0, 5)
+              .map((p) => {
+                const label = LEAK_TYPE_LABELS_PROFILE[p.leakType] ?? p.leakType
+                const workedCount = Array.isArray(p.whatWorked) ? p.whatWorked.length : 0
+                const updatedDate = new Date(p.updatedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+                return (
+                  <div key={p.leakType} className="flex items-start justify-between gap-2 p-2 rounded-lg bg-muted/20">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{label}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {p.analysisCount} {p.analysisCount === 1 ? 'анализ' : p.analysisCount < 5 ? 'анализа' : 'анализов'}
+                        {workedCount > 0 && ` · ${workedCount} сработало ✅`}
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{updatedDate}</span>
+                  </div>
+                )
+              })}
           </CardContent>
         </Card>
       )}
