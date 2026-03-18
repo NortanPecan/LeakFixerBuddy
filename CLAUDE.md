@@ -117,7 +117,7 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Текущее состояние (2026-03-18, сессия 19)
+## Текущее состояние (2026-03-18, сессия 20)
 
 ### Что реализовано (полный список)
 
@@ -250,39 +250,65 @@ export function GymWorkoutDetailDialog() {
 | `prisma/migrations/20260317_user_ai_patterns.sql` | `user_ai_patterns` | ✅ применена |
 | `prisma/migrations/20260317_ai_logs.sql` | `ai_logs` | ✅ применена |
 | `prisma/migrations/20260317_supplement_reminders.sql` | `user_settings.supplement_reminders` | ✅ применена |
+| `prisma/migrations/20260318_training_data_view.sql` | `training_data` (VIEW) | ✅ применена |
 
 ---
 
-## Следующие задачи (приоритет, сессия 20)
+## Следующие задачи (приоритет, сессия 21)
 
 ### 1. 🔴 ProfileScreen: CHALLENGE_FIRST в карточке достижений
 `CHALLENGE_FIRST` добавлен в achievements/check бэкенд, но карточка ProfileScreen хардкодит 6 плиток и не знает о новом бейдже.
-- В `ALL_ACHIEVEMENT_DEFS` (ProfileScreen) добавить `{ code: 'CHALLENGE_FIRST', label: 'Первый вызов', emoji: '🏆', desc: 'Завершить первый челлендж' }`
-- Увеличить счётчик «X/7» (было 6 плиток)
+- В `ALL_ACHIEVEMENT_DEFS` добавить `{ code: 'CHALLENGE_FIRST', label: 'Первый вызов', emoji: '🏆', desc: 'Завершить первый челлендж' }`
+- Счётчик: «X/7» (было 6 плиток)
 - Файл: `src/components/screens/ProfileScreen.tsx`
 
-### 2. 🔴 ChallengesScreen: фильтр «Завершённые» не работает
-`ChallengesScreen` запрашивает `status=completed` но `challenges.filter(c => c.status !== 'active')` включает и failed и planned.
-- Исправить фильтрацию: `finished = challenges.filter(c => c.status === 'completed' || c.status === 'failed')`
-- Или добавить отдельный фильтр 'failed' в UI
-- Файл: `src/components/screens/ChallengesScreen.tsx`
-
-### 3. 🟡 Telegram: команда `вызовы` → показывать прогресс как в приложении
-Сейчас `getChallengesSummary` показывает `c.progress` (сырое число из БД), не вызывает `calculateChallengeProgress`.
-- Перед рендером вызвать calculateChallengeProgress для каждого активного челленджа
-- Либо упростить: показывать только имя + дней осталось + кнопку быстрого старта
-- Файл: `src/app/api/telegram/webhook/route.ts`
-
-### 4. 🟡 HomeScreen: виджет челленджей — клик открывает ChallengeDetailScreen
-Сейчас клик на виджет ведёт на `goals`, но не на конкретный челлендж.
-- Добавить `setSelectedContentId(c.id)` + `setScreen('challenge-detail')` по клику на отдельную карточку
+### 2. 🟡 HomeScreen: клик на виджет «Активные челленджи» → ChallengeDetailScreen
+Сейчас клик на карточку челленджа ведёт на `setScreen('goals')`.
+- Изменить на: `setSelectedContentId(c.id); setScreen('challenge-detail')`
 - Файл: `src/components/screens/HomeScreen.tsx`
 
-### 5. 🟢 Telegram: кнопка «вызовы» в главном меню
-Команда `вызовы` работает через текст, но кнопки в меню нет.
-- Добавить `{ id: 'challenges', emoji: '🏆', label: 'Вызовы' }` в `TG_BUTTONS`
-- Добавить handler в `moduleHandlers`
+### 3. 🟡 Telegram: getChallengesSummary — показывать реальный прогресс
+Сейчас отображается `c.daysCompleted` (сырое), не вызывается `calculateChallengeProgress`.
+- Вызвать `calculateChallengeProgress(c, userId)` для каждого активного челленджа перед рендером
 - Файл: `src/app/api/telegram/webhook/route.ts`
+
+### 4. 🟢 ProfileScreen: заблокированные ачивменты STREAK_7/30/WATER_WEEK/GYM_10 появляются в карточке
+Бэкенд `POST /api/achievements/check` уже выдаёт эти бейджи, но `ALL_ACHIEVEMENT_DEFS` их не имеет → они никогда не показываются на «замочке» в ProfileScreen.
+- Убедиться что все 7 кодов (включая CHALLENGE_FIRST) присутствуют в `ALL_ACHIEVEMENT_DEFS`
+- Файл: `src/components/screens/ProfileScreen.tsx`
+
+### 5. 🟢 Telegram: кнопка «Вызовы» в настройках — проверить toggle
+Кнопка `🏆 Вызовы` добавлена в `TG_BUTTONS` (сессия 19). `buildSettingsKeyboard` итерирует `TG_BUTTONS` автоматически — убедиться что кнопка появляется в ⚙️ Настройки и корректно переключается через `tg_challenges` в `hiddenWidgets`.
+
+---
+
+## Что делали в сессии 2026-03-18 (сессия 20)
+
+### Аудит + 1 реальный фикс
+
+**Аудит:** проверили все 5 задач из плана сессии 20:
+
+| Задача | Статус | Комментарий |
+|--------|--------|-------------|
+| Telegram еда: БЖУ и кнопки качества | ✅ Уже было | `parseFoodEntry()` + `food_q_` callback реализованы в сессии 13 |
+| Telegram Вызовы в настройках | ✅ Уже было | `buildSettingsKeyboard` итерирует `TG_BUTTONS` автоматически |
+| ChallengesScreen: failed в «Завершённых» | ✅ Исправлено | Реальный баг: API не загружал failed-челленджи |
+| Telegram «неделя»/«итоги» | ✅ Уже было | `WEEK_RE` → `__WEEKLY_DIGEST__` → AI weekly digest |
+| Миграция `training_data_view` | ✅ Подтверждена | VIEW присутствует в Supabase |
+
+**Изменённые файлы:**
+- `src/components/screens/ChallengesScreen.tsx`:
+  - `loadChallenges()`: вкладка 'completed' теперь загружает **без** `&status=completed` → API возвращает все статусы
+  - `finished = challenges.filter(c => c.status === 'completed' || c.status === 'failed')` — явная фильтрация
+  - Добавлен `displayList = filter === 'active' ? active : finished`
+  - Рендер и empty-state переключены на `displayList` вместо `challenges`
+
+**Принятые решения:**
+- **Фикс без изменения API**: самый минимальный рефакторинг — убираем `status` param из запроса для вкладки 'completed', фильтруем на фронте через `finished`. Не добавляем `status=finished` в API (лишние изменения, где не сломано).
+- **`displayList` вместо inline ternary**: выделили в константу для читаемости — используется в трёх местах (рендер, empty-state, счётчик кнопки).
+
+### Ничего не осталось незакончено
+Один коммит: `fix: ChallengesScreen — показывать failed-челленджи во вкладке «Завершённые»`, линтер чистый (0 ошибок).
 
 ---
 
