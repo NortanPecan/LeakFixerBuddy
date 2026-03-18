@@ -19,6 +19,10 @@
     {
       "path": "/api/notifications/send-supplement-reminder",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/telegram/send-weekly-digest",
+      "schedule": "0 7 * * 1"
     }
   ]
 }
