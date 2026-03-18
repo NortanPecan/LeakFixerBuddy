@@ -429,8 +429,21 @@ export function ChallengeDetailScreen() {
             <Progress value={challenge.progressPercentage} className="h-3" />
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>
-                {challenge.type === 'chain' 
+                {challenge.type === 'chain'
                   ? `${challenge.daysCompleted} шагов`
+                  : challenge.type === 'tracker'
+                  ? (() => {
+                      try {
+                        const cfg = JSON.parse(challenge.config || '{}') as { metric?: string }
+                        const units: Record<string, string> = {
+                          water_streak: 'мл воды', gym_count: 'тренировок',
+                          ritual_rate: 'ритуалов', no_food_bad: 'нарушений',
+                          sleep_avg: 'ч сна', mood_avg: '/10',
+                        }
+                        const unit = cfg.metric ? (units[cfg.metric] ?? 'дней') : 'дней'
+                        return `${challenge.daysCompleted}/${challenge.duration} ${unit}`
+                      } catch { return `${challenge.daysCompleted}/${challenge.duration} дней` }
+                    })()
                   : `${challenge.daysCompleted}/${challenge.duration} дней`
                 }
               </span>

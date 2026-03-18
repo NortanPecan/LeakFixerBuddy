@@ -518,7 +518,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, name, title, description, category, directionId, config, status, progress, endDate, markDay } = body
+    const { id, name, title, description, category, directionId, config, status, progress, startDate, endDate, markDay } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
@@ -529,23 +529,59 @@ export async function PATCH(request: NextRequest) {
       const challenge = await db.challenge.findUnique({ where: { id } })
       if (!challenge) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+      // Dedup: only one mark per calendar day
+      const todayStr = new Date().toISOString().split('T')[0]
       const existing = await db.challengeProgress.findFirst({ where: { challengeId: id } })
-      let daysCompleted = 1
       if (existing) {
+        const lastChecked = existing.lastCheckedAt.toISOString().split('T')[0]
+        if (lastChecked === todayStr) {
+          return NextResponse.json({ success: true, challenge, daysCompleted: existing.daysCompleted, alreadyMarked: true })
+        }
         await db.challengeProgress.update({
           where: { id: existing.id },
           data: { daysCompleted: { increment: 1 }, currentStreak: { increment: 1 }, lastCheckedAt: new Date() },
         })
-        daysCompleted = existing.daysCompleted + 1
       } else {
         await db.challengeProgress.create({ data: { challengeId: id, daysCompleted: 1, currentStreak: 1 } })
       }
+      const daysCompleted = existing ? existing.daysCompleted + 1 : 1
       const newProgress = Math.min(100, Math.round((daysCompleted / challenge.duration) * 100))
       const newStatus   = newProgress >= 100 ? 'completed' : challenge.status
       const updated = await db.challenge.update({
         where: { id },
         data: { progress: newProgress, status: newStatus },
       })
+
+      // When completing: award CHALLENGE_FIRST + TG notification (same as calculateChallengeProgress)
+      if (newStatus === 'completed' && challenge.status === 'active') {
+        try {
+          await db.achievement.create({
+            data: {
+              userId: challenge.userId,
+              code: 'CHALLENGE_FIRST',
+              metadata: JSON.stringify({ challengeId: challenge.id, challengeName: challenge.name }),
+            },
+          })
+        } catch { /* already exists */ }
+        try {
+          const botToken = process.env.TELEGRAM_BOT_TOKEN
+          if (botToken) {
+            const tgUser = await db.user.findUnique({ where: { id: challenge.userId }, select: { telegramId: true } })
+            if (tgUser?.telegramId) {
+              await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  chat_id: tgUser.telegramId,
+                  text: `🏆 <b>Челлендж завершён!</b>\n\n<b>${challenge.name}</b>\n\n🎉 Отличная работа! Ты выполнил поставленную цель.`,
+                  parse_mode: 'HTML',
+                }),
+              })
+            }
+          }
+        } catch { /* non-critical */ }
+      }
+
       return NextResponse.json({ success: true, challenge: updated, daysCompleted })
     }
 
@@ -558,6 +594,7 @@ export async function PATCH(request: NextRequest) {
     if (config !== undefined) updateData.config = typeof config === 'object' ? JSON.stringify(config) : config
     if (status !== undefined) updateData.status = status
     if (progress !== undefined) updateData.progress = progress
+    if (startDate !== undefined) updateData.startDate = new Date(startDate)
     if (endDate !== undefined) updateData.endDate = endDate ? new Date(endDate) : null
 
     const challenge = await db.challenge.update({

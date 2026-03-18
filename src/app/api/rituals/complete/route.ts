@@ -202,9 +202,13 @@ async function incrementLinkedChallenges(userId: string, ritualId: string) {
       // Empty means track all rituals; non-empty means only specific ones
       if (linked.length > 0 && !linked.includes(ritualId)) continue
 
-      // Upsert ChallengeProgress and increment daysCompleted
+      // Upsert ChallengeProgress — at most one increment per calendar day
+      const todayStr = new Date().toISOString().split('T')[0]
       const existing = await db.challengeProgress.findFirst({ where: { challengeId: ch.id } })
       if (existing) {
+        const lastChecked = existing.lastCheckedAt.toISOString().split('T')[0]
+        if (lastChecked === todayStr) continue // already counted today
+
         await db.challengeProgress.update({
           where: { id: existing.id },
           data: {

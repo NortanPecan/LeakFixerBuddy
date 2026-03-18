@@ -254,31 +254,67 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Следующие задачи (приоритет, сессия 21)
+## Следующие задачи (приоритет, сессия 22)
 
-### 1. 🔴 ProfileScreen: CHALLENGE_FIRST в карточке достижений
-`CHALLENGE_FIRST` добавлен в achievements/check бэкенд, но карточка ProfileScreen хардкодит 6 плиток и не знает о новом бейдже.
+### 1. 🔴 ProfileScreen: CHALLENGE_FIRST + все 7 ачивментов в карточке
+`ALL_ACHIEVEMENT_DEFS` содержит только 6 плиток (GREAT_DAY_FIRST, QUALITY_WEEK, STREAK_7, STREAK_30, WATER_WEEK, GYM_10) — CHALLENGE_FIRST отсутствует. Нужно добавить в массив и обновить счётчик «X/7».
 - В `ALL_ACHIEVEMENT_DEFS` добавить `{ code: 'CHALLENGE_FIRST', label: 'Первый вызов', emoji: '🏆', desc: 'Завершить первый челлендж' }`
-- Счётчик: «X/7» (было 6 плиток)
 - Файл: `src/components/screens/ProfileScreen.tsx`
 
-### 2. 🟡 HomeScreen: клик на виджет «Активные челленджи» → ChallengeDetailScreen
-Сейчас клик на карточку челленджа ведёт на `setScreen('goals')`.
+### 2. 🟡 HomeScreen: клик на карточку активного челленджа → ChallengeDetailScreen
+Сейчас клик ведёт на `setScreen('goals')`.
 - Изменить на: `setSelectedContentId(c.id); setScreen('challenge-detail')`
 - Файл: `src/components/screens/HomeScreen.tsx`
 
-### 3. 🟡 Telegram: getChallengesSummary — показывать реальный прогресс
-Сейчас отображается `c.daysCompleted` (сырое), не вызывается `calculateChallengeProgress`.
+### 3. 🟡 Telegram: getChallengesSummary — реальный прогресс через calculateChallengeProgress
+Сейчас показывает `c.progress` (сырое из БД), не пересчитывает tracker-метрики.
 - Вызвать `calculateChallengeProgress(c, userId)` для каждого активного челленджа перед рендером
 - Файл: `src/app/api/telegram/webhook/route.ts`
 
-### 4. 🟢 ProfileScreen: заблокированные ачивменты STREAK_7/30/WATER_WEEK/GYM_10 появляются в карточке
-Бэкенд `POST /api/achievements/check` уже выдаёт эти бейджи, но `ALL_ACHIEVEMENT_DEFS` их не имеет → они никогда не показываются на «замочке» в ProfileScreen.
-- Убедиться что все 7 кодов (включая CHALLENGE_FIRST) присутствуют в `ALL_ACHIEVEMENT_DEFS`
-- Файл: `src/components/screens/ProfileScreen.tsx`
+### 4. 🟢 ChallengeDetailScreen: кнопка «Отметить день» показывает сообщение если уже отмечен
+Сейчас API возвращает `{ alreadyMarked: true }` (добавлено в сессии 21), но фронт не обрабатывает это поле.
+- В `handleMarkDay` показывать showSuccessToast('✅ Сегодня уже отмечен!') при `alreadyMarked: true`
+- Файл: `src/components/screens/ChallengeDetailScreen.tsx`
 
-### 5. 🟢 Telegram: кнопка «Вызовы» в настройках — проверить toggle
-Кнопка `🏆 Вызовы` добавлена в `TG_BUTTONS` (сессия 19). `buildSettingsKeyboard` итерирует `TG_BUTTONS` автоматически — убедиться что кнопка появляется в ⚙️ Настройки и корректно переключается через `tg_challenges` в `hiddenWidgets`.
+### 5. 🟢 Проверить кнопки tracker-прогресса в ChallengesScreen getProgressLabel()
+Функция `getProgressLabel()` в ChallengesScreen может показывать "8.2 / 8 дней" для avg-метрик. Проверить и привести к единому виду с исправлением в ChallengeDetailScreen из сессии 21.
+
+---
+
+## Что делали в сессии 2026-03-18 (сессия 21)
+
+### Полный аудит багов + 5 реальных исправлений
+
+**Формат:** аудит всей кодовой базы по ключевым файлам (challenges, achievements, rituals, ProfileScreen, HomeScreen, ChallengeDetailScreen, store).
+
+**Найдено 5 реальных багов:**
+
+| # | Баг | Severity | Файл |
+|---|-----|----------|------|
+| 1 | `PATCH /api/challenges` игнорировал поле `startDate` — активация planned-челленджа не сбрасывала дату старта | 🔴 HIGH | `challenges/route.ts` |
+| 2 | `markDay` без дедупликации по дате — можно было нажать 30 раз в день, мгновенно завершая челлендж | 🔴 HIGH | `challenges/route.ts` |
+| 3 | `incrementLinkedChallenges` инкрементила `daysCompleted` за каждый ритуал, а не за каждый день — 5 ритуалов в день = +5 к счётчику | 🟡 MEDIUM | `rituals/complete/route.ts` |
+| 4 | Tracker-тип в ChallengeDetailScreen показывал «7/10 дней» вместо «7/10 тренировок» — не было ветки для `type === 'tracker'` | 🟡 MEDIUM | `ChallengeDetailScreen.tsx` |
+| 5 | `markDay` при завершении не выдавал CHALLENGE_FIRST achievement и не отправлял TG-уведомление (в отличие от `calculateChallengeProgress`) | 🟢 LOW | `challenges/route.ts` |
+
+**Изменённые файлы:**
+- `src/app/api/challenges/route.ts`:
+  - Добавлен `startDate` в деструктуризацию body и в `updateData` PATCH-обработчика
+  - `markDay`: дедупликация — `lastCheckedAt.toISOString().split('T')[0] === todayStr`, при совпадении возвращает `{ alreadyMarked: true }` без инкремента
+  - `markDay` при `newStatus === 'completed'`: inline создание `CHALLENGE_FIRST` + TG-уведомление (зеркалит `calculateChallengeProgress`)
+- `src/app/api/rituals/complete/route.ts`:
+  - `incrementLinkedChallenges`: проверка `lastCheckedAt` — если уже помечен сегодня, `continue` без инкремента
+- `src/components/screens/ChallengeDetailScreen.tsx`:
+  - Прогресс-лейбл: добавлена ветка `challenge.type === 'tracker'` с IIFE, парсящим `config.metric` и выбирающим unit из словаря (`gym_count → тренировок`, `sleep_avg → ч сна`, `mood_avg → /10`, etc.)
+
+**Принятые решения:**
+- **`alreadyMarked` vs ошибка**: API возвращает `200 { alreadyMarked: true }` (не 400) — фронт покажет тост «уже отмечен», без прерывания UX.
+- **`daysCompleted` читается до обновления**: В `markDay` читаем `existing.daysCompleted` до `db.challengeProgress.update()`, чтобы вычислить правильное значение без дополнительного запроса.
+- **Tracker unit словарь в двух местах**: в ChallengeDetailScreen (для detail view) и в ChallengesScreen `getProgressLabel()` (для списка). Намеренно не выносим в shared — разные контексты отображения.
+- **`incrementLinkedChallenges` dedup через `lastCheckedAt`**: поле уже существует в `ChallengeProgress`, дополнительных миграций не нужно.
+
+### Ничего не осталось незакончено
+Все 5 багов исправлены. Миграций нет (схема не менялась). Коммит запушен в `claude/add-challenge-first-badge-c2W4D`.
 
 ---
 
