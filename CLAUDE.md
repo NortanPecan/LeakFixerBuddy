@@ -117,7 +117,7 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Текущее состояние (2026-03-17, сессия 11)
+## Текущее состояние (2026-03-18, сессия 12)
 
 ### Что реализовано (полный список)
 
@@ -187,16 +187,19 @@ export function GymWorkoutDetailDialog() {
 - ✅ `user_ai_patterns` таблица — хранит историю анализов, tried solutions, whatWorked по каждому типу лика
 - ✅ Прокси-архитектура: ключи только на сервере, фронт не знает ни ключей, ни провайдера
 
-**Telegram bot (сессии 6–9)**
+**Telegram bot (сессии 6–9, 12)**
 - ✅ `POST /api/telegram/webhook` — 13 текстовых команд: вода/вес/настроение/энергия/ел/зал/задача/ритуалы/сон/сводка/доход/расход/помощь
 - ✅ Верификация через `TELEGRAM_WEBHOOK_SECRET`, GET → healthcheck
-- ✅ Inline keyboard: главное меню с 11 кнопками (💪🍽️💧✅😴⚖️😊⚡💰📊📋)
+- ✅ Inline keyboard: главное меню с 12 кнопками (💪🍽️💧✅😴⚖️😊⚡💰📊📋🔍)
 - ✅ Callback handlers для каждого модуля — сводки прямо в боте
 - ✅ GYM сводка: упражнения в формате `Жим — 4х12х50кг(55) 🏆`, кнопка «Отметить выполненной»
 - ✅ Вода: live-обновление без нового сообщения, кнопки +200/+350/+500 мл
 - ✅ Ритуалы: список с ✅/⬜, кнопка «Отметить все выполненными»
 - ✅ ⚙️ Настройки кнопок: каждую кнопку можно вкл/выкл прямо в боте, хранится в `hidden_widgets` (префикс `tg_`)
 - ✅ Webhook зарегистрирован, токен перевыпущен через @BotFather
+- ✅ ForceReply для Сон/Вес/Настроение/Энергия: кнопка → бот спрашивает значение → пользователь отвечает → записывается
+- ✅ 🔍 Лики в боте: кнопка показывает список UserAiPattern с причинами и топ-решениями
+- ✅ AI-адаптация неизвестных сообщений: Groq классифицирует тип → подтверждение ✅/❌ → сохранение + обучение regex-паттерна
 
 **Онбординг и персонализация (сессия 6)**
 - ✅ Прогрессивный онбординг (7.1): до дня 8 скрыты EmotionWidget, FleetingThoughts, Wellbeing, «Лики недели», «Месячный анализ», «Фокус недели»; показывается баннер «🔓 ещё X дн.»
@@ -214,41 +217,38 @@ export function GymWorkoutDetailDialog() {
 | `prisma/migrations/20260317_hidden_widgets.sql` | `user_settings.hidden_widgets` | ✅ применена |
 | `prisma/migrations/20260317_user_ai_patterns.sql` | `user_ai_patterns` | ✅ применена |
 | `prisma/migrations/20260317_ai_logs.sql` | `ai_logs` | ✅ применена |
+| `prisma/migrations/20260317_supplement_reminders.sql` | `user_settings.supplement_reminders` | ✅ применена |
 
 ---
 
-## Следующие задачи (приоритет, сессия 12)
+## Следующие задачи (приоритет, сессия 13)
 
-### 1. 🔴 Supplement reminder — отдельный флаг (30 мин)
-Сейчас `/api/notifications/send-supplement-reminder` проверяет `ritualReminders`. Нужен отдельный флаг.
-- `prisma/schema.prisma`: добавить `supplementReminders Boolean @default(true)`
-- `prisma/migrations/20260317_supplement_reminders.sql` + применить в Supabase SQL Editor
-- `SettingsScreen.tsx`: Switch «Напоминание о БАДах»
-- `send-supplement-reminder/route.ts`: заменить `ritualReminders` → `supplementReminders`
+### 1. 🔴 Ачивменты — список в ProfileScreen (30 мин)
+`POST /api/achievements/check` и popup уже реализованы. Остался экран-витрина.
+- ProfileScreen: карточка «Достижения» — сетка полученных бейджей с датой
+- Грузить через `GET /api/achievements/check?userId=...`
+- Заблюренные/серые плитки для ещё не полученных ачивментов (motivation)
 
-### 2. 🟡 StatsScreen — выбор периода 7д/14д/30д/90д (1 час)
-Сейчас `?days=30` и `last14Days` жёстко захардкожено.
-- State `periodDays: 7 | 14 | 30 | 90` + кнопки-переключатели в UI
-- API: передавать `?days=N`, пересчёт всех chart и averages
-- Файлы: `src/components/screens/StatsScreen.tsx`, `src/app/api/stats/history/route.ts`
+### 2. 🟡 Telegram AI — улучшить промпт классификации (30 мин)
+Текущий AI_CLASSIFY_SYSTEM хорошо работает для еды, но нужно расширить:
+- Добавить примеры для русских разговорных форм: «выпил кофе», «скушал яблоко», «побегал 30 минут»
+- Добавить обработку комбинированных команд: «поел и выпил воды»
+- Тест промпта на 10 реальных примерах (написать в CLAUDE.md)
 
-### 3. 🟡 Ачивменты за оценку дня (2 часа)
-Таблица `Achievement` уже есть в Prisma schema.
-- Триггеры: первый 80+ → badge «Отличный день», 7 дней подряд 70+ → badge «Неделя качества»
-- API: `POST /api/achievements/check` → проверка условий и запись
-- UI: показывать popup при выдаче, список в ProfileScreen
+### 3. 🟡 ProfileScreen — полный список ачивментов + история AI-паттернов (1 час)
+- Новая вкладка или секция в ProfileScreen: все Achievement + статистика по лику (из UserAiPattern)
+- Показать: сколько раз анализировали, что сработало, какие паттерны повторяются
+- Данные уже есть, нужен только UI
 
-### 4. 🟢 Telegram bot — inline ввод данных через ForceReply (1.5 часа)
-Сейчас кнопки «Сон», «Вес», «Настроение», «Энергия» только показывают текущее значение.
-- Flow: нажал кнопку → бот спрашивает значение (ForceReply) → пользователь отвечает → записывается
-- Хранить `pendingAction` в `fleeting_thoughts` (TTL 5 мин) или временной Note
-- Файл: `webhook/route.ts` — проверять `message.reply_to_message`
+### 4. 🟢 StatsScreen — агрегаты за 90 дней (30 мин)
+При 90 днях API возвращает много данных, но averages/totals считаются правильно.
+- Добавить в cards «Всего за N дней» дополнительно: средний балл дня, лучший день
+- Подсветить лучшую неделю в weeklySummary chart
 
-### 5. 🟢 DailySummaryScreen — кнопка «Поделиться» оценкой (30 мин)
-Кнопка рядом со score формирует текст:
-`📊 Мой день: 83/100 — Отличный! 💧100% 🍽️1800ккал ✅4/5 ритуалов`
-→ `navigator.clipboard.writeText()` или `window.open('tg://msg?text=...')`
-Файл: `src/components/screens/DailySummaryScreen.tsx`
+### 5. 🟢 Telegram — команда `ачивменты` (20 мин)
+Текстовая команда + кнопка в меню для просмотра своих достижений прямо в боте
+- `GET /api/achievements/check?userId=...` → форматировать список с датами
+- Добавить `{ id: 'achievements', emoji: '🏅', label: 'Достижения' }` в TG_BUTTONS
 
 ---
 
@@ -533,6 +533,47 @@ export function GymWorkoutDetailDialog() {
 | `0 8 * * *` | 08:00 | 11:00 | Supplement reminder (новый) |
 | `0 16 * * *` | 16:00 | 19:00 | Ritual reminder |
 | `0 17 * * *` | 17:00 | 20:00 | Вечерний checkin reminder |
+
+## Что делали в сессии 2026-03-18 (сессия 12)
+
+### 7 задач за одну сессию — полная реализация
+
+**Изменённые файлы:**
+- `prisma/schema.prisma` — добавлен `supplementReminders Boolean @default(true) @map("supplement_reminders")`
+- `prisma/migrations/20260317_supplement_reminders.sql` — миграция применена пользователем вручную
+- `src/app/api/notifications/send-supplement-reminder/route.ts` — фильтр `supplementReminders: true` (вместо `ritualReminders`)
+- `src/components/screens/SettingsScreen.tsx` — новый Switch «Напоминание о БАДах» в разделе уведомлений
+- `src/components/screens/StatsScreen.tsx` — период 7/14/30/90д: тип `7|14|30|90`, кнопки `Xд`, `chartDays` (max 30 точек), динамические заголовки графиков
+- `src/components/screens/DailySummaryScreen.tsx`:
+  - Кнопка Share2 рядом со скором: формирует `📊 Мой день: 83/100 — Отличный! 💧95% 🍽️1800ккал ✅4/5 ритуалов` → clipboard
+  - Вызов `POST /api/achievements/check` после загрузки сводки за сегодня
+  - Popup «🌟 Новое достижение!» при получении нового бейджа, кнопка «Отлично!»
+- `src/app/api/telegram/webhook/route.ts` — крупный рефактор (+300 строк):
+  - ForceReply для btn_sleep/weight/mood/energy: pending хранится в `Note (zone=__tg_pending)`
+  - `message.reply_to_message` → lookup pending → парсим число → сохраняем в БД
+  - Кнопка `🔍 Лики` → `getLeaksSummary()`: список UserAiPattern с urgency, причиной (80 символов), топ-решением
+  - AI-классификация неизвестных сообщений: `callAI(AI_CLASSIFY_SYSTEM, text)` → JSON {type, data, display, confidence ≥ 0.6}
+  - Confirmation keyboard `✅/❌` → при подтверждении `executeClassifiedAction()` + `saveLearnedPattern()`
+  - Паттерны per-user: regex в `UserAiPattern[leakType='tg_input_patterns'].lastAnalysis[]`, max 50 записей
+
+**Новые файлы:**
+- `src/app/api/achievements/check/route.ts` — POST: calcDayScore(), проверка GREAT_DAY_FIRST + QUALITY_WEEK, создание Achievement. GET: список всех ачивментов пользователя
+
+**Баги исправлены:**
+- `Note.create` в handleCommand (зал): было `title`/`content` → исправлено на `text` (поле в схеме)
+
+### Принятые решения (важно для следующих сессий)
+
+- **Pending ForceReply**: хранится в `Note` с `zone='__tg_pending'` (один на пользователя, deleteMany перед записью). FleetingThought создаётся параллельно для автоочистки по TTL. Выбор Note вместо FleetingThought — у Note нет required поля TTL при создании.
+- **AI-классификация**: confidence ≥ 0.6 → показываем подтверждение. Ниже — стандартный «не понял» с подсказками.
+- **Паттерны**: regex строится из оригинального текста заменой чисел на `\d+(?:[.,]\d+)?`. Хранятся в `UserAiPattern` с `leakType='tg_input_patterns'` — не нужна новая таблица.
+- **StatsScreen charts**: при 90 днях `chartDays = allDays.slice(-30)` (последние 30) — иначе графики нечитаемы на мобиле. `last7Days` и `last14Days` оставлены как константы но не используются в чартах.
+- **calcDayScore на сервере**: скопирована формула из DailySummaryScreen (rituals 25%, water 20%, mood 20%, energy 15%, morning 10%, evening 10%). Нет смысла выносить в shared lib — используется только в одном endpoint.
+
+### Ручные шаги (выполнены пользователем)
+- ✅ Миграция `supplement_reminders` применена в Supabase SQL Editor
+
+---
 
 ## Telegram webhook — активация (разовая)
 
