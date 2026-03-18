@@ -681,7 +681,11 @@ export function ChallengeDetailScreen() {
               })
               const data = await res.json()
               if (data.challenge) setChallenge(prev => prev ? { ...prev, ...data.challenge, progressPercentage: data.challenge.progress } : prev)
-              showSuccessToast('✅ День отмечен!')
+              if (data.alreadyMarked) {
+                showSuccessToast('✅ Сегодня уже отмечен!')
+              } else {
+                showSuccessToast('✅ День отмечен!')
+              }
             } catch (err) {
               showErrorToast(err, 'отметка дня')
             } finally {

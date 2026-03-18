@@ -5,6 +5,7 @@ import { analyzeLeakWithAI } from '@/lib/ai-analyze-leak'
 import { formatLeakAnalysisForTelegram } from '@/lib/ai-leak-prompts'
 import { callAI } from '@/lib/ai-provider'
 import { generateWeeklyDigest } from '@/lib/ai-weekly-digest'
+import { calculateChallengeProgress } from '@/lib/challenge-utils'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET
@@ -743,6 +744,14 @@ async function getChallengesSummary(userId: string): Promise<{ text: string; key
 
   const now = Date.now()
   for (const c of challenges) {
+    // Recalculate real progress from live data
+    let liveC: Awaited<ReturnType<typeof calculateChallengeProgress>>
+    try {
+      liveC = await calculateChallengeProgress(c, userId)
+    } catch {
+      liveC = { ...c, progressPercentage: c.progress, daysCompleted: 0, currentStreak: 0 }
+    }
+
     let cfg: Record<string, unknown> = {}
     try { cfg = JSON.parse(c.config ?? '{}') } catch { /* */ }
 
@@ -751,7 +760,7 @@ async function getChallengesSummary(userId: string): Promise<{ text: string; key
       Math.floor((now - new Date(c.startDate).getTime()) / 86400000),
     )
     const daysLeft = Math.max(0, c.duration - daysElapsed)
-    const pct = c.progress ?? 0
+    const pct = liveC.progress ?? 0
     const bar = '█'.repeat(Math.round(pct / 10)) + '░'.repeat(10 - Math.round(pct / 10))
 
     let progressStr = `${pct}% · осталось ${daysLeft} дн.`
@@ -759,8 +768,9 @@ async function getChallengesSummary(userId: string): Promise<{ text: string; key
       const metric = cfg.metric as string
       const target = cfg.target as number
       const unit = TRACKER_METRIC_LABELS[metric] ?? ''
-      const actual = Math.round((pct / 100) * target)
-      progressStr = `${actual}/${target} ${unit} · осталось ${daysLeft} дн.`.trim()
+      progressStr = `${liveC.daysCompleted}/${target} ${unit} · осталось ${daysLeft} дн.`.trim()
+    } else {
+      progressStr = `${liveC.daysCompleted}/${c.duration} дней · ${pct}% · осталось ${daysLeft} дн.`
     }
 
     text += `<b>${c.name}</b>\n`
