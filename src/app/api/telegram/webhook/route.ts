@@ -721,10 +721,20 @@ async function getChallengesSummary(userId: string): Promise<{ text: string; key
     orderBy: { createdAt: 'asc' },
   })
 
+  const quickStartButtons: InlineButton[][] = [
+    [
+      { text: '💪 10 тренировок', callback_data: 'challenge_start_gym_count_10_30' },
+      { text: '💧 7 дней воды',   callback_data: 'challenge_start_water_streak_7_7' },
+    ],
+    [
+      { text: '🔥 21 день ритуалов', callback_data: 'challenge_start_ritual_rate_21_21' },
+    ],
+  ]
+
   if (challenges.length === 0) {
     return {
-      text: '🏆 <b>Активных челленджей нет</b>\n\nОткрой приложение → Челленджи, чтобы начать новый.',
-      keyboard: backBtn(),
+      text: '🏆 <b>Активных челленджей нет</b>\n\nБыстрый старт — выбери шаблон:',
+      keyboard: [...quickStartButtons, ...backBtn()],
     }
   }
 
@@ -750,7 +760,11 @@ async function getChallengesSummary(userId: string): Promise<{ text: string; key
     text += `📅 ${c.duration} дней · ${c.type === 'tracker' ? '📊 трекер' : c.type === 'ritual' ? '🔥 ритуал' : '⭐ свободный'}\n\n`
   }
 
-  return { text: text.trim(), keyboard: backBtn() }
+  const keyboard = challenges.length < 3
+    ? [...quickStartButtons, ...backBtn()]
+    : backBtn()
+
+  return { text: text.trim(), keyboard }
 }
 
 // ─── AI Input Classification ───────────────────────────────────────────────────
@@ -1655,6 +1669,59 @@ async function handleCallback(
     )
     if (botMsgId) {
       await storePending(userId, { __type: 'gymSet', exerciseId, exerciseName: exercise.name })
+    }
+    return
+  }
+
+  // Quick-start challenge
+  if (data.startsWith('challenge_start_')) {
+    // format: challenge_start_{metric}_{target}_{duration}
+    const parts = data.replace('challenge_start_', '').split('_')
+    // metric may have underscore (e.g. gym_count, water_streak, ritual_rate)
+    // last two parts are target and duration
+    const duration = parseInt(parts[parts.length - 1])
+    const target   = parseInt(parts[parts.length - 2])
+    const metric   = parts.slice(0, parts.length - 2).join('_')
+
+    const QUICK_NAMES: Record<string, string> = {
+      gym_count:    '💪 10 тренировок',
+      water_streak: '💧 7 дней нормы воды',
+      ritual_rate:  '🔥 21 день ритуалов',
+    }
+    const name = QUICK_NAMES[metric] ?? metric
+
+    const activeCount = await db.challenge.count({ where: { userId, status: 'active' } })
+    if (activeCount >= 3) {
+      await answerCallback(cbQueryId, '⚠️ Достигнут лимит 3 активных челленджа')
+      return
+    }
+
+    try {
+      const endDate = new Date()
+      endDate.setDate(endDate.getDate() + duration)
+      await db.challenge.create({
+        data: {
+          userId,
+          name,
+          type: 'tracker',
+          category: 'health',
+          zone: 'health',
+          config: JSON.stringify({ metric, target }),
+          duration,
+          startDate: new Date(),
+          endDate,
+          status: 'active',
+        },
+      })
+      await answerCallback(cbQueryId, '✅ Челлендж создан!')
+      await editMessageText(
+        chatId, messageId,
+        `🏆 <b>Челлендж начат!</b>\n\n<b>${name}</b>\n📅 ${duration} дней · Цель: ${target}`,
+        backBtn()
+      )
+    } catch (err) {
+      console.error('[challenge_start] error:', err)
+      await answerCallback(cbQueryId, '❌ Не удалось создать')
     }
     return
   }

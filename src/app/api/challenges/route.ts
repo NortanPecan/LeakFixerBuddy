@@ -250,6 +250,42 @@ async function calculateChallengeProgress(challenge: {
     })
   }
 
+  // When transitioning to completed: award achievement + send TG notification
+  if (newStatus === 'completed' && challenge.status === 'active') {
+    // CHALLENGE_FIRST achievement
+    try {
+      await db.achievement.create({
+        data: {
+          userId: challenge.userId,
+          code: 'CHALLENGE_FIRST',
+          metadata: JSON.stringify({ challengeId: challenge.id, challengeName: challenge.name }),
+        },
+      })
+    } catch { /* already exists — ignore */ }
+
+    // TG congratulation
+    try {
+      const botToken = process.env.TELEGRAM_BOT_TOKEN
+      if (botToken) {
+        const user = await db.user.findUnique({
+          where: { id: challenge.userId },
+          select: { telegramId: true },
+        })
+        if (user?.telegramId) {
+          await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: user.telegramId,
+              text: `🏆 <b>Челлендж завершён!</b>\n\n<b>${challenge.name}</b>\n\n🎉 Отличная работа! Ты выполнил поставленную цель.`,
+              parse_mode: 'HTML',
+            }),
+          })
+        }
+      }
+    } catch { /* non-critical */ }
+  }
+
   return {
     ...challenge,
     progress: progress ?? 0,
@@ -313,13 +349,74 @@ export async function GET(request: NextRequest) {
         // ignore parse errors
       }
 
-      return NextResponse.json({ 
-        success: true, 
+      // Tracker history: last 7 days per metric
+      let trackerDays: Array<{ date: string; value: number | null; met: boolean }> = []
+      if (challengeWithProgress.type === 'tracker') {
+        try {
+          const tcfg = JSON.parse(challenge.config || '{}') as Record<string, unknown>
+          const metric = tcfg.metric as string
+          const target = (tcfg.target as number) || 1
+          const uid = challenge.userId
+
+          for (let i = 6; i >= 0; i--) {
+            const d = new Date()
+            d.setDate(d.getDate() - i)
+            d.setHours(0, 0, 0, 0)
+            const dEnd = new Date(d)
+            dEnd.setHours(23, 59, 59, 999)
+            const dateStr = d.toISOString().split('T')[0]
+
+            let value: number | null = null
+            let met = false
+
+            if (metric === 'water_streak') {
+              const fd = await db.fitnessDaily.findFirst({ where: { userId: uid, date: d } })
+              value = fd?.water ?? null
+              met = fd ? (fd.water ?? 0) >= (fd.waterTarget ?? 2000) : false
+            } else if (metric === 'gym_count') {
+              const cnt = await db.gymWorkout.count({
+                where: { period: { userId: uid }, status: 'completed', date: { gte: d, lte: dEnd } },
+              })
+              value = cnt
+              met = cnt > 0
+            } else if (metric === 'ritual_rate') {
+              const rits = await db.ritual.findMany({ where: { userId: uid, status: 'active' }, select: { id: true } })
+              if (rits.length > 0) {
+                const comps = await db.ritualCompletion.findMany({
+                  where: { ritualId: { in: rits.map(r => r.id) }, date: d, completed: true },
+                })
+                value = comps.length
+                met = comps.length > 0
+              }
+            } else if (metric === 'no_food_bad') {
+              const badCnt = await db.foodEntry.count({
+                where: { userId: uid, quality: 'bad', date: { gte: d, lte: dEnd } },
+              })
+              value = badCnt
+              met = badCnt === 0
+            } else if (metric === 'sleep_avg') {
+              const st = await db.dailyState.findFirst({ where: { userId: uid, date: d } })
+              value = st?.sleepHours ?? null
+              met = (st?.sleepHours ?? 0) >= target
+            } else if (metric === 'mood_avg') {
+              const st = await db.dailyState.findFirst({ where: { userId: uid, date: d } })
+              value = st?.mood ?? null
+              met = (st?.mood ?? 0) >= target
+            }
+
+            trackerDays.push({ date: dateStr, value, met })
+          }
+        } catch { /* ignore */ }
+      }
+
+      return NextResponse.json({
+        success: true,
         challenge: {
           ...challengeWithProgress,
           linkedRituals,
           linkedSkills,
-          linkedTraits
+          linkedTraits,
+          trackerDays,
         }
       })
     } catch (error) {

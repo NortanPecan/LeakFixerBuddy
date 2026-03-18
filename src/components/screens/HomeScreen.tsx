@@ -123,6 +123,10 @@ export function HomeScreen() {
     updatedAt: string
   } | null>(null)
   const [dailyTip, setDailyTip] = useState<{ tip: string; provider: string; cached: boolean } | null>(null)
+  const [activeChallenges, setActiveChallenges] = useState<Array<{
+    id: string; name: string; progressPercentage: number; currentStreak: number; type: string
+  }>>([])
+
 
   // Days with app (since account creation — approximated by streak + day)
   const daysWithApp = user?.day || 1
@@ -264,6 +268,17 @@ export function HomeScreen() {
       }
     }
     loadDailyTip()
+  }, [user?.id, hiddenWidgets])
+
+  // Load active challenges (background, non-critical)
+  useEffect(() => {
+    if (!user?.id || hiddenWidgets.includes('challenges')) return
+    fetch(`/api/challenges?userId=${user.id}&status=active`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.success && d.challenges) setActiveChallenges(d.challenges.slice(0, 2))
+      })
+      .catch(() => {})
   }, [user?.id, hiddenWidgets])
 
   // Load weight data
@@ -1065,6 +1080,40 @@ export function HomeScreen() {
                 <div className="text-xs text-violet-400 font-medium mb-1 uppercase tracking-wider">Совет дня</div>
                 <p className="text-sm text-white/90 leading-snug">{dailyTip.tip}</p>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Active challenges widget */}
+      {activeChallenges.length > 0 && !hiddenWidgets.includes('challenges') && (
+        <Card
+          className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors"
+          onClick={() => setScreen('goals' as Screen)}
+        >
+          <CardContent className="pt-3 pb-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-yellow-400" />
+                <span className="text-sm font-medium">Активные челленджи</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <div className="space-y-2">
+              {activeChallenges.map(c => (
+                <div key={c.id}>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-white/80 truncate max-w-[70%]">{c.name}</span>
+                    <span className="font-medium text-white/60">{c.progressPercentage}%</span>
+                  </div>
+                  <Progress value={c.progressPercentage} className="h-1.5" />
+                  {c.currentStreak > 0 && (
+                    <div className="flex items-center gap-1 mt-0.5 text-[10px] text-orange-400">
+                      <Flame className="w-2.5 h-2.5" />{c.currentStreak} дней подряд
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

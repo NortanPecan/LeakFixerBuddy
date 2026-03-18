@@ -72,6 +72,12 @@ const STATUS_OPTIONS = [
   { value: 'failed', label: 'Провален', icon: XCircle, color: 'bg-red-500/20 text-red-400 border-red-500/30' },
 ]
 
+interface TrackerDay {
+  date: string
+  value: number | null
+  met: boolean
+}
+
 interface Challenge {
   id: string
   name: string
@@ -94,6 +100,7 @@ interface Challenge {
   linkedRituals?: Array<{ id: string; title: string; category: string }>
   linkedSkills?: Array<{ id: string; name: string; level: number }>
   linkedTraits?: Array<{ id: string; name: string; score: number }>
+  trackerDays?: TrackerDay[]
 }
 
 interface Buddy {
@@ -571,6 +578,81 @@ export function ChallengeDetailScreen() {
           )}
         </CardContent>
       </Card>
+
+      {/* Tracker 7-day history */}
+      {challenge.type === 'tracker' && challenge.trackerDays && challenge.trackerDays.length > 0 && (
+        <Card className="bg-card/50 backdrop-blur">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-blue-400" />
+              Последние 7 дней
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              let cfg: Record<string, unknown> = {}
+              try { cfg = JSON.parse(challenge.config || '{}') } catch { /* */ }
+              const metric = cfg.metric as string
+              const metricLabel: Record<string, string> = {
+                water_streak: 'мл воды',
+                gym_count: 'трен.',
+                ritual_rate: 'ритуалов',
+                no_food_bad: 'нарушений',
+                sleep_avg: 'ч сна',
+                mood_avg: '/10 настр.',
+              }
+              const unit = metricLabel[metric] ?? ''
+              return (
+                <div className="flex items-end gap-1.5 justify-between">
+                  {challenge.trackerDays!.map(day => {
+                    const weekday = new Date(day.date).toLocaleDateString('ru-RU', { weekday: 'short' })
+                    const dayNum = new Date(day.date).getDate()
+                    const dotColor = day.value === null
+                      ? 'bg-muted-foreground/20'
+                      : day.met ? 'bg-emerald-500' : 'bg-red-500/70'
+                    return (
+                      <div key={day.date} className="flex flex-col items-center gap-1 flex-1">
+                        <div className="text-[10px] text-muted-foreground/60">{weekday}</div>
+                        <div className={`w-6 h-6 rounded-full ${dotColor} flex items-center justify-center`}>
+                          {day.value !== null && day.met && (
+                            <CheckCircle className="w-3 h-3 text-white/90" />
+                          )}
+                        </div>
+                        {day.value !== null && (
+                          <div className="text-[9px] text-muted-foreground text-center leading-tight">
+                            {metric === 'water_streak' && day.value !== null
+                              ? `${Math.round(day.value / 100) / 10}л`
+                              : day.value
+                            }
+                            {metric === 'sleep_avg' || metric === 'mood_avg' ? ` ${unit}` : ''}
+                          </div>
+                        )}
+                        <div className="text-[9px] text-muted-foreground/50">{dayNum}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Complete early button — for active challenges */}
+      {challenge.status === 'active' && (
+        <Button
+          className="w-full bg-emerald-600 hover:bg-emerald-700"
+          onClick={async () => {
+            if (!confirm('Завершить челлендж досрочно?')) return
+            await handleStatusChange('completed')
+            showSuccessToast('🏆 Челлендж завершён!')
+          }}
+          disabled={isUpdating}
+        >
+          <CheckCircle className="w-4 h-4 mr-2" />
+          Завершить досрочно ✓
+        </Button>
+      )}
 
       {/* Manual day mark — for custom/ai challenges without ritual linking */}
       {challenge.status === 'active' && (challenge.type === 'custom' || challenge.type === 'ai') && (
