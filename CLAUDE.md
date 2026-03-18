@@ -7,7 +7,7 @@ Self-improvement social network. Next.js 14 App Router + TypeScript + Prisma + S
 
 ## КРИТИЧЕСКИЕ правила
 
-- **ВЕТКА**: только `claude/add-profile-achievements-px0DE` — никогда не пушить в main/master без разрешения
+- **ВЕТКА**: только `claude/ai-weekly-summary-rmF6Y` — никогда не пушить в main/master без разрешения
 - **БД**: только Supabase PostgreSQL через Prisma ORM (локальной БД нет!)
 - **Язык UI**: русский
 - **Lint**: `bun run lint` перед каждым коммитом (0 ошибок!)
@@ -117,7 +117,7 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Текущее состояние (2026-03-18, сессия 12)
+## Текущее состояние (2026-03-18, сессия 16)
 
 ### Что реализовано (полный список)
 
@@ -195,22 +195,26 @@ export function GymWorkoutDetailDialog() {
 - ✅ `GET /api/ai/patterns` — список всех UserAiPattern пользователя
 - ✅ ProfileScreen: секция «История AI-анализов» — тип лика, кол-во анализов, сколько сработало, дата
 
-**Telegram bot (сессии 6–9, 12–13)**
-- ✅ `POST /api/telegram/webhook` — 14 текстовых команд: вода/вес/настроение/энергия/еда/зал/задача/ритуалы/сон/сводка/доход/расход/ачивменты/помощь
+**Telegram bot (сессии 6–9, 12–13, 16)**
+- ✅ `POST /api/telegram/webhook` — 15 текстовых команд: вода/вес/настроение/энергия/еда/зал/задача/ритуалы/сон/сводка/доход/расход/ачивменты/тренер/помощь
 - ✅ Верификация через `TELEGRAM_WEBHOOK_SECRET`, GET → healthcheck
-- ✅ Inline keyboard: главное меню с 12 кнопками (💪🍽️💧✅😴⚖️😊⚡💰📊📋🔍)
+- ✅ Inline keyboard: главное меню с 13 кнопками (💪🍽️💧✅😴⚖️😊⚡💰📊📋🔍🏅)
 - ✅ Callback handlers для каждого модуля — сводки прямо в боте
 - ✅ GYM сводка: упражнения в формате `Жим — 4х12х50кг(55) 🏆`, кнопка «Отметить выполненной»
+- ✅ GYM: кнопки `➕ Сет → Название` под каждым упражнением → ForceReply → `75x8` / `75 8` / `75` → `gymExerciseSet.create`
 - ✅ Вода: live-обновление без нового сообщения, кнопки +200/+350/+500 мл
 - ✅ Ритуалы: список с ✅/⬜, кнопка «Отметить все выполненными»
 - ✅ ⚙️ Настройки кнопок: каждую кнопку можно вкл/выкл прямо в боте, хранится в `hidden_widgets` (префикс `tg_`)
 - ✅ Webhook зарегистрирован, токен перевыпущен через @BotFather
-- ✅ ForceReply для Сон/Вес/Настроение/Энергия: кнопка → бот спрашивает значение → пользователь отвечает → записывается
+- ✅ ForceReply для Сон/Вес/Настроение/Энергия/GymSet: кнопка → бот спрашивает значение → пользователь отвечает → записывается
 - ✅ 🔍 Лики в боте: кнопка показывает список UserAiPattern с причинами и топ-решениями
 - ✅ AI-адаптация неизвестных сообщений: Groq классифицирует тип → подтверждение ✅/❌ → сохранение + обучение regex-паттерна
 - ✅ Кнопка 🏅 Достижения + команда `ачивменты` — список с датами или подсказка как получить
 - ✅ Расширенный парсер еды: `ел {name} {вес} {ккал/100г} [Б Ж У]` → автопересчёт на порцию
 - ✅ Дедупликация по update_id (zone=`__tg_dedup`) — защита от Telegram retry loop при медленном AI
+- ✅ `тренер [вопрос]` — AI Coach: 30 дней данных → Groq → конкретный ответ по числам, логируется в `ai_logs (callType='tg_coach')`
+- ✅ AI-резюме недели: `GET /api/ai/weekly-digest?userId=` + batch-рассылка `GET /api/telegram/send-weekly-digest`
+- ✅ Cron `0 7 * * 1` в `vercel.json` — понедельник 07:00 UTC = 10:00 МСК
 
 **Онбординг и персонализация (сессия 6)**
 - ✅ Прогрессивный онбординг (7.1): до дня 8 скрыты EmotionWidget, FleetingThoughts, Wellbeing, «Лики недели», «Месячный анализ», «Фокус недели»; показывается баннер «🔓 ещё X дн.»
@@ -232,42 +236,100 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Следующие задачи (приоритет, сессия 16)
+## Следующие задачи (приоритет, сессия 17)
 
-### 1. 🔴 AI-резюме недели в Telegram (понедельник, cron)
-Каждый понедельник — краткий AI-текст в Telegram: лучшее за неделю, главный лик, рекомендация на следующую неделю.
-- Новый endpoint `GET /api/ai/weekly-digest?userId=` — собирает 7 дней данных → Groq → кешируется в `ai_logs (callType='weekly_digest')`
-- Новый cron `0 7 * * 1` (понедельник 07:00 UTC = 10:00 MSK) → batch-рассылка всем активным пользователям
-- Добавить cron в `vercel.json`
-- Контекст: стрики, настроение, ритуалы, зал, еда, финансы за 7 дней + главный лик из `UserAiPattern`
-- Формат ответа: 3-4 предложения, без markdown, эмодзи допустимы
+### 1. 🔴 Telegram: «+ Упражнение» в сводке зала
+Дополнение к уже реализованному «+ Сет» — добавить возможность добавить новое упражнение прямо из бота.
+- Кнопка `[➕ Упражнение]` в конце gym summary
+- callback `gym_addex_{workoutId}` → ForceReply «Введи: Жим 4x12 75кг»
+- Парсить формат «Название [sets]x[reps] [weight]кг» → `db.gymExercise.create` + первый сет
+- Это дополняет уже готовый «+ Сет» — вместе они дают полный контроль над тренировкой из TG
 
-### 2. 🔴 Telegram — кнопка «+ Сет» в сводке зала (45 мин)
-- Кнопки `[+ Сет → {exercise.name}]` под каждым упражнением в `getGymSummary()`
-- callback `gym_addset_{exerciseId}` → ForceReply «Введи вес × повторения (напр. 75x8)»
-- pending `{__type: 'gymSet', exerciseId}`, парсер `75x8` / `75 8` / `75` → `db.gymExerciseSet.create`
-- Расширить `PendingPayload` типом `PendingGymSet`
+### 2. 🔴 AI-нарратив «Как я изменился» (2.4)
+За 90 дней — один AI-текст вместо набора графиков.
+- `GET /api/ai/transformation?userId=` — сравнивает первые 30 дней vs последние 30 дней
+- Метрики: ритуалы %, настроение avg, тренировки count, вес дельта, стрик max
+- AI формирует нарратив: «За 90 дней: ритуалы выросли с 40% до 73%, срывов в 2 раза меньше…»
+- Показывать в ProfileScreen рядом с карточкой «За X дней»
+- Кешировать в `ai_logs (callType='transformation')` на 7 дней
+
+### 3. 🟡 Telegram: кнопка «🏋️ Тренер» в главном меню
+Добавить `тренер` как постоянную кнопку в `TG_BUTTONS`.
+- Сейчас `/тренер` работает только текстом — нет кнопки в меню
+- Добавить `{ id: 'trainer', emoji: '🏋️', label: 'Тренер' }` в `TG_BUTTONS`
+- callback `btn_trainer` → спрашивает вопрос через ForceReply вместо открытия сводки
 - Файл: `src/app/api/telegram/webhook/route.ts`
 
-### 3. 🟡 AI Coach в Telegram — команда `/тренер`
-Любой вопрос о себе → AI отвечает зная всю историю пользователя.
-- Ключевые слова: `/тренер`, `тренер`, `почему я`, `что делать с`
-- Контекст: последние 30 дней (настроение, стрики, лики, еда, зал) — тот же buildLeakAnalysisMessage() с расширенным промптом
-- Промпт-режим: «ты персональный коуч, отвечай конкретно по данным пользователя, не общими фразами»
-- Кешировать не нужно — каждый вопрос уникален, но логировать в `ai_logs (callType='tg_coach')`
+### 4. 🟡 StatsScreen — тренды за период
+Сейчас StatsScreen показывает графики за 7/14/30/90 дней, но нет сводки «стало лучше/хуже».
+- В cards «Итого»: цветные стрелки тренда (↑/↓) рядом с avg mood, avg energy
+- Сравнивать первую половину периода vs вторую половину
+- Файл: `src/components/screens/StatsScreen.tsx`
 
-### 4. 🟡 StatsScreen — лучшая неделя + средний балл дня (30 мин)
-- В `/api/stats/history`: добавить `dayScore` в каждый DayData (упрощённый calcDayScore)
-- В cards «Итого за N дней»: плитка «Средний балл дня» (avg dayScore)
-- В weeklySummary: подсветить неделю с наивысшим суммарным баллом (border/bg)
-- Файл: `src/components/screens/StatsScreen.tsx`, `src/app/api/stats/history/route.ts`
+### 5. 🟢 WeeklyDigest — проверить первую рассылку
+Технически готово (сессия 16), но нужно убедиться что всё работает:
+- Проверить `vercel.json` — cron `0 7 * * 1` добавлен
+- Убедиться что `CRON_SECRET` защищает `/api/telegram/send-weekly-digest`
+- Протестировать вручную: `GET /api/ai/weekly-digest?userId=...`
+- Проверить что digest не шлётся если `telegramId` не привязан
 
-### 5. 🟢 AI-полные корреляции (одним запросом)
-Вместо отдельных rule-based корреляций — один AI-запрос по 30 дням.
-- Новый endpoint `GET /api/ai/correlations?userId=` — передаёт 30 дней данных (DayData[]), просит AI найти значимые паттерны
-- Формат ответа: массив `{pattern, strength, recommendation}` — топ-5 паттернов
-- Показывать в WeeklyReportScreen вместо/рядом с rule-based CorrelationInsights
-- Кешировать в `ai_logs (callType='correlations')` на 24 часа
+---
+
+## Что делали в сессии 2026-03-18 (сессия 16)
+
+### 5 задач — полная реализация
+
+**Изменённые файлы:**
+- `src/app/api/telegram/webhook/route.ts` — крупные расширения (+200 строк):
+  - **+ Сет**: кнопки `➕ Сет → {exercise.name}` под каждым упражнением в `getGymSummary()`
+  - `gym_addset_{exerciseId}` callback → `sendForceReply` с подсказкой по target reps упражнения
+  - `PendingGymSet` тип добавлен в `PendingPayload` union
+  - ForceReply-обработчик расширен: проверяет `gymSet` до `forceReply`, парсит `75x8`/`75 8`/`75`, создаёт `GymExerciseSet` с правильным `setNum`
+  - **AI Тренер**: `TRAINER_RE = /^(?:\/тренер|тренер)(?:\s+(.+))?$/i`
+  - `COACH_SYSTEM` промпт — «отвечай конкретно по числам, не общими фразами»
+  - Контекст: 30 дней mood/energy/sleep/gym/rituals/calories + главный лик из `UserAiPattern`
+  - Логируется в `ai_logs (callType='tg_coach')`, без кеширования
+  - Добавлен в текст помощи: `🏋️ тренер вопрос`
+- `src/app/api/stats/history/route.ts`:
+  - `totals.avgDayScore` — среднее `overallScore` по активным дням (> 0)
+  - `getWeeklySummary` возвращает `isBest: boolean` — неделя с макс. avgScore
+- `src/components/screens/StatsScreen.tsx`:
+  - `WeeklySummary` и `StatsData` типы расширены (`isBest`, `avgDayScore`)
+  - Плитка «Ср. балл» (жёлтая) в карточке «Итого за N дней» — появляется если есть данные
+  - Бар лучшей недели жёлтый (`#f59e0b`), остальные зелёные — через `<Cell>`
+  - Надпись «🏆 Лучшая неделя — {дата} ({балл} баллов)» под графиком
+- `src/components/screens/WeeklyReportScreen.tsx`:
+  - `CorrelationPattern` interface добавлен
+  - State `aiCorrelations` + `correlationsLoading`, отдельный `useEffect` при mount
+  - Карточка «🧬 AI-паттерны (30 дней)» — strength dots (●●●/●●○/●○○) + рекомендации
+  - Независима от weekly report loading, не блокирует рендер
+
+**Новые файлы:**
+- `src/app/api/ai/correlations/route.ts` — `GET /api/ai/correlations?userId=`
+  - Строит per-date snapshot: mood, energy, sleep, gym (да/нет), rituals%, calories, water
+  - Контекст ≥ 5 дней, иначе `{ patterns: [] }`
+  - Кеш 24 часа в `ai_logs (callType='correlations')`
+  - Парсит JSON-массив из ответа Groq, устойчив к markdown-фенсам
+  - `CorrelationPattern { pattern, strength: 'strong'|'moderate'|'weak', recommendation }`
+
+**AI Weekly Digest (сессия 16, задача 1):**
+- `GET /api/ai/weekly-digest?userId=` — 7 дней контекста → Groq → 3-4 предложения
+- Кеш по текущей неделе (ISO week) в `ai_logs (callType='weekly_digest')`
+- `GET /api/telegram/send-weekly-digest` — batch-рассылка всем активным юзерам с TG
+- Защищён `CRON_SECRET`, пауза 100мс между юзерами
+- `vercel.json` дополнен cron `0 7 * * 1`
+
+### Принятые решения (важно для следующих сессий)
+
+- **ForceReply gymSet**: проверяется ДО `forceReply` в handler — приоритет явного типа. `return NextResponse.json({ ok: true })` после сохранения (не `return` без аргумента).
+- **Сет-парсинг**: regex `(\d+)\s*[xхXХ×*]\s*(\d+)` — разделитель x/х/X/Х/×/*. Если только вес — reps берём из `targetReps` упражнения или пишем null (не падаем).
+- **AI Correlations кеш**: ищем последний успешный `ai_logs` с callType='correlations' за 24ч. При ошибке парсинга кеш игнорируем и регенерируем.
+- **`isBest` в weeklySummary**: только если maxScore > 0. Если все недели с нулевым счётом — никакая не помечается.
+- **WeeklyReport correlations**: загружаются независимо через отдельный useEffect, не связаны с weekOffset — всегда 30 дней.
+- **TRAINER_RE без `почему я` / `что делать с`**: решено не перехватывать эти фразы без явного контекста — слишком много ложных срабатываний в обычной речи.
+
+### Ничего не осталось незакончено
+Все 5 задач завершены, линтер чистый (0 ошибок), коммит запушен.
 
 ---
 
@@ -652,7 +714,8 @@ export function GymWorkoutDetailDialog() {
 |------|-----|-----|-----------|
 | `0 3 * * *` | 03:00 | 06:00 | Очистка истёкших fleeting thoughts |
 | `0 6 * * *` | 06:00 | 09:00 | Утренний checkin reminder |
-| `0 8 * * *` | 08:00 | 11:00 | Supplement reminder (новый) |
+| `0 7 * * 1` | 07:00 пн | 10:00 пн | **AI Weekly Digest** — рассылка в Telegram |
+| `0 8 * * *` | 08:00 | 11:00 | Supplement reminder |
 | `0 16 * * *` | 16:00 | 19:00 | Ritual reminder |
 | `0 17 * * *` | 17:00 | 20:00 | Вечерний checkin reminder |
 
