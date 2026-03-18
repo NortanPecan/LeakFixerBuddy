@@ -4,7 +4,7 @@ import { formatDateKey, normalizeToDate, getToday, getTodayKey } from '@/lib/dat
 import { getMoodStatus } from '@/lib/mood-utils'
 
 // Navigation state
-export type Screen = 'home' | 'fitness' | 'rituals' | 'gym' | 'profile' | 'create-ritual' | 'catalog' | 'all-rituals' | 'tasks' | 'chain' | 'create-task' | 'create-chain' | 'notes' | 'note-detail' | 'development' | 'content-detail' | 'finance' | 'challenges' | 'challenge-detail' | 'health' | 'daily-summary' | 'goals' | 'skills' | 'traits' | 'export' | 'stats' | 'buddies' | 'journey' | 'onboarding' | 'zones' | 'settings' | 'weekly-report' | 'monthly-report' | 'habits'
+export type Screen = 'home' | 'fitness' | 'rituals' | 'gym' | 'profile' | 'create-ritual' | 'catalog' | 'all-rituals' | 'tasks' | 'chain' | 'create-task' | 'create-chain' | 'notes' | 'note-detail' | 'development' | 'content-detail' | 'finance' | 'challenges' | 'challenge-detail' | 'health' | 'daily-summary' | 'goals' | 'skills' | 'traits' | 'export' | 'stats' | 'buddies' | 'journey' | 'onboarding' | 'zones' | 'settings' | 'weekly-report' | 'monthly-report' | 'habits' | 'calorie-goal'
 
 interface User {
   id: string

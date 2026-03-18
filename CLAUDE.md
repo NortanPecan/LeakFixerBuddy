@@ -232,16 +232,14 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Следующие задачи (приоритет, сессия 14)
+## Следующие задачи (приоритет, сессия 15)
 
-### 1. 🔴 Backend для недостающих ачивментов (30 мин)
-ProfileScreen показывает 6 плиток, но только 2 реально выдаются (GREAT_DAY_FIRST, QUALITY_WEEK).
-Нужно добавить проверки в `POST /api/achievements/check`:
-- `STREAK_7` — серия 7 дней (`user.streak >= 7`)
-- `STREAK_30` — серия 30 дней (`user.streak >= 30`)
-- `GYM_10` — 10 тренировок (`gym_workouts` WHERE `status='completed'` COUNT >= 10)
-- `WATER_WEEK` — 7 дней подряд норма воды (`fitnessDaily.water >= waterTarget` за 7 дней)
-- Файл: `src/app/api/achievements/check/route.ts`
+### 1. 🔴 Челленджи — полная реализация (отдельный чат)
+Обсуждено: личные + шаблонные + Buddy-челленджи + AI-челленджи против ликов.
+- Схема (`Challenge`, `ChallengeProgress`) уже есть в Prisma
+- Нужно: API `/api/challenges`, UI экран, линковка с ритуалами через `config.linkedRitualIds`
+- Buddy-челленджи: новая таблица `BuddyChallenge`
+- AI-челленджи: на основе `UserAiPattern` генерировать релевантный челлендж
 
 ### 2. 🟡 Telegram getFoodSummary — показывать amount + БЖУ (20 мин)
 Сейчас `btn_food` показывает только имя + ккал. После нового парсера в записях есть `amount`, `protein`, `fat`, `carbs`.
@@ -251,19 +249,84 @@ ProfileScreen показывает 6 плиток, но только 2 реал�
 ### 3. 🟡 Telegram — кнопки качества еды после записи (30 мин)
 После `ел доширак 70 440` бот отвечает подтверждением. Добавить inline-кнопки:
 `🟢 Здорово` / `🟡 Нормально` / `🔴 Срыв` → callback `food_quality_{entryId}_{good|neutral|bad}` → PATCH FoodEntry.quality
-- Нужно возвращать `id` из db.foodEntry.create и передавать в keyboard
 - Файл: `src/app/api/telegram/webhook/route.ts`
 
 ### 4. 🟢 StatsScreen — лучшая неделя + средний балл дня (30 мин)
 - В cards «Итого за N дней» добавить: средний балл дня (из calcDayScore), лучший день
-- В weeklySummary подсветить неделю с наивысшим суммарным баллом (border/background)
+- В weeklySummary подсветить неделю с наивысшим суммарным баллом
 - Файл: `src/components/screens/StatsScreen.tsx`, `/api/stats/history/route.ts`
 
-### 5. 🟢 Telegram — inline-кнопка «Зал» показывает упражнения + кнопка «Добавить сет» (45 мин)
-Сейчас btn_gym только показывает тренировку. Добавить:
-- Кнопки `+ Сет` под каждым упражнением → ForceReply «Введи вес кг × повторений»
-- Парсер `75x8` / `75 8` → db.gymExerciseSet.create
+### 5. 🟢 Telegram — inline-кнопка «Зал» + кнопка «Добавить сет» (45 мин)
+- Кнопки `+ Сет` под каждым упражнением → ForceReply → `75x8` → db.gymExerciseSet.create
 - Файл: `src/app/api/telegram/webhook/route.ts`
+
+### 6. 🟢 Применить SQL миграцию training_data view в Supabase
+- Файл: `prisma/migrations/20260318_training_data_view.sql`
+- Применить вручную в Supabase SQL Editor
+
+---
+
+## Что делали в сессии 2026-03-18 (сессия 14)
+
+### Обсуждение фич + реализация трёх пунктов
+
+**Обсуждено (архитектура для следующих сессий):**
+- **5.8 Калораж-цель**: вариант А — цель «сбросить X кг к дате», адаптивный дефицит, предупреждения
+- **2.9 Челленджи**: личные + шаблоны + Buddy + AI-челленджи против ликов. Отдельный чат.
+- **2.6 AI-совет**: генерировать раз в день, кешировать в `ai_logs`, виджет на HomeScreen + Telegram утро
+- **7.6 Journey**: скрыть пока криво, база данных не трогать
+- **LLM Training**: view `training_data` = `ai_logs` + `user_ai_patterns` с фидбеком (RLHF-ready)
+
+**Реализовано:**
+
+**✅ Ачивменты — 4 недостающих бэкенда**
+- `STREAK_7` (streak >= 7), `STREAK_30` (streak >= 30)
+- `GYM_10` (10+ completed gym_workouts)
+- `WATER_WEEK` (7 дней подряд water >= waterTarget)
+- Файл: `src/app/api/achievements/check/route.ts`
+
+**✅ Journey — скрыт из UI**
+- Убраны: прогресс-бар курса, карточка урока, следующие уроки из HomeScreen
+- Убраны: состояния lesson/upcomingLessons/lessonCompleted, loadLesson useEffect, handleCompleteLesson
+- Удалены: `BookOpen`, `Play` иконки (не используются)
+- Убран импорт JourneyScreen из page.tsx, из MAIN_SCREENS
+- БД (journey_lessons, journey_progress) не тронута — вернём позже
+
+**✅ 5.8 CalorieGoalScreen — адаптивный калораж**
+- `GET /api/calorie-goal?userId` — возвращает цель + адаптивный дневной таргет + 7-дневный прогресс + прогноз
+- `PATCH /api/calorie-goal` — устанавливает/очищает цель (targetWeight + deadline → weightDeadline, weightStart)
+- Использует существующие поля: `UserProfile.targetWeight`, `weightDeadline`, `weightStart`, `weightStartAt`
+- TDEE: Harris-Benedict × multiplier по workProfile
+- Адаптация: каждый день пересчитывает дефицит по (currentWeight - targetWeight) / daysLeft
+- Предупреждения: > 1000 ккал/день дефицит = агрессивно, > 1100 = нереалистично
+- `CalorieGoalScreen.tsx` — полный экран: прогресс к цели, дневной таргет, 7-дневные бары, прогноз
+- Вход: ProfileScreen → кнопка «🎯 Цель по калоражу»
+- 'calorie-goal' добавлен в Screen type
+
+**✅ 2.6 AI Daily Tip — персональный совет дня**
+- `GET /api/ai/daily-tip?userId` — кеш в `ai_logs` (callType='daily_tip'), если нет — генерирует через Groq
+- `POST /api/ai/daily-tip` — batch-генерация для всех активных юзеров (cron-ready)
+- Контекст: стрик, настроение/энергия, калории, вода, ритуалы, тренировки, leak-профиль, цель по весу
+- HomeScreen: виджет «🧠 Совет дня» (фиолетовый, скрывается через `hiddenWidgets['daily_tip']`)
+- ProfileScreen: переключатель «Совет дня (AI)» в виджетах
+- Telegram: утреннее уведомление включает совет как `<i>...</i>` (кешируется, не регенерирует)
+- Все вызовы автоматически попадают в `ai_logs` → `training_data` view
+
+**✅ LLM Training Data**
+- `prisma/migrations/20260318_training_data_view.sql` — CREATE VIEW training_data
+- Джойнит `ai_logs` + `user_ai_patterns`: input_context → model_output + positive_feedback
+- `training_quality`: 'positive' (есть whatWorked), 'neutral' (нет фидбека), 'daily_tip'
+- Исключает: системные вызовы без userId, tg_classify, telegram-classify
+- ⚠️ Применить вручную в Supabase SQL Editor
+
+### Принятые решения (важно для следующих сессий)
+- **Daily tip кеширование**: в `ai_logs` (callType='daily_tip'). Утренний Telegram notify проверяет кеш — не перегенерирует
+- **CalorieGoalScreen**: адаптация через (currentWeight - targetWeight) / daysLeft — пересчёт каждый день автоматически
+- **Journey**: `'journey'` остаётся в Screen type (не удаляем), просто нет UI-входа
+- **training_data view**: RLHF-ready. При экспорте фильтровать `training_quality = 'positive'` для fine-tuning
+
+### Ручные шаги (нужно выполнить)
+- ⚠️ Применить `prisma/migrations/20260318_training_data_view.sql` в Supabase SQL Editor
 
 ---
 
