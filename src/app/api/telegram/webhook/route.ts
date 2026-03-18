@@ -168,15 +168,13 @@ interface PendingAiConfirm {
 type PendingPayload = PendingForceReply | PendingAiConfirm
 
 async function storePending(userId: string, payload: PendingPayload): Promise<void> {
-  const expiresAt = new Date(Date.now() + PENDING_TTL_MS)
   // Store one pending per user — upsert via delete+create since no unique key on text
   // Use a Note with special zone as lightweight KV
   await db.note.deleteMany({ where: { userId, zone: '__tg_pending' } })
   await db.note.create({
     data: { userId, text: JSON.stringify(payload), zone: '__tg_pending', type: 'thought', date: new Date() },
   })
-  // Also store in FleetingThought with short TTL for auto-cleanup
-  await db.fleetingThought.create({ data: { userId, text: JSON.stringify(payload), expiresAt } }).catch(() => {})
+  // NOTE: do NOT store in FleetingThought — it would show raw JSON in the app's fleeting thoughts section
 }
 
 async function getPendingForUserId(userId: string): Promise<PendingPayload | null> {
@@ -1323,6 +1321,21 @@ export async function POST(request: NextRequest) {
     await sendMessage(chatId, '👋 Привет! Сначала войди в <b>LeakFixer Buddy</b> через Telegram, чтобы привязать аккаунт.')
     return NextResponse.json({ ok: true })
   }
+
+  // ── Dedup: Telegram retries the webhook if we don't respond in <5s.
+  //    AI calls can take 5-15s, causing the bot to send the same question
+  //    multiple times. We store processed update_ids in Notes to detect retries.
+  const dedupKey = `tg_upd_${update.update_id}`
+  const alreadyProcessed = await db.note.findFirst({
+    where: { userId: user.id, zone: '__tg_dedup', text: dedupKey },
+  })
+  if (alreadyProcessed) return NextResponse.json({ ok: true })
+
+  // Mark update as being processed (best-effort, cleans up all old dedup notes)
+  await db.note.deleteMany({ where: { userId: user.id, zone: '__tg_dedup' } }).catch(() => {})
+  await db.note.create({
+    data: { userId: user.id, zone: '__tg_dedup', text: dedupKey, type: 'thought', date: new Date() },
+  }).catch(() => {})
 
   try {
     // ── Check if this is a reply to a ForceReply prompt ───────────────────
