@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { normalizeToDate } from '@/lib/date-utils'
 import { analyzeLeakWithAI } from '@/lib/ai-analyze-leak'
 import { formatLeakAnalysisForTelegram } from '@/lib/ai-leak-prompts'
+import { callAI } from '@/lib/ai-provider'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET
@@ -20,6 +21,7 @@ interface TelegramMessage {
   from?: TelegramUser
   chat: { id: number; type: string }
   text?: string
+  reply_to_message?: { message_id: number }
 }
 
 interface TelegramCallbackQuery {
@@ -57,6 +59,7 @@ const TG_BUTTONS = [
   { id: 'finance',  emoji: '💰', label: 'Финансы' },
   { id: 'summary',  emoji: '📊', label: 'Сводка' },
   { id: 'tasks',    emoji: '📋', label: 'Задачи' },
+  { id: 'leaks',    emoji: '🔍', label: 'Лики' },
 ] as const
 
 // ─── Regex commands ─────────────────────────────────────────────────────────
@@ -121,6 +124,69 @@ async function answerCallback(callbackQueryId: string, text?: string): Promise<v
       body: JSON.stringify({ callback_query_id: callbackQueryId, text, show_alert: false }),
     })
   } catch { /* best-effort */ }
+}
+
+// Returns the new message_id so we can store it as pending
+async function sendForceReply(chatId: number, text: string): Promise<number | null> {
+  if (!BOT_TOKEN) return null
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: 'HTML',
+        reply_markup: { force_reply: true, selective: true },
+      }),
+    })
+    const data = await res.json()
+    return data.ok ? (data.result?.message_id ?? null) : null
+  } catch { return null }
+}
+
+// ─── Pending action helpers (ForceReply + AI confirm) ─────────────────────────
+
+const PENDING_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
+interface PendingForceReply {
+  __type: 'forceReply'
+  action: 'sleep' | 'weight' | 'mood' | 'energy'
+  botMessageId: number
+}
+
+interface PendingAiConfirm {
+  __type: 'aiConfirm'
+  aiType: string
+  display: string
+  data: Record<string, unknown>
+  originalText: string
+}
+
+type PendingPayload = PendingForceReply | PendingAiConfirm
+
+async function storePending(userId: string, payload: PendingPayload): Promise<void> {
+  const expiresAt = new Date(Date.now() + PENDING_TTL_MS)
+  // Store one pending per user — upsert via delete+create since no unique key on text
+  // Use a Note with special zone as lightweight KV
+  await db.note.deleteMany({ where: { userId, zone: '__tg_pending' } })
+  await db.note.create({
+    data: { userId, text: JSON.stringify(payload), zone: '__tg_pending', type: 'thought', date: new Date() },
+  })
+  // Also store in FleetingThought with short TTL for auto-cleanup
+  await db.fleetingThought.create({ data: { userId, text: JSON.stringify(payload), expiresAt } }).catch(() => {})
+}
+
+async function getPendingForUserId(userId: string): Promise<PendingPayload | null> {
+  const note = await db.note.findFirst({ where: { userId, zone: '__tg_pending' }, orderBy: { date: 'desc' } })
+  if (!note) return null
+  try {
+    return JSON.parse(note.text) as PendingPayload
+  } catch { return null }
+}
+
+async function clearPendingForUserId(userId: string): Promise<void> {
+  await db.note.deleteMany({ where: { userId, zone: '__tg_pending' } })
 }
 
 // ─── Button settings helpers ───────────────────────────────────────────────
@@ -501,6 +567,224 @@ async function buildFullSummary(userId: string, today: Date): Promise<string> {
   return msg
 }
 
+// LEAKS
+
+const LEAK_TYPE_LABELS: Record<string, string> = {
+  low_energy: 'Низкая энергия',
+  chronic_low_energy: 'Хроническая усталость',
+  no_gym: 'Мало тренировок',
+  gym_dropout: 'Бросил зал',
+  ritual_consistency: 'Непостоянство ритуалов',
+  ritual_erosion: 'Эрозия ритуалов',
+  missed_checkins: 'Пропуск чек-инов',
+  calorie_spikes: 'Скачки калорий',
+  no_habits: 'Нет привычек',
+  weekend_ritual_drop: 'Срыв в выходные',
+  high_stress: 'Высокий стресс',
+  sleep_deficit: 'Дефицит сна',
+  expense_spike: 'Скачок расходов',
+  tracking_dropout: 'Не ввожу данные',
+  low_tracking: 'Мало трекинга',
+}
+
+async function getLeaksSummary(userId: string): Promise<{ text: string; keyboard: InlineKeyboard }> {
+  const patterns = await db.userAiPattern.findMany({
+    where: { userId },
+    orderBy: { updatedAt: 'desc' },
+    take: 10,
+  })
+
+  if (patterns.length === 0) {
+    return {
+      text: '🔍 <b>Лики</b>\n\nAI-анализов пока нет.\n\nНапиши: <code>лик описание проблемы</code>\nили открой раздел «Лики» в приложении.',
+      keyboard: backBtn(),
+    }
+  }
+
+  let text = '🔍 <b>Твои лики (AI-анализы)</b>\n\n'
+
+  for (const p of patterns) {
+    const label = LEAK_TYPE_LABELS[p.leakType] ?? p.leakType
+    const analysis = p.lastAnalysis as { cause?: string; urgency?: string; solutions?: { text: string }[] } | null
+    const urgencyEmoji = analysis?.urgency === 'now' ? '🔴' : analysis?.urgency === 'thisWeek' ? '🟡' : '🟢'
+    const topSolution = analysis?.solutions?.[0]?.text ?? '—'
+    text += `${urgencyEmoji} <b>${label}</b>\n`
+    if (analysis?.cause) text += `  Причина: ${analysis.cause.slice(0, 80)}${analysis.cause.length > 80 ? '…' : ''}\n`
+    text += `  💡 ${topSolution.slice(0, 90)}${topSolution.length > 90 ? '…' : ''}\n`
+    text += `  Анализов: ${p.analysisCount} | Провайдер: ${p.lastProvider ?? '?'}\n\n`
+  }
+
+  text += '\nОбновить анализ: <code>лик описание</code>'
+
+  return { text, keyboard: backBtn() }
+}
+
+// ─── AI Input Classification ───────────────────────────────────────────────────
+
+const AI_CLASSIFY_SYSTEM = `Ты анализируешь сообщения пользователя фитнес-приложения.
+Определи что хотел сделать пользователь и извлеки данные.
+Отвечай только JSON без markdown блоков:
+{"type":"food|water|weight|mood|energy|sleep|task|gym|income|expense|unknown","data":{},"display":"строка для подтверждения","confidence":0.0-1.0}
+
+Типы и их data:
+- food: {"name":"название","calories":число или null,"weight_g":число или null}
+- water: {"amount_ml":число}
+- weight: {"kg":число}
+- mood: {"score":1-10}
+- energy: {"score":1-10}
+- sleep: {"hours":число}
+- task: {"text":"текст задачи"}
+- gym: {"duration_min":число или null}
+- income: {"amount":число,"desc":"описание или null"}
+- expense: {"amount":число,"desc":"описание или null"}
+- unknown: {}
+
+Примеры:
+"яблоко 500 грамм 300 калорий" → {"type":"food","data":{"name":"яблоко","calories":300,"weight_g":500},"display":"🍽️ яблоко (300 ккал, 500г)","confidence":0.95}
+"бегал 40 минут" → {"type":"gym","data":{"duration_min":40},"display":"💪 Тренировка 40 мин","confidence":0.9}
+"выпил стакан воды" → {"type":"water","data":{"amount_ml":250},"display":"💧 +250 мл воды","confidence":0.85}
+"купил кофе 150 руб" → {"type":"expense","data":{"amount":150,"desc":"кофе"},"display":"💸 Расход −150₽ (кофе)","confidence":0.9}`
+
+interface AiClassifyResult {
+  type: string
+  data: Record<string, unknown>
+  display: string
+  confidence: number
+}
+
+async function classifyUnknownInput(text: string, userId: string): Promise<AiClassifyResult | null> {
+  // First check user's own learned patterns
+  const userPattern = await db.userAiPattern.findUnique({
+    where: { userId_leakType: { userId, leakType: 'tg_input_patterns' } },
+  })
+  if (userPattern?.lastAnalysis) {
+    const patterns = userPattern.lastAnalysis as Array<{ regex: string; type: string; data: Record<string, unknown>; display: string }>
+    for (const p of patterns) {
+      try {
+        if (new RegExp(p.regex, 'i').test(text)) {
+          return { type: p.type, data: p.data, display: p.display, confidence: 1.0 }
+        }
+      } catch { /* bad regex */ }
+    }
+  }
+
+  // Call AI for classification
+  try {
+    const { text: aiText } = await callAI(AI_CLASSIFY_SYSTEM, text, {
+      userId,
+      callType: 'tg-classify',
+    })
+    const result = JSON.parse(aiText.trim()) as AiClassifyResult
+    if (result.type && result.confidence >= 0.6) return result
+    return null
+  } catch {
+    return null
+  }
+}
+
+async function saveLearnedPattern(userId: string, originalText: string, type: string, data: Record<string, unknown>, display: string): Promise<void> {
+  try {
+    // Build a simple regex from the original text (escaped, case-insensitive)
+    // Replace numbers with \d+ pattern for reuse
+    const regexStr = originalText.replace(/\d+(?:[.,]\d+)?/g, '\\d+(?:[.,]\\d+)?').replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\\d\+/g, '\\d+')
+
+    const existing = await db.userAiPattern.findUnique({
+      where: { userId_leakType: { userId, leakType: 'tg_input_patterns' } },
+    })
+    const patterns = (existing?.lastAnalysis as Array<{ regex: string; type: string; data: Record<string, unknown>; display: string }> ?? [])
+    // Avoid duplicates
+    if (!patterns.some(p => p.regex === regexStr)) {
+      patterns.unshift({ regex: regexStr, type, data, display })
+      if (patterns.length > 50) patterns.splice(50)
+    }
+
+    // Cast to satisfy Prisma Json type
+    const patternsJson = patterns as unknown as Record<string, unknown>[]
+    await db.userAiPattern.upsert({
+      where: { userId_leakType: { userId, leakType: 'tg_input_patterns' } },
+      update: { lastAnalysis: patternsJson, updatedAt: new Date() },
+      create: {
+        userId,
+        leakType: 'tg_input_patterns',
+        lastAnalysis: patternsJson,
+        triedSolutions: [],
+        whatWorked: [],
+        analysisCount: 0,
+      },
+    })
+  } catch { /* non-critical */ }
+}
+
+async function executeClassifiedAction(userId: string, type: string, data: Record<string, unknown>, today: Date): Promise<string> {
+  switch (type) {
+    case 'food': {
+      const name = String(data.name ?? 'блюдо')
+      const calories = data.calories != null ? Number(data.calories) : undefined
+      await db.foodEntry.create({ data: { userId, name, mealType: 'snack', date: today, ...(calories != null && { calories }) } })
+      return `🍽️ <b>${name}</b>${calories ? ` (${calories} ккал)` : ''} добавлено в питание!`
+    }
+    case 'water': {
+      const amount = Number(data.amount_ml ?? 250)
+      let fd = await db.fitnessDaily.findFirst({ where: { userId, date: today } })
+      const profile = !fd ? await db.userProfile.findUnique({ where: { userId } }) : null
+      const target = fd?.waterTarget ?? profile?.waterBaseline ?? 2000
+      const current = fd?.water ?? 0
+      if (!fd) fd = await db.fitnessDaily.create({ data: { userId, date: today, water: amount, waterTarget: target } })
+      else fd = await db.fitnessDaily.update({ where: { id: fd.id }, data: { water: current + amount } })
+      return `💧 +${amount} мл воды! Сегодня: <b>${fd.water}/${target} мл</b>`
+    }
+    case 'weight': {
+      const value = Number(data.kg)
+      await db.measurement.create({ data: { userId, type: 'weight', value, unit: 'kg' } })
+      return `⚖️ Вес <b>${value} кг</b> записан!`
+    }
+    case 'mood': {
+      const score = Math.round(Number(data.score))
+      await db.dailyState.upsert({ where: { userId_date: { userId, date: today } }, update: { mood: score }, create: { userId, date: today, mood: score, energy: 5 } })
+      return `😊 Настроение <b>${score}/10</b> записано!`
+    }
+    case 'energy': {
+      const score = Math.round(Number(data.score))
+      await db.dailyState.upsert({ where: { userId_date: { userId, date: today } }, update: { energy: score }, create: { userId, date: today, mood: 5, energy: score } })
+      return `⚡ Энергия <b>${score}/10</b> записана!`
+    }
+    case 'sleep': {
+      const hours = Number(data.hours)
+      await db.dailyState.upsert({ where: { userId_date: { userId, date: today } }, update: { sleepHours: hours }, create: { userId, date: today, mood: 5, energy: 5, sleepHours: hours } })
+      return `😴 Сон <b>${hours} ч</b> записан!`
+    }
+    case 'task': {
+      const text = String(data.text ?? '')
+      await db.task.create({ data: { userId, text, status: 'todo', date: today } })
+      return `✅ Задача <b>${text}</b> добавлена!`
+    }
+    case 'gym': {
+      const duration = data.duration_min ? Number(data.duration_min) : null
+      const durText = duration ? ` ${duration} мин` : ''
+      await db.note.create({ data: { userId, text: `Тренировка${durText} — быстрая запись через Telegram`, type: 'thought', date: new Date() } })
+      return `💪 Тренировка${durText} записана!`
+    }
+    case 'income': {
+      const amount = Number(data.amount)
+      const desc = data.desc ? String(data.desc) : null
+      const account = await db.account.findFirst({ where: { userId }, select: { id: true } })
+      if (!account) return '❌ Нет счёта. Создай в приложении.'
+      await db.transaction.create({ data: { userId, accountId: account.id, amount, description: desc, date: today } })
+      return `💚 Доход <b>+${amount}₽</b>${desc ? ` (${desc})` : ''} записан!`
+    }
+    case 'expense': {
+      const amount = Number(data.amount)
+      const desc = data.desc ? String(data.desc) : null
+      const account = await db.account.findFirst({ where: { userId }, select: { id: true } })
+      if (!account) return '❌ Нет счёта. Создай в приложении.'
+      await db.transaction.create({ data: { userId, accountId: account.id, amount: -Math.abs(amount), description: desc, date: today } })
+      return `💸 Расход <b>−${amount}₽</b>${desc ? ` (${desc})` : ''} записан!`
+    }
+    default:
+      return '✅ Сохранено!'
+  }
+}
+
 // ─── Leak classifier (keyword-based) ──────────────────────────────────────
 
 function classifyLeakFromText(text: string): string {
@@ -537,7 +821,8 @@ async function handleCommand(userId: string, text: string): Promise<{ reply: str
       '⚡ <b>энергия 7</b>  🍽️ <b>ел пицца 800</b>  💪 <b>зал 60</b>\n' +
       '✅ <b>задача текст</b>  🙌 <b>ритуалы</b>  😴 <b>сон 8</b>\n' +
       '📊 <b>сводка</b>  💚 <b>доход 5000</b>  💸 <b>расход 500</b>\n\n' +
-      '🤖 <b>лик описание проблемы</b> — AI-анализ лика'
+      '🤖 <b>лик описание проблемы</b> — AI-анализ лика\n' +
+      '💬 Пишешь в любом формате — AI поймёт и уточнит!'
     return { reply, keyboard }
   }
 
@@ -637,7 +922,7 @@ async function handleCommand(userId: string, text: string): Promise<{ reply: str
     }
     const durText = duration ? ` ${duration} мин` : ''
     await db.note.create({
-      data: { userId, title: `Тренировка${durText}`, content: `Быстрая запись через Telegram${durText ? ` — ${duration} мин` : ''}.` },
+      data: { userId, text: `Тренировка${durText} — быстрая запись через Telegram`, type: 'thought', date: new Date() },
     })
     return { reply: duration ? `💪 Тренировка <b>${duration} мин</b> записана!` : '💪 Тренировка записана!' }
   }
@@ -748,10 +1033,8 @@ async function handleCommand(userId: string, text: string): Promise<{ reply: str
     }
   }
 
-  // Unknown
-  return {
-    reply: '🤔 Не понял команду. Напиши <b>помощь</b> или нажми кнопку.\n\nПримеры: <code>вода 500</code>, <code>вес 74.5</code>, <code>настроение 8</code>\n💡 <code>лик описание проблемы</code> — AI-анализ лика',
-  }
+  // Unknown — try AI classification
+  return { reply: '__AI_CLASSIFY__' }
 }
 
 // ─── Callback query handler ────────────────────────────────────────────────
@@ -857,7 +1140,45 @@ async function handleCallback(
     return
   }
 
-  // Module buttons → send new message
+  // AI confirm / reject
+  if (data === 'ai_confirm' || data === 'ai_reject') {
+    const pending = await getPendingForUserId(userId)
+    await clearPendingForUserId(userId)
+    if (data === 'ai_reject' || !pending || pending.__type !== 'aiConfirm') {
+      await answerCallback(cbQueryId, '❌ Отменено')
+      await editMessageText(chatId, messageId, '❌ Действие отменено.\n\nНапиши <b>помощь</b> чтобы увидеть команды.', backBtn())
+      return
+    }
+    const { aiType, display, data: actionData, originalText } = pending
+    try {
+      const confirmText = await executeClassifiedAction(userId, aiType, actionData, today)
+      await saveLearnedPattern(userId, originalText, aiType, actionData, display)
+      await answerCallback(cbQueryId, '✅ Сохранено!')
+      await editMessageText(chatId, messageId, confirmText, backBtn())
+    } catch (err) {
+      console.error('[ai_confirm] error:', err)
+      await answerCallback(cbQueryId, '❌ Ошибка сохранения')
+    }
+    return
+  }
+
+  // ForceReply buttons — ask user to type value
+  const forceReplyMap: Record<string, { action: 'sleep' | 'weight' | 'mood' | 'energy'; prompt: string }> = {
+    btn_sleep:  { action: 'sleep',  prompt: '😴 Сколько часов ты спал? Ответь числом (напр. <b>7.5</b>):' },
+    btn_weight: { action: 'weight', prompt: '⚖️ Введи текущий вес в кг (напр. <b>74.5</b>):' },
+    btn_mood:   { action: 'mood',   prompt: '😊 Оцени настроение от 1 до 10 (напр. <b>7</b>):' },
+    btn_energy: { action: 'energy', prompt: '⚡ Оцени энергию от 1 до 10 (напр. <b>7</b>):' },
+  }
+  if (data in forceReplyMap) {
+    const { action, prompt } = forceReplyMap[data]
+    const botMsgId = await sendForceReply(chatId, prompt)
+    if (botMsgId) {
+      await storePending(userId, { __type: 'forceReply', action, botMessageId: botMsgId })
+    }
+    return
+  }
+
+  // Module buttons → show summary (edit existing message)
   const moduleHandlers: Record<string, () => Promise<{ text: string; keyboard: InlineKeyboard }>> = {
     btn_gym:     () => getGymSummary(userId, today),
     btn_water:   () => getWaterSummary(userId, today),
@@ -865,11 +1186,8 @@ async function handleCallback(
     btn_rituals: () => getRitualsSummary(userId, today),
     btn_finance: () => getFinanceSummary(userId, today),
     btn_tasks:   () => getTasksSummary(userId, today),
-    btn_weight:  () => getWeightSummary(userId),
-    btn_mood:    () => getMoodEnergySummary(userId, today),
-    btn_energy:  () => getMoodEnergySummary(userId, today),
-    btn_sleep:   () => getMoodEnergySummary(userId, today),
     btn_summary: async () => ({ text: await buildFullSummary(userId, today), keyboard: backBtn() }),
+    btn_leaks:   () => getLeaksSummary(userId),
   }
 
   const handler = moduleHandlers[data]
@@ -941,7 +1259,71 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // ── Check if this is a reply to a ForceReply prompt ───────────────────
+    if (message.reply_to_message) {
+      const pending = await getPendingForUserId(user.id)
+      if (pending && pending.__type === 'forceReply') {
+        await clearPendingForUserId(user.id)
+        const today = normalizeToDate(new Date())
+        const val = text.trim().replace(',', '.')
+        const num = parseFloat(val)
+        let reply = ''
+        switch (pending.action) {
+          case 'sleep':
+            if (isNaN(num) || num <= 0 || num > 24) { reply = '❌ Укажи часы, например <b>7.5</b>'; break }
+            await db.dailyState.upsert({ where: { userId_date: { userId: user.id, date: today } }, update: { sleepHours: num }, create: { userId: user.id, date: today, mood: 5, energy: 5, sleepHours: num } })
+            reply = `😴 Сон <b>${num} ч</b> записан!`; break
+          case 'weight':
+            if (isNaN(num) || num <= 0) { reply = '❌ Укажи вес в кг, например <b>74.5</b>'; break }
+            await db.measurement.create({ data: { userId: user.id, type: 'weight', value: num, unit: 'kg' } })
+            reply = `⚖️ Вес <b>${num} кг</b> записан!`; break
+          case 'mood': {
+            const score = Math.round(num)
+            if (isNaN(score) || score < 1 || score > 10) { reply = '❌ От 1 до 10, например <b>7</b>'; break }
+            await db.dailyState.upsert({ where: { userId_date: { userId: user.id, date: today } }, update: { mood: score }, create: { userId: user.id, date: today, mood: score, energy: 5 } })
+            reply = `😊 Настроение <b>${score}/10</b> записано!`; break
+          }
+          case 'energy': {
+            const score = Math.round(num)
+            if (isNaN(score) || score < 1 || score > 10) { reply = '❌ От 1 до 10, например <b>7</b>'; break }
+            await db.dailyState.upsert({ where: { userId_date: { userId: user.id, date: today } }, update: { energy: score }, create: { userId: user.id, date: today, mood: 5, energy: score } })
+            reply = `⚡ Энергия <b>${score}/10</b> записана!`; break
+          }
+        }
+        if (reply) { await sendMessage(chatId, reply); return }
+      }
+    }
+
     const { reply, keyboard } = await handleCommand(user.id, text)
+
+    // ── AI classification for unknown messages ────────────────────────────
+    if (reply === '__AI_CLASSIFY__') {
+      const classified = await classifyUnknownInput(text, user.id).catch(() => null)
+      if (classified && classified.type !== 'unknown') {
+        await storePending(user.id, {
+          __type: 'aiConfirm',
+          aiType: classified.type,
+          display: classified.display,
+          data: classified.data,
+          originalText: text,
+        })
+        await sendMessage(
+          chatId,
+          `🤖 Похоже, ты хочешь записать:\n\n<b>${classified.display}</b>\n\nВсё верно?`,
+          [[
+            { text: '✅ Да, записать', callback_data: 'ai_confirm' },
+            { text: '❌ Нет', callback_data: 'ai_reject' },
+          ]]
+        )
+      } else {
+        await sendMessage(
+          chatId,
+          '🤔 Не понял команду. Напиши <b>помощь</b> или нажми кнопку.\n\nПримеры: <code>вода 500</code>, <code>вес 74.5</code>, <code>настроение 8</code>\n🍽️ <code>ел пицца 800</code>, <code>яблоко 300 ккал</code>\n💡 <code>лик описание проблемы</code> — AI-анализ лика'
+        )
+      }
+      return
+    }
+
     await sendMessage(chatId, reply, keyboard)
   } catch (err) {
     console.error('[Telegram webhook] command error:', err)

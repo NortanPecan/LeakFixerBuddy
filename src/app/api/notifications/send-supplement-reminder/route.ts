@@ -46,7 +46,7 @@ async function handleReminder(request: NextRequest) {
   const dayOfWeek = getDayOfWeek(today)
 
   const usersWithSettings = await db.userSettings.findMany({
-    where: { ritualReminders: true },
+    where: { supplementReminders: true },
     select: {
       userId: true,
       user: {
