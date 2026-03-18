@@ -69,7 +69,7 @@ const WATER_RE    = /^(?:вода|water)\s+(\d+(?:[.,]\d+)?)\s*(?:мл|ml)?$/i
 const WEIGHT_RE   = /^(?:вес|weight|вага)\s+(\d+(?:[.,]\d+)?)\s*(?:кг|kg)?$/i
 const MOOD_RE     = /^(?:настроение|mood|настр)\s+(\d+(?:[.,]\d+)?)$/i
 const ENERGY_RE   = /^(?:энергия|energy|энерг)\s+(\d+(?:[.,]\d+)?)$/i
-const FOOD_RE     = /^(?:ел|ела|еда|съел|съела|food|ate)\s+(.+?)(?:\s+(\d+(?:[.,]\d+)?)\s*(?:ккал|кал|cal|kcal)?)?$/i
+const FOOD_CMD_RE = /^(?:ел|ела|еда|съел|съела|food|ate)\s+/i
 const GYM_RE      = /^(?:зал|gym|трен(?:ировка)?)\s*(?:(\d+(?:[.,]\d+)?)\s*(?:мин|min|минут)?)?$/i
 const TASK_RE     = /^(?:задача|задание|task)\s+(.+)$/i
 const RITUALS_RE  = /^(?:ритуалы|ритуал|rituals?)$/i
@@ -861,6 +861,125 @@ function classifyLeakFromText(text: string): string {
   return 'low_energy' // generic fallback
 }
 
+// ─── Food parser ──────────────────────────────────────────────────────────
+//
+// Supported formats (Variant B — 2 bare numbers = weight + kcal/100g):
+//   ел пицца 800               → name=пицца, kcal=800 (total, backward compat)
+//   ел доширак 70 440          → 70г, 440kcal/100g → 308 kcal
+//   ел доширак 70 440 17 8 54  → + БЖУ per 100g → auto-calculated per portion
+//   ел молоко 300мл 64         → 300мл, 64kcal/100ml → 192 kcal
+//   ел курица 2 куска 440      → count unit → 440 kcal (total for that amount)
+//   ел яйцо                    → just name, no kcal
+//
+// Metric units (г/гр/кг/мл/л): kcal interpreted as per 100g → calculate actual
+// Count units (кусок/порция/шт…): kcal interpreted as total
+// If БЖУ present without weight: treated as actual grams for the portion (divisor=1)
+
+const METRIC_UNIT_RE = /^(г|гр|г\.|кг|мл|л)$/i
+const FOOD_WEIGHT_UNITS = 'г|гр|г\\.|кг|мл|л|кусо?к(?:а|ов)?|порци(?:я|ю|и|й)?|шт\\.?|ложк(?:а|и|ек)?|стакан(?:а|ов)?|банк(?:а|и)?'
+
+interface FoodParseResult {
+  name: string
+  calories: number | null
+  amount: string | null      // "70г", "2 куска", "300мл"
+  protein: number | null     // actual grams for the portion
+  fat: number | null
+  carbs: number | null
+  kcalPer100: number | null  // original kcal/100g value (for display)
+}
+
+function parseFoodEntry(text: string): FoodParseResult | null {
+  const body = text.replace(FOOD_CMD_RE, '').trim()
+  if (!body) return null
+
+  let remaining = body
+  let proteinPer100: number | null = null
+  let fatPer100: number | null = null
+  let carbsPer100: number | null = null
+
+  // Step 1: extract trailing BJU (3 numbers ≤ 100 each = per 100g values)
+  const bjuRe = /^(.*)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)$/
+  const bjuMatch = remaining.match(bjuRe)
+  if (bjuMatch) {
+    const b = parseFloat(bjuMatch[2].replace(',', '.'))
+    const f = parseFloat(bjuMatch[3].replace(',', '.'))
+    const c = parseFloat(bjuMatch[4].replace(',', '.'))
+    if (b <= 100 && f <= 100 && c <= 100) {
+      proteinPer100 = b; fatPer100 = f; carbsPer100 = c
+      remaining = bjuMatch[1].trim()
+    }
+  }
+
+  // Step 2: extract kcal (last number, optional ккал suffix)
+  let kcalNum: number | null = null
+  const kcalRe = /^(.*?)\s+(\d+(?:[.,]\d+)?)\s*(?:ккал|кал|cal|kcal)?$/i
+  const kcalMatch = remaining.match(kcalRe)
+  if (kcalMatch && kcalMatch[1].trim()) {
+    kcalNum = parseFloat(kcalMatch[2].replace(',', '.'))
+    remaining = kcalMatch[1].trim()
+  }
+
+  // Step 3: extract weight/amount before kcal
+  let amountNum: number | null = null
+  let amountUnit = 'г'
+  let amountStr: string | null = null
+  let isMetric = true
+
+  if (kcalNum !== null) {
+    // Try explicit unit: "70г", "300 мл", "2 куска"
+    const unitRe = new RegExp(`^(.*?)\\s+(\\d+(?:[.,]\\d+)?)\\s*(${FOOD_WEIGHT_UNITS})$`, 'i')
+    const unitMatch = remaining.match(unitRe)
+    if (unitMatch && unitMatch[1].trim()) {
+      amountNum  = parseFloat(unitMatch[2].replace(',', '.'))
+      amountUnit = unitMatch[3].toLowerCase()
+      amountStr  = `${unitMatch[2]}${amountUnit}`
+      isMetric   = METRIC_UNIT_RE.test(amountUnit)
+      remaining  = unitMatch[1].trim()
+    } else {
+      // Variant B: bare number at end = weight in grams
+      const bareRe = /^(.*?)\s+(\d+(?:[.,]\d+)?)$/
+      const bareMatch = remaining.match(bareRe)
+      if (bareMatch && bareMatch[1].trim()) {
+        amountNum  = parseFloat(bareMatch[2].replace(',', '.'))
+        amountUnit = 'г'
+        amountStr  = `${bareMatch[2]}г`
+        isMetric   = true
+        remaining  = bareMatch[1].trim()
+      }
+    }
+  }
+
+  const name = remaining.trim()
+  if (!name) return null
+
+  // Step 4: calculate actual kcal & BJU for the portion
+  let actualKcal: number | null = null
+  let divisor = 1.0
+  let kcalPer100: number | null = null
+
+  if (amountNum !== null && kcalNum !== null && isMetric) {
+    // Metric → kcal/100g → calculate actual
+    const baseGrams = /^кг$|^л$/i.test(amountUnit) ? amountNum * 1000 : amountNum
+    divisor    = baseGrams / 100
+    actualKcal = Math.round(baseGrams * kcalNum / 100)
+    kcalPer100 = kcalNum
+  } else if (kcalNum !== null) {
+    // Count unit or no weight → kcal is total
+    actualKcal = Math.round(kcalNum)
+  }
+
+  const round1 = (n: number) => Math.round(n * 10) / 10
+  return {
+    name,
+    calories: actualKcal,
+    amount:   amountStr,
+    protein:  proteinPer100 !== null ? round1(proteinPer100 * divisor) : null,
+    fat:      fatPer100     !== null ? round1(fatPer100     * divisor) : null,
+    carbs:    carbsPer100   !== null ? round1(carbsPer100   * divisor) : null,
+    kcalPer100,
+  }
+}
+
 // ─── Text command handler ──────────────────────────────────────────────────
 
 async function handleCommand(userId: string, text: string): Promise<{ reply: string; keyboard?: InlineKeyboard }> {
@@ -875,11 +994,15 @@ async function handleCommand(userId: string, text: string): Promise<{ reply: str
       '👋 <b>LeakFixer Buddy</b>\n\n' +
       'Выбери раздел кнопкой или напиши команду:\n\n' +
       '💧 <b>вода 500</b>  ⚖️ <b>вес 74.5</b>  😊 <b>настроение 8</b>\n' +
-      '⚡ <b>энергия 7</b>  🍽️ <b>ел пицца 800</b>  💪 <b>зал 60</b>\n' +
-      '✅ <b>задача текст</b>  🙌 <b>ритуалы</b>  😴 <b>сон 8</b>\n' +
-      '📊 <b>сводка</b>  💚 <b>доход 5000</b>  💸 <b>расход 500</b>\n\n' +
-      '🤖 <b>лик описание проблемы</b> — AI-анализ лика\n' +
-      '💬 Пишешь в любом формате — AI поймёт и уточнит!'
+      '⚡ <b>энергия 7</b>  💪 <b>зал 60</b>  😴 <b>сон 8</b>\n' +
+      '✅ <b>задача текст</b>  🙌 <b>ритуалы</b>  📊 <b>сводка</b>\n' +
+      '💚 <b>доход 5000</b>  💸 <b>расход 500</b>\n\n' +
+      '🍽️ <b>Еда:</b>\n' +
+      '  <code>ел пицца 800</code> — 800 ккал\n' +
+      '  <code>ел доширак 70 440</code> — 70г, 440/100г → 308 ккал\n' +
+      '  <code>ел доширак 70 440 17 8 54</code> — + БЖУ\n\n' +
+      '🤖 <b>лик описание</b> — AI-анализ лика\n' +
+      '💬 Пишешь свободно — AI поймёт и уточнит!'
     return { reply, keyboard }
   }
 
@@ -942,16 +1065,51 @@ async function handleCommand(userId: string, text: string): Promise<{ reply: str
     return { reply: `${e} Энергия <b>${score}/10</b> записана!` }
   }
 
-  // Food
-  const foodMatch = t.match(FOOD_RE)
-  if (foodMatch) {
-    const name = foodMatch[1].trim()
-    const calories = foodMatch[2] ? Math.round(parseFloat(foodMatch[2].replace(',', '.'))) : undefined
+  // Food (extended: weight + kcal/100g + БЖУ)
+  if (FOOD_CMD_RE.test(t)) {
+    const parsed = parseFoodEntry(t)
+    if (!parsed) {
+      return {
+        reply:
+          '❌ Не понял еду. Примеры:\n' +
+          '<code>ел пицца 800</code> — 800 ккал\n' +
+          '<code>ел доширак 70 440</code> — 70г, 440 ккал/100г → 308 ккал\n' +
+          '<code>ел доширак 70 440 17 8 54</code> — + БЖУ на 100г\n' +
+          '<code>ел молоко 300мл 64</code> — 300мл, 64/100мл → 192 ккал\n' +
+          '<code>ел курица 2 куска 440</code> — 2 куска, 440 ккал',
+      }
+    }
+
     await db.foodEntry.create({
-      data: { userId, name, mealType: 'snack', date: today, ...(calories !== undefined && { calories }) },
+      data: {
+        userId,
+        name: parsed.name,
+        mealType: 'snack',
+        date: today,
+        ...(parsed.calories  !== null && { calories: parsed.calories }),
+        ...(parsed.amount               && { amount: parsed.amount }),
+        ...(parsed.protein   !== null && { protein: parsed.protein }),
+        ...(parsed.fat       !== null && { fat: parsed.fat }),
+        ...(parsed.carbs     !== null && { carbs: parsed.carbs }),
+      },
     })
-    const calText = calories !== undefined ? ` (${calories} ккал)` : ''
-    return { reply: `🍽️ <b>${name}</b>${calText} записано!` }
+
+    // Build reply
+    let reply = `🍽️ <b>${parsed.name}</b>`
+    if (parsed.amount) reply += ` (${parsed.amount})`
+    if (parsed.calories !== null) {
+      reply += ` — <b>${parsed.calories} ккал</b>`
+      if (parsed.kcalPer100 !== null) reply += ` <i>(${parsed.kcalPer100}/100г)</i>`
+    }
+    reply += ' записано!'
+    if (parsed.protein !== null || parsed.fat !== null || parsed.carbs !== null) {
+      const bju: string[] = []
+      if (parsed.protein !== null) bju.push(`Б ${parsed.protein}г`)
+      if (parsed.fat     !== null) bju.push(`Ж ${parsed.fat}г`)
+      if (parsed.carbs   !== null) bju.push(`У ${parsed.carbs}г`)
+      reply += `\n🥩 ${bju.join(' · ')}`
+    }
+    return { reply }
   }
 
   // Gym
