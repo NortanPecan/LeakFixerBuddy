@@ -117,6 +117,71 @@ async function calculateChallengeProgress(challenge: {
       daysCompleted = completedSteps
       progress = Math.round((completedSteps / targetSteps) * 100)
     }
+  } else if (challenge.type === 'tracker') {
+    const metric = (config.metric as string) || ''
+    const target = (config.target as number) || 1
+    const startDate = new Date(challenge.startDate)
+    const endDate = new Date(startDate)
+    endDate.setDate(endDate.getDate() + challenge.duration)
+    endDate.setHours(23, 59, 59, 999)
+    const today = new Date()
+    const effectiveEnd = today < endDate ? today : endDate
+
+    if (metric === 'water_streak') {
+      const fds = await db.fitnessDaily.findMany({
+        where: { userId, date: { gte: startDate, lte: effectiveEnd } },
+        select: { water: true, waterTarget: true },
+      })
+      const daysMetTarget = fds.filter(fd => (fd.water ?? 0) >= (fd.waterTarget ?? 2000)).length
+      daysCompleted = daysMetTarget
+      progress = Math.min(100, Math.round((daysMetTarget / target) * 100))
+    } else if (metric === 'gym_count') {
+      const count = await db.gymWorkout.count({
+        where: { period: { userId }, status: 'completed', date: { gte: startDate, lte: effectiveEnd } },
+      })
+      daysCompleted = count
+      progress = Math.min(100, Math.round((count / target) * 100))
+    } else if (metric === 'ritual_rate') {
+      const rituals = await db.ritual.findMany({ where: { userId, status: 'active' }, select: { id: true } })
+      const ritualIds = rituals.map(r => r.id)
+      if (ritualIds.length > 0) {
+        const completions = await db.ritualCompletion.findMany({
+          where: { ritualId: { in: ritualIds }, date: { gte: startDate, lte: effectiveEnd }, completed: true },
+        })
+        const daysWithCompletions = new Set(completions.map(c => c.date.toISOString().split('T')[0])).size
+        daysCompleted = daysWithCompletions
+        progress = Math.min(100, Math.round((daysWithCompletions / target) * 100))
+      }
+    } else if (metric === 'no_food_bad') {
+      const totalDays = Math.max(1, Math.ceil((effectiveEnd.getTime() - startDate.getTime()) / 86400000))
+      const badDays = await db.foodEntry.findMany({
+        where: { userId, quality: 'bad', date: { gte: startDate, lte: effectiveEnd } },
+        select: { date: true },
+      })
+      const badDaySet = new Set(badDays.map(f => new Date(f.date).toISOString().split('T')[0]))
+      daysCompleted = totalDays - badDaySet.size
+      progress = Math.min(100, Math.round((daysCompleted / target) * 100))
+    } else if (metric === 'sleep_avg') {
+      const states = await db.dailyState.findMany({
+        where: { userId, date: { gte: startDate, lte: effectiveEnd }, sleepHours: { not: null } },
+        select: { sleepHours: true },
+      })
+      if (states.length > 0) {
+        const avg = states.reduce((s, d) => s + (d.sleepHours ?? 0), 0) / states.length
+        daysCompleted = Math.round(avg * 10) / 10
+        progress = Math.min(100, Math.round((avg / target) * 100))
+      }
+    } else if (metric === 'mood_avg') {
+      const states = await db.dailyState.findMany({
+        where: { userId, date: { gte: startDate, lte: effectiveEnd }, mood: { not: null } },
+        select: { mood: true },
+      })
+      if (states.length > 0) {
+        const avg = states.reduce((s, d) => s + (d.mood ?? 0), 0) / states.length
+        daysCompleted = Math.round(avg * 10) / 10
+        progress = Math.min(100, Math.round((avg / target) * 100))
+      }
+    }
   } else if (challenge.type === 'custom') {
     const zone = (config.zone as string) || challenge.zone
     const targetCount = (config.targetCount as number) || 0
@@ -306,6 +371,11 @@ export async function POST(request: NextRequest) {
 
     if (!userId || !name) {
       return NextResponse.json({ error: 'userId and name are required' }, { status: 400 })
+    }
+
+    const activeCount = await db.challenge.count({ where: { userId, status: 'active' } })
+    if (activeCount >= 3) {
+      return NextResponse.json({ error: 'Максимум 3 активных челленджа', code: 'LIMIT_REACHED' }, { status: 400 })
     }
 
     const start = startDate ? new Date(startDate) : new Date()

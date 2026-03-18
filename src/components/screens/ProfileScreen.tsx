@@ -278,8 +278,8 @@ export function ProfileScreen() {
           .then(d => { if (d?.patterns) setAiPatterns(d.patterns) })
           .catch(() => {/* silent */})
 
-        // Load AI transformation narrative (2.4) — only if 30+ days
-        if ((user.day ?? 0) >= 30) {
+        // Load AI transformation narrative (2.4) — only if 30+ days and not hidden
+        if ((user.day ?? 0) >= 30 && !(settingsData.settings?.hiddenWidgets ?? []).includes('transformation')) {
           setTransformationLoading(true)
           fetch(`/api/ai/transformation?userId=${user.id}`)
             .then(r => r.ok ? r.json() : null)
@@ -600,7 +600,7 @@ export function ProfileScreen() {
       )}
 
       {/* AI Transformation narrative (2.4) */}
-      {(user?.day ?? 0) >= 30 && (transformationLoading || transformation) && (
+      {(user?.day ?? 0) >= 30 && !(settings.hiddenWidgets ?? []).includes('transformation') && (transformationLoading || transformation) && (
         <Card className="bg-gradient-to-br from-purple-500/10 to-indigo-500/10 border-purple-500/30">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
@@ -1021,6 +1021,7 @@ export function ProfileScreen() {
               { id: 'quickinput', label: 'Быстрый ввод' },
               { id: 'ai_recommendations', label: 'AI Рекомендации' },
               { id: 'daily_tip', label: 'Совет дня (AI)' },
+              { id: 'transformation', label: 'AI-нарратив «Как я изменился»' },
             ].map(({ id, label }) => {
               const hidden = (settings.hiddenWidgets ?? []).includes(id)
               return (

@@ -145,7 +145,7 @@ const ACHIEVEMENTS = [
       })
       if (existing) return false
       const count = await db.gymWorkout.count({
-        where: { userId, status: 'completed' },
+        where: { period: { userId }, status: 'completed' },
       })
       return count >= 10
     },
