@@ -1,22 +1,24 @@
 # Next Session — Текущее состояние и задачи
 
-> Обновлено: 2026-03-17 (сессия 11)
-> Ветка: `claude/ai-recommendations-feedback-TlDoh`
+> Обновлено: 2026-03-18 (сессия 13)
+> Ветка: `claude/add-profile-achievements-px0DE`
 
 ---
 
-## Последняя сессия (2026-03-17, сессия 11)
+## Последняя сессия (2026-03-18, сессия 13)
 
 ### ✅ Сделано
 
 | # | Задача | Детали |
 |---|--------|--------|
-| 1 | **PATCH /api/ai/analyze-leak** | Фидбек по решению: `{ userId, leakType, solutionText, worked }` → пишет в `triedSolutions[].worked` и `whatWorked` |
-| 2 | **GET /api/ai/recommendations** | Новый endpoint — свежайший `UserAiPattern` пользователя за 7 дней |
-| 3 | **LeakAiAnalysisCard — «📋 Добавить в задачи»** | Все 3 решения → POST /api/tasks, zone 'LeakFixer', дата из дедлайна AI |
-| 4 | **LeakAiAnalysisCard — фидбек ✅/❌** | Кнопки под каждым решением, оптимистичное обновление UI |
-| 5 | **HomeScreen виджет «💡 AI Рекомендации»** | Тип лика + топ-решение + кнопка «Все» → WeeklyReport, скрывается через hiddenWidgets |
-| 6 | **ProfileScreen** | Переключатель «AI Рекомендации» в разделе «Виджеты» |
+| 1 | **Достижения в ProfileScreen** | Карточка с 6 плитками (2 реальных + 4 locked). Earned: цветные с датой. Locked: серые+grayscale. Счётчик X/6. |
+| 2 | **История AI-паттернов в ProfileScreen** | Секция с UserAiPattern[]: тип лика, кол-во анализов, сколько сработало, дата. Скрывает `tg_input_patterns`. |
+| 3 | **GET /api/ai/patterns** | Новый endpoint. Вся история UserAiPattern пользователя для ProfileScreen. |
+| 4 | **Telegram: кнопка 🏅 + команда ачивменты** | `getAchievementsSummary()`, ACHIEVEMENTS_RE, btn_achievements в moduleHandlers. |
+| 5 | **AI_CLASSIFY_SYSTEM расширен** | +10 примеров разговорных форм: скушал, выпил кофе, побегал, поплавал, заплатил за такси и т.д. |
+| 6 | **Баг: бесконечный цикл в боте** | Дедупликация по update_id через Note(zone='__tg_dedup'). Telegram retry → возвращаем 200 сразу. |
+| 7 | **Баг: JSON в мимолётных мыслях** | storePending() больше не создаёт FleetingThought с JSON-payload. |
+| 8 | **parseFoodEntry() — расширенный парсер еды** | Вариант B: 2 числа = вес+ккал/100г. Метрические единицы → пересчёт. БЖУ на 100г → пересчёт на порцию. Keywords: ел/ела/еда/съел/съела. |
 
 ---
 
@@ -24,83 +26,77 @@
 
 | Проблема | Статус |
 |----------|--------|
-| Supplement reminder использует `ritualReminders` вместо своего флага | ❌ не починено |
-| Telegram кнопки «Сон/Вес/Настроение/Энергия» только показывают, не дают ввести | ❌ нет ForceReply flow |
+| 4 из 6 achievement-плиток (STREAK_7/30, GYM_10, WATER_WEEK) не выдаются бэкендом — видны только как locked | ❌ нужен backend |
+| Telegram getFoodSummary() не показывает amount/БЖУ из новых полей FoodEntry | ❌ нужно обновить |
+| Кнопки качества еды (🟢🟡🔴) в Telegram после записи блюда | ❌ не реализовано |
 
 ---
 
 ## Задачи — следующая сессия (по приоритету)
 
-### 1. 🔴 Supplement reminder — отдельный флаг (30 мин)
-Сейчас `send-supplement-reminder` проверяет `ritualReminders`. Нужен отдельный флаг:
-- `prisma/schema.prisma`: `supplementReminders Boolean @default(true)`
-- `prisma/migrations/20260317_supplement_reminders.sql` → применить в Supabase SQL Editor
-- `SettingsScreen.tsx`: Switch «Напоминание о БАДах»
-- `send-supplement-reminder/route.ts`: `where: { supplementReminders: true }`
+### 1. 🔴 Backend для недостающих ачивментов (30 мин)
+Файл: `src/app/api/achievements/check/route.ts`
 
-### 2. 🟡 StatsScreen — выбор периода 7д/14д/30д/90д (1 час)
-Сейчас `?days=30` и `last14Days` захардкожено.
-- State `periodDays: 7 | 14 | 30 | 90` + кнопки-переключатели
-- API `?days=N`, пересчёт chart и averages
-- Файлы: `StatsScreen.tsx`, `/api/stats/history/route.ts`
+Добавить в массив `ACHIEVEMENTS` 4 новые проверки:
+```typescript
+{ code: 'STREAK_7',    label: '7 дней подряд',  emoji: '🔥', desc: 'Серия из 7 дней',          check: async (userId) => user.streak >= 7 && !existing }
+{ code: 'STREAK_30',   label: 'Месяц силы',      emoji: '💎', desc: 'Серия из 30 дней',         check: async (userId) => user.streak >= 30 && !existing }
+{ code: 'GYM_10',      label: 'Железный',        emoji: '💪', desc: '10 тренировок выполнено',  check: async (userId) => gymCount >= 10 && !existing }
+{ code: 'WATER_WEEK',  label: 'Водный марафон',  emoji: '💧', desc: '7 дней норма воды',        check: async (userId) => 7 consecutive days water >= waterTarget && !existing }
+```
+- `check()` нужен доступ к userId и todayScore, добавить параметр `user: { streak: number }` в сигнатуру
+- `WATER_WEEK`: проверить `fitnessDaily.water >= waterTarget` за последние 7 дней подряд
 
-### 3. 🟡 Ачивменты за оценку дня (2 часа)
-Таблица `Achievement` уже есть в Prisma schema.
-- Триггеры: первый 80+ → badge «Отличный день», 7 дней подряд 70+ → badge «Неделя качества»
-- `POST /api/achievements/check` — проверка при каждом сохранении оценки
-- UI: popup при выдаче + список в ProfileScreen
+### 2. 🟡 Telegram: getFoodSummary + качество еды (30 мин)
+Файл: `src/app/api/telegram/webhook/route.ts`
 
-### 4. 🟢 Telegram ForceReply для ввода данных (1.5 часа)
-Кнопки «Сон», «Вес», «Настроение», «Энергия» должны запрашивать значение:
-- Нажал кнопку → бот отвечает `ForceReply` «Введи часы сна:»
-- Пользователь отвечает числом → записывается как reply на то сообщение
-- Хранить `pendingAction` в `fleeting_thoughts` (TTL 5 мин)
-- Файл: `webhook/route.ts` — проверять `message.reply_to_message`
+**getFoodSummary()** — обновить вывод:
+```
+🟢 Доширак (70г) — 308 ккал · Б11.9 Ж5.6 У37.8
+```
+- Если `entry.amount` → добавлять `(amount)`
+- Если `entry.protein/fat/carbs` → добавлять `· Б X Ж X У X`
 
-### 5. 🟢 DailySummaryScreen — кнопка «Поделиться» оценкой (30 мин)
-Текст: `📊 Мой день: 83/100 — Отличный! 💧100% 🍽️1800ккал ✅4/5 ритуалов`
-→ `navigator.clipboard.writeText()` или `window.open('tg://msg?text=...')`
-Файл: `src/components/screens/DailySummaryScreen.tsx`
+**Кнопки качества** после записи еды через текстовую команду:
+- После `db.foodEntry.create()` отправлять keyboard:
+  `[🟢 Отлично, 🟡 Нормально, 🔴 Срыв]` → callback `food_q_{id}_{good|neutral|bad}`
+- callback handler: `db.foodEntry.update({ quality })`
+
+### 3. 🟡 StatsScreen — лучшая неделя + средний балл (30 мин)
+Файлы: `src/components/screens/StatsScreen.tsx`, `src/app/api/stats/history/route.ts`
+
+- В API `/api/stats/history`: добавить `dayScore` в DayData (вызов `calcDayScore` для каждого дня, или упрощённая версия)
+- В cards «Итого за N дней»: добавить плитку «Средний балл дня» (avg dayScore)
+- В weeklySummary: найти неделю с наивысшим суммарным баллом → подсветить border/bg
+
+### 4. 🟢 Telegram: кнопка «+ Сет» в сводке зала (45 мин)
+Файл: `src/app/api/telegram/webhook/route.ts`
+
+После списка упражнений добавить кнопку `[+ Добавить сет → {exercise.name}]`.
+- callback `gym_addset_{exerciseId}` → ForceReply «Введи: вес × повторения (напр. 75x8)»
+- pending `__type: 'gymSet'`, парсер `75x8` / `75 8` / `75` → db.gymExerciseSet.create
+- Расширить `PendingPayload` типом `PendingGymSet`
+
+### 5. 🟢 Telegram: «доширак» без ключевого слова (AI улучшение)
+Сейчас при вводе `доширак 70 440` без `ел` — идёт в AI classify, который должен его поймать как food.
+Убедиться что AI_CLASSIFY_SYSTEM имеет пример для числового формата без ключевого слова.
+Добавить пример: `"доширак 70 440"` → food с weight_g=70, calories_per_100=440.
 
 ---
 
-## Telegram bot — полный список команд (v4, 13 команд)
+## Важные архитектурные детали
 
-| Команда | Действие |
-|---------|---------|
-| `вода 500` | +500 мл к воде дня |
-| `вес 74.5` | замер веса |
-| `настроение 8` | mood 1–10 |
-| `энергия 7` | energy 1–10 |
-| `ел пицца 800` | food entry |
-| `зал 60` | gym workout |
-| `задача купить хлеб` | task |
-| `ритуалы` | отметить все выполненными |
-| `сон 8` | sleepHours |
-| `сводка` | мини-итоги дня |
-| `доход 5000 зарплата` | income transaction |
-| `расход 500 кофе` | expense transaction |
-| `лик [текст]` | AI-анализ лика (Groq/Gemini) |
-| `помощь` / `/start` / `меню` | список команд + inline keyboard |
-
-## Telegram inline keyboard — 11 кнопок
-
-| Кнопка | callback_data | Что показывает |
-|--------|--------------|----------------|
-| 💪 Зал | btn_gym | Тренировка дня: упражнения Nх12хWкг(next) 🏆 |
-| 🍽️ Питание | btn_food | Список приёмов 🟢🟡🔴 + ккал |
-| 💧 Вода | btn_water | Прогресс + кнопки +200/+350/+500 |
-| ✅ Ритуалы | btn_rituals | ✅/⬜ список + «Отметить все» |
-| 😴 Сон | btn_sleep | Текущий сон + подсказка |
-| ⚖️ Вес | btn_weight | Последний замер + подсказка |
-| 😊 Настроение | btn_mood | Настроение + энергия + сон |
-| ⚡ Энергия | btn_energy | То же что btn_mood |
-| 💰 Финансы | btn_finance | Баланс месяца |
-| 📊 Сводка | btn_summary | Полная сводка дня |
-| 📋 Задачи | btn_tasks | Список задач ✅/⬜ |
-| ⚙️ Настройки | btn_settings | Toggle вкл/выкл каждой кнопки |
-
-**Настройки кнопок:** хранятся в `user_settings.hidden_widgets` как `["tg_gym", "tg_food", ...]`
+| Тема | Правило |
+|------|---------|
+| **update_id dedup** | Note(zone='__tg_dedup'), deleteMany старых при каждом новом → чистый KV |
+| **storePending** | Только Note(zone='__tg_pending'). НЕ создавать FleetingThought — виден в приложении |
+| **parseFoodEntry** | Поэтапный снос с конца: BJU → kcal → weight → name. Metric units → /100г. Count units → total |
+| **ALL_ACHIEVEMENT_DEFS** | Хардкод в ProfileScreen. Backend выдаёт только коды которые знает. Новые плитки = sync |
+| **Transaction.amount** | Положительный = доход, отрицательный = расход (нет поля type!) |
+| **hidden_widgets** | Web-виджеты (без префикса) + tg-кнопки (`tg_gym`, `tg_food` и т.д.) |
+| **БД** | Только Supabase PostgreSQL, Prisma ORM, без локальной БД |
+| **Lint** | `bun run lint` перед коммитом (0 ошибок) |
+| **Миграции** | Вручную в Supabase SQL Editor, файл в prisma/migrations/ |
 
 ---
 
@@ -113,20 +109,3 @@
 | `0 8 * * *` | 08:00 | 11:00 | Supplement reminder |
 | `0 16 * * *` | 16:00 | 19:00 | Ritual reminder |
 | `0 17 * * *` | 17:00 | 20:00 | Вечерний checkin reminder |
-
----
-
-## Важно помнить
-
-| Тема | Правило |
-|------|---------|
-| **БД** | Только Supabase PostgreSQL, Prisma ORM |
-| **Ветка** | `claude/ai-recommendations-feedback-TlDoh` |
-| **Lint** | `bun run lint` перед коммитом (0 ошибок) |
-| **Миграции** | Вручную в Supabase SQL Editor |
-| **Transaction.amount** | Положительный = доход, отрицательный = расход (нет поля type!) |
-| **Supplement reminder** | Пока использует `ritualReminders` — нужен отдельный флаг (задача #1) |
-| **hidden_widgets** | Хранит web-виджеты (`weight`, `ai_recommendations` и т.д.) и tg-кнопки (`tg_gym` и т.д.) |
-| **PATCH /api/ai/analyze-leak** | Фидбек — в том же route что POST/GET, не отдельный файл |
-| **Фидбек → следующий анализ** | `analyzeLeakWithAI()` уже передаёт `pastPatterns` (triedSolutions + whatWorked) в промпт — автоматически |
-| **LeakAiAnalysisCard дедлайн** | `deadlineToDate()` парсит текст AI: регулярка на цифры + ключевые слова, fallback +7 дней |
