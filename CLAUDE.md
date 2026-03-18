@@ -55,7 +55,8 @@ src/
 │   ├── mood-utils.ts       # getMoodStatus, getMoodStatusText
 │   ├── ai-provider.ts      # Groq + Gemini fallback, логирует в ai_logs
 │   ├── ai-leak-prompts.ts  # Промпт-билдер, парсер JSON-ответа, Telegram-форматтер
-│   └── ai-analyze-leak.ts  # Shared функция analyzeLeakWithAI() — используется API + Telegram
+│   ├── ai-analyze-leak.ts  # Shared функция analyzeLeakWithAI() — используется API + Telegram
+│   └── challenge-utils.ts  # calculateChallengeProgress() — shared между challenges API и Telegram
 └── prisma/schema.prisma
 ```
 
@@ -254,30 +255,77 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Следующие задачи (приоритет, сессия 22)
+## Следующие задачи (приоритет, сессия 23)
 
-### 1. 🔴 ProfileScreen: CHALLENGE_FIRST + все 7 ачивментов в карточке
-`ALL_ACHIEVEMENT_DEFS` содержит только 6 плиток (GREAT_DAY_FIRST, QUALITY_WEEK, STREAK_7, STREAK_30, WATER_WEEK, GYM_10) — CHALLENGE_FIRST отсутствует. Нужно добавить в массив и обновить счётчик «X/7».
-- В `ALL_ACHIEVEMENT_DEFS` добавить `{ code: 'CHALLENGE_FIRST', label: 'Первый вызов', emoji: '🏆', desc: 'Завершить первый челлендж' }`
-- Файл: `src/components/screens/ProfileScreen.tsx`
-
-### 2. 🟡 HomeScreen: клик на карточку активного челленджа → ChallengeDetailScreen
-Сейчас клик ведёт на `setScreen('goals')`.
-- Изменить на: `setSelectedContentId(c.id); setScreen('challenge-detail')`
-- Файл: `src/components/screens/HomeScreen.tsx`
-
-### 3. 🟡 Telegram: getChallengesSummary — реальный прогресс через calculateChallengeProgress
-Сейчас показывает `c.progress` (сырое из БД), не пересчитывает tracker-метрики.
-- Вызвать `calculateChallengeProgress(c, userId)` для каждого активного челленджа перед рендером
+### 1. 🔴 Telegram: кнопка «Отметить день» для конкретного челленджа
+Сейчас в `getChallengesSummary` нет кнопки для быстрой отметки дня прямо из Telegram.
+- Добавить `[✅ Отметить день]` под каждым активным челленджом в виде callback `challenge_mark_{id}`
+- В `handleCallback`: `challenge_mark_{id}` → `PATCH /api/challenges` с `{ id, markDay: true }` → ответить тостом
 - Файл: `src/app/api/telegram/webhook/route.ts`
 
-### 4. 🟢 ChallengeDetailScreen: кнопка «Отметить день» показывает сообщение если уже отмечен
-Сейчас API возвращает `{ alreadyMarked: true }` (добавлено в сессии 21), но фронт не обрабатывает это поле.
-- В `handleMarkDay` показывать showSuccessToast('✅ Сегодня уже отмечен!') при `alreadyMarked: true`
-- Файл: `src/components/screens/ChallengeDetailScreen.tsx`
+### 2. 🟡 StatsScreen: добавить раздел «Челленджи» в статистику
+Текущая StatScreen не отображает прогресс по челленджам.
+- Добавить карточку «🏆 Челленджи»: кол-во завершённых, активных, провалённых, текущая серия лучшего
+- Данные: `GET /api/challenges?userId=X` (загружены все статусы)
+- Файл: `src/components/screens/StatsScreen.tsx`
 
-### 5. 🟢 Проверить кнопки tracker-прогресса в ChallengesScreen getProgressLabel()
-Функция `getProgressLabel()` в ChallengesScreen может показывать "8.2 / 8 дней" для avg-метрик. Проверить и привести к единому виду с исправлением в ChallengeDetailScreen из сессии 21.
+### 3. 🟡 ChallengesScreen: кнопка «Пригласить друга» для активного Buddy-челленджа
+Сейчас приглашение видно только в ChallengeDetailScreen.
+- Добавить иконку 👥 в карточку активного челленджа если нет BuddyChallenge
+- Клик → `ChallengeDetailScreen` с открытым диалогом приглашения (через `setSelectedContentId`)
+- Файл: `src/components/screens/ChallengesScreen.tsx`
+
+### 4. 🟢 ProfileScreen: секция «Мои достижения» — показывать дату и подсказку для locked
+Сейчас locked-плитки показывают только emoji + label, без подсказки как получить.
+- Добавить tooltip или sub-text «Как получить: ...» из поля `desc` под заблюренными плитками
+- Файл: `src/components/screens/ProfileScreen.tsx`
+
+### 5. 🟢 Telegram: показывать streak челленджа в getChallengesSummary
+Сейчас выводится только `daysCompleted` и `%`. Добавить `🔥 серия X` если `currentStreak > 0`.
+- Файл: `src/app/api/telegram/webhook/route.ts`
+
+---
+
+## Что делали в сессии 2026-03-18 (сессия 22)
+
+### Аудит 5 задач + 2 реальных исправления
+
+**Формат:** аудит кодовой базы — проверили все 5 задач из плана сессии 22.
+
+**Результаты аудита:**
+
+| # | Задача | Статус | Комментарий |
+|---|--------|--------|-------------|
+| 1 | ProfileScreen CHALLENGE_FIRST в ALL_ACHIEVEMENT_DEFS | ✅ Уже было | Добавлено в сессии 19 (строка 84) — 7-я плитка есть |
+| 2 | HomeScreen: клик на карточку → ChallengeDetailScreen | ✅ Уже было | Реализовано в сессии 19 (строка 1107) |
+| 3 | Telegram getChallengesSummary — реальный прогресс | ✅ Исправлено | calculateChallengeProgress вынесена в shared lib |
+| 4 | ChallengeDetailScreen: alreadyMarked: true тост | ✅ Исправлено | Показывает «✅ Сегодня уже отмечен!» |
+| 5 | ChallengesScreen getProgressLabel() для avg-метрик | ✅ Уже было | sleep_avg/mood_avg уже корректно форматированы |
+
+**Изменённые файлы:**
+- `src/lib/challenge-utils.ts` *(новый файл)*:
+  - `calculateChallengeProgress()` вынесена сюда как exported shared функция
+  - Исправлен баг оригинала: `db.user.findUnique` → `db.appUser.findUnique` (для TG уведомления)
+- `src/app/api/challenges/route.ts`:
+  - Импортирует `calculateChallengeProgress` из `@/lib/challenge-utils` (DRY)
+  - Удалена локальная дублирующая функция (~290 строк)
+  - Удалён неиспользуемый импорт `calculateStreak` / `CompletionEntry`
+- `src/app/api/telegram/webhook/route.ts`:
+  - Импортирует `calculateChallengeProgress` из `@/lib/challenge-utils`
+  - `getChallengesSummary`: для каждого активного челленджа вызывает `calculateChallengeProgress` → живые данные вместо `c.progress`
+  - Прогресс-строка: для tracker — `daysCompleted/target unit`, для остальных — `daysCompleted/duration дней`
+- `src/components/screens/ChallengeDetailScreen.tsx`:
+  - `markDay` handler: проверяет `data.alreadyMarked` → тост «✅ Сегодня уже отмечен!» вместо «✅ День отмечен!»
+
+### Принятые решения (важно для следующих сессий)
+
+- **calculateChallengeProgress как shared lib**: функция слишком большая (~250 строк) для дублирования. `src/lib/challenge-utils.ts` — единый источник истины для обоих потребителей.
+- **db.user → db.appUser**: в оригинальном challenges/route.ts TG-нотификация использовала `db.user.findUnique` (неверно — модель называется `AppUser`). Исправлено при переносе в lib.
+- **alreadyMarked как 200 (не 400)**: API возвращает успешный 200 с `{ alreadyMarked: true }` — не ломает UX, фронт показывает информационный тост.
+- **try/catch в getChallengesSummary**: если `calculateChallengeProgress` падает — fallback на `c.progress` (graceful degradation).
+
+### Ничего не осталось незакончено
+Все задачи проверены. Коммит запушен в `claude/add-challenge-first-badge-UqNVc`.
 
 ---
 
