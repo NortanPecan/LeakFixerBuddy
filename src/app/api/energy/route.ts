@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { normalizeToDate, getStartOfDay, getEndOfDay, parseDateKey } from '@/lib/date-utils'
 
-import { getStartOfDay as getStartOfDayOld, getEndOfDay as getEndOfDayOld } from '@/lib/date-utils'
-
 // Work activity multipliers
 const WORK_ACTIVITY_MULTIPLIERS: Record<string, number> = {
   sedentary: 1.2,   // Сидячая работа

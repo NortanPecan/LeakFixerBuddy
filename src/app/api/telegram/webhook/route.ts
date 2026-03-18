@@ -6,6 +6,7 @@ import { formatLeakAnalysisForTelegram } from '@/lib/ai-leak-prompts'
 import { callAI } from '@/lib/ai-provider'
 import { generateWeeklyDigest } from '@/lib/ai-weekly-digest'
 import { calculateChallengeProgress } from '@/lib/challenge-utils'
+import { LEAK_TYPE_LABELS } from '@/lib/leak-types'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET
@@ -618,23 +619,7 @@ async function buildFullSummary(userId: string, today: Date): Promise<string> {
 
 // LEAKS
 
-const LEAK_TYPE_LABELS: Record<string, string> = {
-  low_energy: 'Низкая энергия',
-  chronic_low_energy: 'Хроническая усталость',
-  no_gym: 'Мало тренировок',
-  gym_dropout: 'Бросил зал',
-  ritual_consistency: 'Непостоянство ритуалов',
-  ritual_erosion: 'Эрозия ритуалов',
-  missed_checkins: 'Пропуск чек-инов',
-  calorie_spikes: 'Скачки калорий',
-  no_habits: 'Нет привычек',
-  weekend_ritual_drop: 'Срыв в выходные',
-  high_stress: 'Высокий стресс',
-  sleep_deficit: 'Дефицит сна',
-  expense_spike: 'Скачок расходов',
-  tracking_dropout: 'Не ввожу данные',
-  low_tracking: 'Мало трекинга',
-}
+// LEAK_TYPE_LABELS imported from @/lib/leak-types
 
 async function getLeaksSummary(userId: string): Promise<{ text: string; keyboard: InlineKeyboard }> {
   const patterns = await db.userAiPattern.findMany({
@@ -1814,11 +1799,9 @@ async function handleCallback(
 // ─── Route handlers ────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
-  if (WEBHOOK_SECRET) {
-    const secretHeader = request.headers.get('x-telegram-bot-api-secret-token')
-    if (secretHeader !== WEBHOOK_SECRET) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+  const secretHeader = request.headers.get('x-telegram-bot-api-secret-token')
+  if (!WEBHOOK_SECRET || secretHeader !== WEBHOOK_SECRET) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   let update: TelegramUpdate

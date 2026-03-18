@@ -39,7 +39,7 @@ async function sendTelegramMessage(chatId: bigint, text: string): Promise<boolea
 
 async function handleRequest(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
-  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+  if (!CRON_SECRET || authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

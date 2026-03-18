@@ -53,6 +53,7 @@ import {
   Download
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { LEAK_TYPE_LABELS } from '@/lib/leak-types'
 import {
   Dialog,
   DialogContent,
@@ -84,23 +85,7 @@ const ALL_ACHIEVEMENT_DEFS = [
   { code: 'CHALLENGE_FIRST',  emoji: '🏆', label: 'Первый вызов',    desc: 'Завершить первый челлендж' },
 ]
 
-const LEAK_TYPE_LABELS_PROFILE: Record<string, string> = {
-  low_energy:        'Низкая энергия',
-  chronic_low_energy:'Хроническая усталость',
-  no_gym:            'Мало тренировок',
-  gym_dropout:       'Бросил зал',
-  ritual_consistency:'Непостоянство ритуалов',
-  ritual_erosion:    'Эрозия ритуалов',
-  missed_checkins:   'Пропуск чек-инов',
-  calorie_spikes:    'Скачки калорий',
-  no_habits:         'Нет привычек',
-  weekend_ritual_drop:'Срыв в выходные',
-  high_stress:       'Высокий стресс',
-  sleep_deficit:     'Дефицит сна',
-  expense_spike:     'Скачок расходов',
-  tracking_dropout:  'Не ввожу данные',
-  low_tracking:      'Мало трекинга',
-}
+// LEAK_TYPE_LABELS imported from @/lib/leak-types
 
 function WeightSparkline({ data }: { data: Array<{ date: string; weight: number }> }) {
   if (data.length < 2) return null
@@ -710,7 +695,7 @@ export function ProfileScreen() {
               .filter(p => p.leakType !== 'tg_input_patterns')
               .slice(0, 5)
               .map((p) => {
-                const label = LEAK_TYPE_LABELS_PROFILE[p.leakType] ?? p.leakType
+                const label = LEAK_TYPE_LABELS[p.leakType] ?? p.leakType
                 const workedCount = Array.isArray(p.whatWorked) ? p.whatWorked.length : 0
                 const updatedDate = new Date(p.updatedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
                 return (
