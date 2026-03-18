@@ -85,6 +85,7 @@ const LEAK_RE         = /^(?:лик|leak|утечка)\s+(.+)$/i
 const ACHIEVEMENTS_RE = /^(?:ачивменты|ачивмент|достижения|достижение|achievement|badge|бейдж)$/i
 const TRAINER_RE      = /^(?:\/тренер|тренер)(?:\s+(.+))?$/i
 const WEEK_RE         = /^(?:неделя|итоги недели|дайджест недели|week summary)$/i
+const CHALLENGES_RE   = /^(?:вызовы|вызов|челленджи|челлендж|challenges?)$/i
 
 // ─── Telegram API ──────────────────────────────────────────────────────────
 
@@ -701,6 +702,55 @@ async function getAchievementsSummary(userId: string): Promise<{ text: string; k
   }
 
   return { text, keyboard: backBtn() }
+}
+
+// ─── Challenges summary ────────────────────────────────────────────────────────
+
+const TRACKER_METRIC_LABELS: Record<string, string> = {
+  gym_count:    'тренировок',
+  water_streak: 'дней воды',
+  ritual_rate:  'дней ритуалов',
+  no_food_bad:  'дней без срывов',
+  sleep_avg:    'ч сна',
+  mood_avg:     '/10 настр.',
+}
+
+async function getChallengesSummary(userId: string): Promise<{ text: string; keyboard: InlineKeyboard }> {
+  const challenges = await db.challenge.findMany({
+    where: { userId, status: 'active' },
+    orderBy: { createdAt: 'asc' },
+  })
+
+  if (challenges.length === 0) {
+    return {
+      text: '🏆 <b>Активных челленджей нет</b>\n\nОткрой приложение → Челленджи, чтобы начать новый.',
+      keyboard: backBtn(),
+    }
+  }
+
+  let text = `🏆 <b>Активные челленджи (${challenges.length}/3)</b>\n\n`
+
+  for (const c of challenges) {
+    let cfg: Record<string, unknown> = {}
+    try { cfg = JSON.parse(c.config ?? '{}') } catch { /* */ }
+
+    const pct = c.progress ?? 0
+    const bar = '█'.repeat(Math.round(pct / 10)) + '░'.repeat(10 - Math.round(pct / 10))
+
+    let progressStr = `${pct}%`
+    if (c.type === 'tracker') {
+      const metric = cfg.metric as string
+      const target = cfg.target as number
+      const unit = TRACKER_METRIC_LABELS[metric] ?? ''
+      progressStr = `${c.progress}/${target} ${unit}`.trim()
+    }
+
+    text += `<b>${c.name}</b>\n`
+    text += `${bar} ${progressStr}\n`
+    text += `📅 ${c.duration} дней · ${c.type === 'tracker' ? '📊 трекер' : c.type === 'ritual' ? '🔥 ритуал' : '⭐ свободный'}\n\n`
+  }
+
+  return { text: text.trim(), keyboard: backBtn() }
 }
 
 // ─── AI Input Classification ───────────────────────────────────────────────────
@@ -1402,6 +1452,12 @@ async function handleCommand(userId: string, text: string): Promise<{ reply: str
   if (ACHIEVEMENTS_RE.test(t)) {
     const { text: achText, keyboard: achKeyboard } = await getAchievementsSummary(userId)
     return { reply: achText, keyboard: achKeyboard }
+  }
+
+  // Challenges
+  if (CHALLENGES_RE.test(t)) {
+    const { text: chText, keyboard: chKeyboard } = await getChallengesSummary(userId)
+    return { reply: chText, keyboard: chKeyboard }
   }
 
   // AI Coach — /тренер [вопрос]

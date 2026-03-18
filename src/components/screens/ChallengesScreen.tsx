@@ -24,7 +24,7 @@ import {
   XCircle,
   Timer,
   Star,
-  Layers,
+  BarChart2,
 } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
 import { showErrorToast, showSuccessToast } from '@/lib/network-utils'
@@ -51,20 +51,23 @@ interface ChallengeTemplate {
   config?: Record<string, unknown>
 }
 const TEMPLATES: ChallengeTemplate[] = [
-  { name: '21 день ритуалов',    emoji: '🔥', type: 'ritual', zone: 'health',    duration: 21, description: 'Выполняй все ритуалы 21 день подряд без пропусков' },
-  { name: '30 дней зала',        emoji: '💪', type: 'ritual', zone: 'health',    duration: 30, description: '30 дней тренировок без пропусков' },
-  { name: '14 дней без срывов',  emoji: '🥗', type: 'ritual', zone: 'health',    duration: 14, description: '14 дней без плохих приёмов пищи' },
-  { name: '21 день дисциплины',  emoji: '♠️', type: 'custom', zone: 'poker',     duration: 21, description: '21 день дисциплины за столом', config: { targetCount: 21, periodDays: 21, actionType: 'days' } },
-  { name: 'Месяц сбережений',    emoji: '💰', type: 'custom', zone: 'savings',   duration: 30, description: 'Откладывай и контролируй бюджет 30 дней', config: { targetCount: 30, periodDays: 30, actionType: 'days' } },
-  { name: '7 дней ранний подъём', emoji: '🌅', type: 'ritual', zone: 'life',    duration: 7,  description: 'Вставай до 7 утра 7 дней подряд' },
-  { name: '30 дней LeakFixer',   emoji: '🔧', type: 'custom', zone: 'leakfixer', duration: 30, description: 'Работай над своими ликами 30 дней', config: { targetCount: 30, periodDays: 30, actionType: 'days' } },
+  { name: '21 день ритуалов',    emoji: '🔥', type: 'ritual',  zone: 'health',    duration: 21, description: 'Выполняй все ритуалы 21 день подряд без пропусков' },
+  { name: '💧 7 дней нормы воды', emoji: '💧', type: 'tracker', zone: 'health',    duration: 7,  description: 'Выполняй норму воды 7 дней из 7',               config: { metric: 'water_streak', target: 7 } },
+  { name: '💪 10 тренировок',    emoji: '💪', type: 'tracker', zone: 'health',    duration: 30, description: '10 завершённых тренировок за месяц',             config: { metric: 'gym_count', target: 10 } },
+  { name: '😴 Сон 7+ часов',     emoji: '😴', type: 'tracker', zone: 'life',      duration: 14, description: 'Держи среднее время сна от 7 часов 2 недели',    config: { metric: 'sleep_avg', target: 7 } },
+  { name: '😊 Настроение 6+',    emoji: '😊', type: 'tracker', zone: 'health',    duration: 14, description: 'Поддерживай среднее настроение выше 6/10',       config: { metric: 'mood_avg', target: 6 } },
+  { name: '🥗 14 дней без срывов', emoji: '🥗', type: 'tracker', zone: 'health',  duration: 14, description: '14 дней без плохих приёмов пищи',               config: { metric: 'no_food_bad', target: 12 } },
+  { name: '✅ 21 день ритуалов', emoji: '✅', type: 'tracker', zone: 'health',    duration: 21, description: 'Хотя бы один ритуал 21 день из 21',             config: { metric: 'ritual_rate', target: 21 } },
+  { name: 'Месяц сбережений',    emoji: '💰', type: 'custom',  zone: 'savings',   duration: 30, description: 'Откладывай и контролируй бюджет 30 дней',        config: { targetCount: 30, periodDays: 30, actionType: 'days' } },
+  { name: '30 дней LeakFixer',   emoji: '🔧', type: 'custom',  zone: 'leakfixer', duration: 30, description: 'Работай над своими ликами 30 дней',              config: { targetCount: 30, periodDays: 30, actionType: 'days' } },
 ]
 
 // ─── Type icons ───────────────────────────────────────────────────────────────
 const TYPE_ICONS: Record<string, typeof Trophy> = {
-  ritual: Flame,
-  chain:  Target,
-  custom: Star,
+  ritual:  Flame,
+  chain:   Target,
+  custom:  Star,
+  tracker: BarChart2,
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -73,6 +76,7 @@ interface Challenge {
   name: string
   type: string
   zone: string
+  config: string
   duration: number
   progress: number
   progressPercentage: number
@@ -101,6 +105,24 @@ const EMPTY_FORM = {
   periodDays: '30',
   actionType: 'actions',
   selectedRitualIds: [] as string[],
+  trackerConfig: {} as Record<string, unknown>,
+}
+
+// ─── Progress label ───────────────────────────────────────────────────────────
+function getProgressLabel(c: Challenge): string {
+  if (c.type !== 'tracker') return `${c.daysCompleted}/${c.duration} дней`
+  try {
+    const cfg = JSON.parse(c.config ?? '{}') as Record<string, unknown>
+    const metric = cfg.metric as string
+    const target = cfg.target as number
+    if (metric === 'gym_count')     return `${c.daysCompleted}/${target} тренировок`
+    if (metric === 'water_streak')  return `${c.daysCompleted}/${target} дней нормы воды`
+    if (metric === 'ritual_rate')   return `${c.daysCompleted}/${target} дней ритуалов`
+    if (metric === 'no_food_bad')   return `${c.daysCompleted}/${target} дней без срывов`
+    if (metric === 'sleep_avg')     return `ср. сон: ${c.daysCompleted} ч / цель ${target} ч`
+    if (metric === 'mood_avg')      return `ср. настр.: ${c.daysCompleted} / цель ${target}`
+  } catch { /* ignore */ }
+  return `${c.daysCompleted}/${c.duration} дней`
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -191,15 +213,16 @@ export function ChallengesScreen() {
   const applyTemplate = (t: ChallengeTemplate) => {
     setForm({
       ...EMPTY_FORM,
-      name:        t.name,
-      description: t.description,
-      type:        t.type,
-      zone:        t.zone,
-      duration:    String(t.duration),
-      targetCount: t.config?.targetCount ? String(t.config.targetCount) : '',
-      periodDays:  t.config?.periodDays  ? String(t.config.periodDays)  : '30',
-      actionType:  (t.config?.actionType as string) ?? 'actions',
+      name:          t.name,
+      description:   t.description,
+      type:          t.type,
+      zone:          t.zone,
+      duration:      String(t.duration),
+      targetCount:   t.config?.targetCount ? String(t.config.targetCount) : '',
+      periodDays:    t.config?.periodDays  ? String(t.config.periodDays)  : '30',
+      actionType:    (t.config?.actionType as string) ?? 'actions',
       selectedRitualIds: [],
+      trackerConfig: t.type === 'tracker' ? (t.config ?? {}) : {},
     })
     setCreateTab('custom')
   }
@@ -212,6 +235,8 @@ export function ChallengesScreen() {
       const config: Record<string, unknown> = {}
       if (form.type === 'ritual') {
         config.selectedRitualIds = form.selectedRitualIds
+      } else if (form.type === 'tracker') {
+        Object.assign(config, form.trackerConfig)
       } else if (form.type === 'custom') {
         config.targetCount = parseInt(form.targetCount) || 0
         config.periodDays  = parseInt(form.periodDays)  || 30
@@ -231,7 +256,15 @@ export function ChallengesScreen() {
           config,
         }),
       })
-      if (!res.ok) throw new Error()
+      const data = await res.json()
+      if (!res.ok) {
+        if (data.code === 'LIMIT_REACHED') {
+          showErrorToast(null, data.error)
+        } else {
+          throw new Error()
+        }
+        return
+      }
       showSuccessToast('Челлендж создан 🏆')
       setShowCreate(false)
       setForm(EMPTY_FORM)
@@ -270,10 +303,13 @@ export function ChallengesScreen() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Челленджи</h1>
-        <Button size="sm" className="bg-primary" onClick={() => setShowCreate(true)}>
+        <Button size="sm" className="bg-primary" onClick={() => setShowCreate(true)} disabled={active.length >= 3}>
           <Plus className="w-4 h-4 mr-1" />Новый
         </Button>
       </div>
+      {active.length >= 3 && (
+        <p className="text-xs text-amber-400/80 -mt-2">⚠️ Достигнут лимит: 3 активных челленджа. Заверши один, чтобы начать новый.</p>
+      )}
 
       {/* Pending buddy invites */}
       {pendingInvites.length > 0 && (
@@ -369,7 +405,7 @@ export function ChallengesScreen() {
                       </div>
                       <div className="space-y-1">
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">{c.daysCompleted}/{c.duration} дней</span>
+                          <span className="text-muted-foreground">{getProgressLabel(c)}</span>
                           <span className="font-medium">{c.progressPercentage}%</span>
                         </div>
                         <Progress value={c.progressPercentage} className="h-1.5" />

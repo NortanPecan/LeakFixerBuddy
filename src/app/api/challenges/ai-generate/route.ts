@@ -4,16 +4,20 @@ import { callAI } from '@/lib/ai-provider'
 
 // Leak type → base template for challenge
 const LEAK_TEMPLATES: Record<string, { name: string; duration: number; zone: string; type: string; config: Record<string, unknown> }> = {
-  no_gym:              { name: '7 тренировок за 2 недели',  duration: 14, zone: 'health',    type: 'ritual', config: { targetCount: 7, periodDays: 14 } },
-  ritual_erosion:      { name: '21 день ритуалов',          duration: 21, zone: 'health',    type: 'ritual', config: {} },
-  low_energy:          { name: '14 дней энергии',           duration: 14, zone: 'health',    type: 'ritual', config: {} },
-  high_spend_days:     { name: 'Месяц финансовой дисциплины', duration: 30, zone: 'savings', type: 'custom', config: { targetCount: 30, periodDays: 30, actionType: 'days' } },
-  poor_sleep:          { name: '7 дней качественного сна',  duration: 7,  zone: 'life',     type: 'ritual', config: {} },
-  overeating:          { name: '14 дней без срывов',        duration: 14, zone: 'health',    type: 'ritual', config: {} },
-  procrastination:     { name: '21 день продуктивности',    duration: 21, zone: 'leakfixer', type: 'custom', config: { targetCount: 21, periodDays: 21, actionType: 'days' } },
-  emotional_eating:    { name: '14 дней осознанного питания', duration: 14, zone: 'health',  type: 'ritual', config: {} },
-  skipped_rituals:     { name: '30 дней без пропусков',     duration: 30, zone: 'health',    type: 'ritual', config: {} },
-  default:             { name: '21 день роста',             duration: 21, zone: 'leakfixer', type: 'custom', config: { targetCount: 21, periodDays: 21, actionType: 'days' } },
+  no_gym:              { name: '10 тренировок за месяц',    duration: 30, zone: 'health',    type: 'tracker', config: { metric: 'gym_count', target: 10 } },
+  gym_dropout:         { name: '10 тренировок за месяц',    duration: 30, zone: 'health',    type: 'tracker', config: { metric: 'gym_count', target: 10 } },
+  ritual_erosion:      { name: '21 день ритуалов',          duration: 21, zone: 'health',    type: 'ritual',  config: {} },
+  ritual_consistency:  { name: '21 день ритуалов',          duration: 21, zone: 'health',    type: 'ritual',  config: {} },
+  low_energy:          { name: '14 дней сна 7+ часов',      duration: 14, zone: 'health',    type: 'tracker', config: { metric: 'sleep_avg', target: 7 } },
+  chronic_low_energy:  { name: '14 дней сна 7+ часов',      duration: 14, zone: 'health',    type: 'tracker', config: { metric: 'sleep_avg', target: 7 } },
+  sleep_deficit:       { name: '14 дней сна 7+ часов',      duration: 14, zone: 'health',    type: 'tracker', config: { metric: 'sleep_avg', target: 7 } },
+  high_spend_days:     { name: 'Месяц финансовой дисциплины', duration: 30, zone: 'savings', type: 'custom',  config: { targetCount: 30, periodDays: 30, actionType: 'days' } },
+  expense_spike:       { name: 'Месяц финансовой дисциплины', duration: 30, zone: 'savings', type: 'custom',  config: { targetCount: 30, periodDays: 30, actionType: 'days' } },
+  calorie_spikes:      { name: '14 дней без срывов',        duration: 14, zone: 'health',    type: 'tracker', config: { metric: 'no_food_bad', target: 12 } },
+  missed_checkins:     { name: '7 дней нормы воды',         duration: 7,  zone: 'health',    type: 'tracker', config: { metric: 'water_streak', target: 7 } },
+  weekend_ritual_drop: { name: '30 дней без пропусков',     duration: 30, zone: 'health',    type: 'ritual',  config: {} },
+  high_stress:         { name: '14 дней настроения 6+',     duration: 14, zone: 'health',    type: 'tracker', config: { metric: 'mood_avg', target: 6 } },
+  default:             { name: '21 день роста',             duration: 21, zone: 'leakfixer', type: 'custom',  config: { targetCount: 21, periodDays: 21, actionType: 'days' } },
 }
 
 const AI_CHALLENGE_SYSTEM = `Ты генерируешь персональный челлендж для борьбы с паттерном поведения ("ликом").
@@ -27,6 +31,11 @@ export async function POST(request: NextRequest) {
   try {
     const { userId, leakType, leakMessage } = await request.json()
     if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+
+    const activeCount = await db.challenge.count({ where: { userId, status: 'active' } })
+    if (activeCount >= 3) {
+      return NextResponse.json({ error: 'Максимум 3 активных челленджа', code: 'LIMIT_REACHED' }, { status: 400 })
+    }
 
     // Get latest UserAiPattern if leakType not provided
     let resolvedLeakType = leakType
