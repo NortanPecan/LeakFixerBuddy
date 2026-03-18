@@ -7,7 +7,7 @@ Self-improvement social network. Next.js 14 App Router + TypeScript + Prisma + S
 
 ## КРИТИЧЕСКИЕ правила
 
-- **ВЕТКА**: только `claude/telegram-add-exercise-RCu1y` — никогда не пушить в main/master без разрешения
+- **ВЕТКА**: только `claude/challenge-detail-screen-2312J` — никогда не пушить в main/master без разрешения
 - **БД**: только Supabase PostgreSQL через Prisma ORM (локальной БД нет!)
 - **Язык UI**: русский
 - **Lint**: `bun run lint` перед каждым коммитом (0 ошибок!)
@@ -117,7 +117,7 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Текущее состояние (2026-03-18, сессия 18)
+## Текущее состояние (2026-03-18, сессия 19)
 
 ### Что реализовано (полный список)
 
@@ -156,6 +156,10 @@ export function GymWorkoutDetailDialog() {
 - ✅ Streak Protection (щит, кулдаун 7 дней)
 - ✅ "Ранняя пташка" бейдж ⚡ при входе до 9:00
 - ✅ Челленджи: личные + AI-генерируемые против ликов, 6 типов трекеров, лимит 3 активных
+- ✅ ChallengeDetailScreen: tracker 7-day история (цветные точки), кнопка «Завершить досрочно»
+- ✅ CHALLENGE_FIRST бейдж — при первом завершённом челлендже (inline в calculateChallengeProgress)
+- ✅ HomeScreen: виджет «Активные челленджи» (до 2 карточек, hiddenWidgets['challenges'])
+- ✅ ProfileScreen → Виджеты: переключатель «Активные челленджи»
 
 **Уведомления**
 - ✅ Telegram push: утро (06:00 UTC), вечер (17:00 UTC), ритуалы (16:00 UTC), БАДы (08:00 UTC)
@@ -218,6 +222,9 @@ export function GymWorkoutDetailDialog() {
 - ✅ **Кнопка 🏋️ Тренер в меню**: `btn_trainer` → ForceReply → `runCoach()` (shared функция, DRY)
 - ✅ AI-резюме недели: `GET /api/ai/weekly-digest?userId=` + batch-рассылка `GET /api/telegram/send-weekly-digest`
 - ✅ Cron `0 7 * * 1` в `vercel.json` — понедельник 07:00 UTC = 10:00 МСК
+- ✅ Telegram: кнопки быстрого старта челленджей (💪/💧/🔥) после `вызовы`
+- ✅ Telegram: callback `challenge_start_{metric}_{target}_{duration}` → `db.challenge.create` + подтверждение
+- ✅ Telegram: TG-поздравление при завершении челленджа (из `calculateChallengeProgress`)
 
 **AI трансформация (сессия 17)**
 - ✅ `GET /api/ai/transformation?userId=` — первые 30 дней vs последние 30 дней: mood/energy/gym/rituals/calories/weight → AI-нарратив «Как я изменился», кеш 7 дней
@@ -246,41 +253,72 @@ export function GymWorkoutDetailDialog() {
 
 ---
 
-## Следующие задачи (приоритет, сессия 19)
+## Следующие задачи (приоритет, сессия 20)
 
-### 1. 🔴 Челленджи: ChallengeDetailScreen — детальный экран
-ChallengesScreen открывает `challenge-detail` при клике, но экрана нет (или минимальный).
-- `GET /api/challenges?id=XXX` уже возвращает полные данные + linkedRituals/Skills/Traits
-- Нужен полноценный экран: прогресс-бар, история по дням, кнопка «Завершить досрочно», описание
-- Для tracker-челленджей показать подходящие метрики (последние 7 дней из трекера)
-- Файл: `src/components/screens/ChallengeDetailScreen.tsx` (создать или обновить)
+### 1. 🔴 ProfileScreen: CHALLENGE_FIRST в карточке достижений
+`CHALLENGE_FIRST` добавлен в achievements/check бэкенд, но карточка ProfileScreen хардкодит 6 плиток и не знает о новом бейдже.
+- В `ALL_ACHIEVEMENT_DEFS` (ProfileScreen) добавить `{ code: 'CHALLENGE_FIRST', label: 'Первый вызов', emoji: '🏆', desc: 'Завершить первый челлендж' }`
+- Увеличить счётчик «X/7» (было 6 плиток)
+- Файл: `src/components/screens/ProfileScreen.tsx`
 
-### 2. 🔴 Челленджи: Telegram — создание нового через бота
-Сейчас `вызовы` показывает список, но нельзя начать новый прямо в боте.
-- После `getChallengesSummary` добавить кнопки быстрого запуска топ-3 tracker-шаблонов
-- callback `challenge_start_{metric}_{target}_{duration}` → `db.challenge.create`
-- Ответ: подтверждение с именем и сроком
+### 2. 🔴 ChallengesScreen: фильтр «Завершённые» не работает
+`ChallengesScreen` запрашивает `status=completed` но `challenges.filter(c => c.status !== 'active')` включает и failed и planned.
+- Исправить фильтрацию: `finished = challenges.filter(c => c.status === 'completed' || c.status === 'failed')`
+- Или добавить отдельный фильтр 'failed' в UI
+- Файл: `src/components/screens/ChallengesScreen.tsx`
+
+### 3. 🟡 Telegram: команда `вызовы` → показывать прогресс как в приложении
+Сейчас `getChallengesSummary` показывает `c.progress` (сырое число из БД), не вызывает `calculateChallengeProgress`.
+- Перед рендером вызвать calculateChallengeProgress для каждого активного челленджа
+- Либо упростить: показывать только имя + дней осталось + кнопку быстрого старта
 - Файл: `src/app/api/telegram/webhook/route.ts`
 
-### 3. 🟡 Достижения: CHALLENGE_COMPLETE бейдж
-Первый завершённый челлендж = новое достижение.
-- Добавить `CHALLENGE_FIRST` в `ACHIEVEMENT_DEFS` в `achievements/check/route.ts`
-- При `calculateChallengeProgress()` когда `newStatus = 'completed'` → вызвать POST `/api/achievements/check`
-- Или: вызывать check при каждом GET /api/challenges (ленивая проверка уже сделана)
-- Файл: `src/app/api/challenges/route.ts` + `src/app/api/achievements/check/route.ts`
+### 4. 🟡 HomeScreen: виджет челленджей — клик открывает ChallengeDetailScreen
+Сейчас клик на виджет ведёт на `goals`, но не на конкретный челлендж.
+- Добавить `setSelectedContentId(c.id)` + `setScreen('challenge-detail')` по клику на отдельную карточку
+- Файл: `src/components/screens/HomeScreen.tsx`
 
-### 4. 🟡 HomeScreen: виджет «Активные челленджи»
-Если есть активные челленджи — показывать мини-карточку на HomeScreen.
-- Загружает `/api/challenges?userId=X&status=active` при монтировании
-- Показывает до 2-х карточек: имя + прогресс-бар + %
-- Скрывается через `hiddenWidgets['challenges']`
-- Добавить переключатель «Челленджи» в ProfileScreen → Виджеты
+### 5. 🟢 Telegram: кнопка «вызовы» в главном меню
+Команда `вызовы` работает через текст, но кнопки в меню нет.
+- Добавить `{ id: 'challenges', emoji: '🏆', label: 'Вызовы' }` в `TG_BUTTONS`
+- Добавить handler в `moduleHandlers`
+- Файл: `src/app/api/telegram/webhook/route.ts`
 
-### 5. 🟢 Telegram: completion popup → уведомление в бот
-Когда `calculateChallengeProgress()` переводит статус в `completed` — отправить TG-уведомление.
-- При смене `newStatus === 'completed'` загрузить `user.telegramId` и отправить поздравление
-- Формат: `🏆 Челлендж завершён!\n\n<b>{name}</b>\n\n{motivation_text}`
-- Файл: `src/app/api/challenges/route.ts`
+---
+
+## Что делали в сессии 2026-03-18 (сессия 19)
+
+### 5 задач — полная реализация
+
+**Изменённые файлы:**
+- `src/app/api/challenges/route.ts`:
+  - `GET ?id=XXX` возвращает `trackerDays[]` — последние 7 дней метрики (water, gym, rituals, food, sleep, mood) с полями `{date, value, met}`
+  - `calculateChallengeProgress()`: при переходе `active → completed` создаёт `CHALLENGE_FIRST` achievement inline (db.achievement.create, ошибку дупликата игнорирует) + отправляет TG-поздравление через Bot API
+- `src/app/api/achievements/check/route.ts`:
+  - Добавлен `CHALLENGE_FIRST` в массив `ACHIEVEMENTS` — проверяет `db.challenge.count({ where: { userId, status: 'completed' } }) >= 1`
+- `src/app/api/telegram/webhook/route.ts`:
+  - `getChallengesSummary()`: добавлены кнопки быстрого старта — `[💪 10 тренировок] [💧 7 дней воды]` + `[🔥 21 день ритуалов]`. Показываются при 0 активных (вместо "нет челленджей") и при < 3 (под списком)
+  - Новый callback handler: `challenge_start_{metric}_{target}_{duration}` → парсит metric/target/duration → `db.challenge.create` → подтверждение в чате
+- `src/components/screens/ChallengeDetailScreen.tsx`:
+  - Интерфейс `TrackerDay` + поле `trackerDays?` в `Challenge`
+  - Секция «Последние 7 дней»: горизонтальная строка кружков (зелёный/красный/серый), подпись дня недели, значение метрики, число месяца
+  - Кнопка «Завершить досрочно ✓» для статуса `active` (зелёная, с confirm-диалогом)
+- `src/components/screens/HomeScreen.tsx`:
+  - State `activeChallenges[]` + useEffect: загружает `GET /api/challenges?userId=X&status=active` при монтировании
+  - Виджет «Активные челленджи» (до 2 карточек): название + Progress bar + % + серия. Клик → `goals`. Скрывается через `hiddenWidgets['challenges']`
+- `src/components/screens/ProfileScreen.tsx`:
+  - Добавлен `{ id: 'challenges', label: 'Активные челленджи' }` в список виджетов
+
+### Принятые решения (важно для следующих сессий)
+
+- **TG-уведомление из calculateChallengeProgress**: функция имеет доступ к `process.env.TELEGRAM_BOT_TOKEN` (module-level), не нужен отдельный endpoint. Fetch к Telegram API в try/catch (non-critical).
+- **CHALLENGE_FIRST inline vs через POST /api/achievements/check**: выбрали inline db.achievement.create в calculateChallengeProgress — дешевле, без self-referential HTTP. Бейдж через `/check` тоже работает при следующем вызове DailySummaryScreen.
+- **trackerDays 7 запросов на деталь**: приемлемо — endpoint вызывается только при открытии экрана, не в списке. Запросы простые (findFirst/count).
+- **Кнопки быстрого старта**: формат `challenge_start_{metric}_{target}_{duration}` — парсим по последним двум `_`-разделителям, остаток = metric (у метрик есть underscore: `gym_count`).
+- **ALL_ACHIEVEMENT_DEFS в ProfileScreen**: пока не обновлён (задача #1 следующей сессии) — показывает 6/6, CHALLENGE_FIRST не отображается в UI-плитках достижений.
+
+### Ничего не осталось незакончено
+Все 5 задач завершены. Линтер чистый (0 ошибок). Коммит запушен в `claude/challenge-detail-screen-2312J`.
 
 ---
 

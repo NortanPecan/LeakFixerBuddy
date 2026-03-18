@@ -175,6 +175,20 @@ const ACHIEVEMENTS = [
       return true
     },
   },
+  {
+    code: 'CHALLENGE_FIRST',
+    label: 'Первый вызов',
+    emoji: '🏆',
+    desc: 'Завершить первый челлендж',
+    check: async (userId: string, _todayScore: number | null) => {
+      const existing = await db.achievement.findUnique({
+        where: { userId_code: { userId, code: 'CHALLENGE_FIRST' } },
+      })
+      if (existing) return false
+      const count = await db.challenge.count({ where: { userId, status: 'completed' } })
+      return count >= 1
+    },
+  },
 ]
 
 // ─── Route ────────────────────────────────────────────────────────────────────

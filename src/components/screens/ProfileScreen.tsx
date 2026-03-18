@@ -1022,6 +1022,7 @@ export function ProfileScreen() {
               { id: 'ai_recommendations', label: 'AI Рекомендации' },
               { id: 'daily_tip', label: 'Совет дня (AI)' },
               { id: 'transformation', label: 'AI-нарратив «Как я изменился»' },
+              { id: 'challenges', label: 'Активные челленджи' },
             ].map(({ id, label }) => {
               const hidden = (settings.hiddenWidgets ?? []).includes(id)
               return (
