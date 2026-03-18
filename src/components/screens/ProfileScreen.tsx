@@ -620,46 +620,8 @@ export function ProfileScreen() {
         </Card>
       )}
 
-      {/* Achievements */}
-      <Card className="bg-card/50 backdrop-blur">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Star className="w-5 h-5 text-yellow-400" />
-            Достижения
-            {achievements.length > 0 && (
-              <Badge className="ml-auto bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-xs">
-                {achievements.length} / {ALL_ACHIEVEMENT_DEFS.length}
-              </Badge>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-3 gap-2">
-            {ALL_ACHIEVEMENT_DEFS.map((def) => {
-              const earned = achievements.find(a => a.code === def.code)
-              const date = earned
-                ? new Date(earned.obtainedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
-                : null
-              return (
-                <div
-                  key={def.code}
-                  className={`flex flex-col items-center text-center p-3 rounded-lg gap-1 transition-all ${
-                    earned
-                      ? 'bg-yellow-500/10 border border-yellow-500/20'
-                      : 'bg-muted/20 opacity-40 grayscale'
-                  }`}
-                >
-                  <span className="text-2xl">{def.emoji}</span>
-                  <span className="text-[11px] font-medium leading-tight">{def.label}</span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {earned && date ? date : def.desc}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Achievements — hidden until further notice */}
+      {false && achievements.length >= 0 && null}
 
       {/* AI Patterns History */}
       {aiPatterns.filter(p => p.leakType !== 'tg_input_patterns').length > 0 && (
