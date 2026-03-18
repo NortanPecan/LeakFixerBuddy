@@ -235,11 +235,71 @@ export function GymWorkoutDetailDialog() {
 ## Следующие задачи (приоритет, сессия 15)
 
 ### 1. 🔴 Челленджи — полная реализация (отдельный чат)
-Обсуждено: личные + шаблонные + Buddy-челленджи + AI-челленджи против ликов.
-- Схема (`Challenge`, `ChallengeProgress`) уже есть в Prisma
-- Нужно: API `/api/challenges`, UI экран, линковка с ритуалами через `config.linkedRitualIds`
-- Buddy-челленджи: новая таблица `BuddyChallenge`
-- AI-челленджи: на основе `UserAiPattern` генерировать релевантный челлендж
+
+#### Что обсуждено и решено (сессия 14):
+
+**Типы челленджей:**
+- **Личные** — пользователь сам создаёт («10 дней без сахара», «неделя зала»)
+- **Шаблонные** — наши готовые челленджи в каталоге, пользователь принимает
+- **Buddy-челленджи** — совместные с баддиём: оба делают одно, видят прогресс друг друга. Два варианта: (а) оба соревнуются в одном, (б) один предлагает другому
+- **AI-челленджи** — генерируются на основе `UserAiPattern` чтобы бороться с конкретным ликом. Также AI-челленджи для пары Buddy на основе их общих паттернов
+
+**Ключевая механика — линковка с ритуалами:**
+- `config.linkedRitualIds[]` в модели Challenge
+- Отметка ритуала → автоинкремент `ChallengeProgress.daysCompleted` (не надо нажимать в двух местах)
+- Если хочет только вручную в челленджах — оставить `linkedRitualIds: []`
+
+**Жизненный цикл:** `planned` → `active` → `completed` / `failed`
+- completed: `daysCompleted >= duration` → выдать Achievement
+- failed: `endDate` прошёл, цель не выполнена
+
+**Схема в БД (уже есть):**
+```
+Challenge: id, userId, name, type, category, config(JSON), duration, progress, startDate, endDate, status
+ChallengeProgress: id, challengeId, daysCompleted, currentStreak, lastCheckedAt
+config JSON уже имеет: linkedRitualIds, linkedSkillIds, linkedTraitIds, targetCount, periodDays
+```
+
+**Новая таблица нужна (добавить в Supabase вручную):**
+```sql
+CREATE TABLE buddy_challenges (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  challenge_id UUID REFERENCES challenges(id) ON DELETE CASCADE,
+  initiator_id UUID REFERENCES app_users(id),
+  partner_id UUID REFERENCES app_users(id),
+  initiator_progress INT DEFAULT 0,
+  partner_progress INT DEFAULT 0,
+  status TEXT DEFAULT 'pending', -- pending, accepted, rejected, completed
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+**API (создать):**
+- `GET /api/challenges?userId` — список (active + completed + templates)
+- `POST /api/challenges` — создать личный `{ name, type, duration, linkedRitualIds, endDate }`
+- `PATCH /api/challenges/:id/progress` — отметить день вручную
+- `GET /api/challenges/templates` — каталог (~10 шаблонов, хардкод)
+- `POST /api/challenges/ai-generate` — AI по UserAiPattern создаёт челлендж
+- `POST /api/buddy-challenges` — предложить buddy-челлендж
+- `PATCH /api/buddy-challenges/:id` — принять/отклонить
+
+**Хук при отметке ритуала** (добавить в `/api/rituals/complete`):
+```ts
+// После сохранения RitualCompletion — найти активные челленджи с этим ritualId
+const linked = await db.challenge.findMany({
+  where: { userId, status: 'active' }
+  // + фильтр config.linkedRitualIds contains ritualId через raw SQL
+})
+// → increment ChallengeProgress.daysCompleted
+```
+
+**AI-челлендж против лика:**
+1. Берём топ UserAiPattern пользователя
+2. По leakType → шаблон (`no_gym` → «7 тренировок за 2 недели», `ritual_erosion` → «21 день ритуалов»)
+3. Groq генерирует кастомное название/описание с учётом контекста
+4. Сохраняем с `type='ai'`, leakType в config
+
 
 ### 2. 🟡 Telegram getFoodSummary — показывать amount + БЖУ (20 мин)
 Сейчас `btn_food` показывает только имя + ккал. После нового парсера в записях есть `amount`, `protein`, `fat`, `carbs`.
