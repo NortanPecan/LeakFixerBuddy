@@ -148,7 +148,9 @@ export function ChallengesScreen() {
     if (!user?.id) return
     setLoading(true)
     try {
-      const res  = await fetch(`/api/challenges?userId=${user.id}&status=${filter}`)
+      // For "completed" tab load all non-active (completed + failed); API filters by exact status
+      const statusParam = filter === 'active' ? '&status=active' : ''
+      const res  = await fetch(`/api/challenges?userId=${user.id}${statusParam}`)
       const data = await res.json()
       if (data.success) setChallenges(data.challenges)
     } catch (err) {
@@ -294,8 +296,9 @@ export function ChallengesScreen() {
     return                        <Badge className="bg-primary/20 text-primary"><Timer className="w-3 h-3 mr-1" />Активен</Badge>
   }
 
-  const active    = challenges.filter(c => c.status === 'active')
-  const finished  = challenges.filter(c => c.status !== 'active')
+  const active      = challenges.filter(c => c.status === 'active')
+  const finished    = challenges.filter(c => c.status === 'completed' || c.status === 'failed')
+  const displayList = filter === 'active' ? active : finished
 
   // ────────────────────────────────────────────────────────────────────────
   return (
@@ -367,7 +370,7 @@ export function ChallengesScreen() {
             </Card>
           ))}
         </div>
-      ) : challenges.length === 0 ? (
+      ) : displayList.length === 0 ? (
         <Card className="bg-card/50 backdrop-blur">
           <CardContent className="pt-8 pb-8 text-center">
             <Trophy className="w-12 h-12 mx-auto mb-3 text-muted-foreground/40" />
@@ -379,7 +382,7 @@ export function ChallengesScreen() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {challenges.map(c => {
+          {displayList.map(c => {
             const TypeIcon   = TYPE_ICONS[c.type] ?? Trophy
             const zoneConf   = ZONE_CONFIG[c.zone] ?? ZONE_CONFIG.general
             return (

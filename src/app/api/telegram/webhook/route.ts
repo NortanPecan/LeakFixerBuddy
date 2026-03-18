@@ -63,6 +63,7 @@ const TG_BUTTONS = [
   { id: 'leaks',        emoji: '🔍', label: 'Лики' },
   { id: 'achievements', emoji: '🏅', label: 'Достижения' },
   { id: 'trainer',      emoji: '🏋️', label: 'Тренер' },
+  { id: 'challenges',   emoji: '🏆', label: 'Вызовы' },
 ] as const
 
 // ─── Regex commands ─────────────────────────────────────────────────────────
@@ -740,19 +741,26 @@ async function getChallengesSummary(userId: string): Promise<{ text: string; key
 
   let text = `🏆 <b>Активные челленджи (${challenges.length}/3)</b>\n\n`
 
+  const now = Date.now()
   for (const c of challenges) {
     let cfg: Record<string, unknown> = {}
     try { cfg = JSON.parse(c.config ?? '{}') } catch { /* */ }
 
-    const pct = c.progress ?? 0
+    // Compute progress based on days elapsed (more accurate than c.progress raw field)
+    const daysElapsed = Math.min(
+      c.duration,
+      Math.floor((now - new Date(c.startDate).getTime()) / 86400000),
+    )
+    const daysLeft = Math.max(0, c.duration - daysElapsed)
+    const pct = Math.round((daysElapsed / c.duration) * 100)
     const bar = '█'.repeat(Math.round(pct / 10)) + '░'.repeat(10 - Math.round(pct / 10))
 
-    let progressStr = `${pct}%`
+    let progressStr = `${pct}% · осталось ${daysLeft} дн.`
     if (c.type === 'tracker') {
       const metric = cfg.metric as string
       const target = cfg.target as number
       const unit = TRACKER_METRIC_LABELS[metric] ?? ''
-      progressStr = `${c.progress}/${target} ${unit}`.trim()
+      progressStr = `${c.progress}/${target} ${unit} · осталось ${daysLeft} дн.`.trim()
     }
 
     text += `<b>${c.name}</b>\n`
@@ -1782,6 +1790,7 @@ async function handleCallback(
     btn_summary: async () => ({ text: await buildFullSummary(userId, today), keyboard: backBtn() }),
     btn_leaks:        () => getLeaksSummary(userId),
     btn_achievements: () => getAchievementsSummary(userId),
+    btn_challenges:   () => getChallengesSummary(userId),
   }
 
   const handler = moduleHandlers[data]
