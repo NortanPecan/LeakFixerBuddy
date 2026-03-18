@@ -294,6 +294,11 @@ export async function GET(request: NextRequest) {
     // Weekly summary
     const weeklySummary = getWeeklySummary(history)
 
+    const activeDayScores = history.map(h => h.overallScore).filter(s => s > 0)
+    const avgDayScore = activeDayScores.length
+      ? Math.round(activeDayScores.reduce((a, b) => a + b, 0) / activeDayScores.length)
+      : null
+
     return NextResponse.json({
       history,
       streaks: {
@@ -308,7 +313,8 @@ export async function GET(request: NextRequest) {
         avgMood: calculateAvg(history.map(h => h.mood).filter(Boolean)),
         avgEnergy: calculateAvg(history.map(h => h.energy).filter(Boolean)),
         avgMorningEnergy: calculateAvg(history.map(h => h.morningEnergy).filter(Boolean)),
-        avgEveningRating: calculateAvg(history.map(h => h.eveningRating).filter(Boolean))
+        avgEveningRating: calculateAvg(history.map(h => h.eveningRating).filter(Boolean)),
+        avgDayScore,
       }
     })
   } catch (error) {
@@ -369,20 +375,28 @@ function calculateAvg(values: (number | null)[]): number | null {
 }
 
 function getWeeklySummary(history: Array<{ date: string; overallScore: number; ritualsRate: number; habitsRate: number }>) {
-  const weeks: Array<{ week: string; avgScore: number; avgRituals: number; avgHabits: number }> = []
-  
+  const weeks: Array<{ week: string; avgScore: number; avgRituals: number; avgHabits: number; isBest: boolean }> = []
+
   for (let i = 0; i < history.length; i += 7) {
     const weekData = history.slice(i, i + 7)
     const weekStart = new Date(weekData[0]?.date || new Date())
-    const weekLabel = `${weekStart.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}`
-    
+    const weekLabel = weekStart.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+
     weeks.push({
       week: weekLabel,
       avgScore: Math.round(weekData.reduce((s, d) => s + d.overallScore, 0) / weekData.length),
       avgRituals: Math.round(weekData.reduce((s, d) => s + d.ritualsRate, 0) / weekData.length),
-      avgHabits: Math.round(weekData.reduce((s, d) => s + d.habitsRate, 0) / weekData.length)
+      avgHabits: Math.round(weekData.reduce((s, d) => s + d.habitsRate, 0) / weekData.length),
+      isBest: false,
     })
   }
-  
+
+  // Mark the week with highest avgScore as best (only if > 0)
+  const maxScore = Math.max(...weeks.map(w => w.avgScore))
+  if (maxScore > 0) {
+    const bestIdx = weeks.findIndex(w => w.avgScore === maxScore)
+    if (bestIdx >= 0) weeks[bestIdx].isBest = true
+  }
+
   return weeks
 }

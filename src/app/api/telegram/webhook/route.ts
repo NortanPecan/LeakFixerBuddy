@@ -81,6 +81,7 @@ const MENU_RE     = /^(?:меню|menu|\/start|\/menu)$/i
 const HELP_RE     = /^(?:помощь|help|старт|start|команды)$/i
 const LEAK_RE         = /^(?:лик|leak|утечка)\s+(.+)$/i
 const ACHIEVEMENTS_RE = /^(?:ачивменты|ачивмент|достижения|достижение|achievement|badge|бейдж)$/i
+const TRAINER_RE      = /^(?:\/тренер|тренер)(?:\s+(.+))?$/i
 
 // ─── Telegram API ──────────────────────────────────────────────────────────
 
@@ -165,7 +166,13 @@ interface PendingAiConfirm {
   originalText: string
 }
 
-type PendingPayload = PendingForceReply | PendingAiConfirm
+interface PendingGymSet {
+  __type: 'gymSet'
+  exerciseId: string
+  exerciseName: string
+}
+
+type PendingPayload = PendingForceReply | PendingAiConfirm | PendingGymSet
 
 async function storePending(userId: string, payload: PendingPayload): Promise<void> {
   // Store one pending per user — upsert via delete+create since no unique key on text
@@ -362,6 +369,12 @@ async function getGymSummary(userId: string, today: Date): Promise<{ text: strin
   if (source.stretchingDone) text += '\n\n🧘 Растяжка: выполнена'
 
   const keyboard: InlineKeyboard = []
+
+  // "+ Сет" button for each exercise
+  for (const ex of source.exercises) {
+    keyboard.push([{ text: `➕ Сет → ${ex.name}`, callback_data: `gym_addset_${ex.id}` }])
+  }
+
   if (isToday && source.status !== 'completed') {
     keyboard.push([{ text: '✅ Отметить выполненной', callback_data: `gym_done_${source.id}` }])
   }
@@ -1014,6 +1027,7 @@ async function handleCommand(userId: string, text: string): Promise<{ reply: str
       '  <code>ел доширак 70 440</code> — 70г, 440/100г → 308 ккал\n' +
       '  <code>ел доширак 70 440 17 8 54</code> — + БЖУ\n\n' +
       '🤖 <b>лик описание</b> — AI-анализ лика\n' +
+      '🏋️ <b>тренер вопрос</b> — персональный AI-коуч\n' +
       '💬 Пишешь свободно — AI поймёт и уточнит!'
     return { reply, keyboard }
   }
@@ -1272,6 +1286,84 @@ async function handleCommand(userId: string, text: string): Promise<{ reply: str
     return { reply: achText, keyboard: achKeyboard }
   }
 
+  // AI Coach — /тренер [вопрос]
+  const trainerMatch = t.match(TRAINER_RE)
+  if (trainerMatch) {
+    const question = trainerMatch[1]?.trim()
+    if (!question) {
+      return {
+        reply:
+          '🏋️ <b>AI Тренер</b>\n\nЗадай любой вопрос о своих данных:\n\n' +
+          '<code>тренер почему у меня мало энергии?</code>\n' +
+          '<code>тренер что делать с питанием?</code>\n' +
+          '<code>тренер как улучшить сон?</code>',
+      }
+    }
+
+    const COACH_SYSTEM = `Ты персональный коуч по саморазвитию в приложении LeakFixer Buddy.
+Тебе дают вопрос пользователя и его реальные данные за последние 30 дней.
+Отвечай КОНКРЕТНО, опираясь на числа из данных — не общими фразами.
+Ответ: 3-5 предложений, на русском языке, без markdown, эмодзи допустимы.
+Если данных мало — честно скажи об этом и дай общий совет.`
+
+    try {
+      // Collect 30-day context
+      const thirtyDaysAgo = new Date()
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+      thirtyDaysAgo.setHours(0, 0, 0, 0)
+
+      const [userRec, dailyStates, gymWorkouts, ritualCompletions, activeRituals, fitnessDays, topLeak] =
+        await Promise.all([
+          db.user.findUnique({ where: { id: userId }, select: { streak: true, day: true, firstName: true } }),
+          db.dailyState.findMany({ where: { userId, date: { gte: thirtyDaysAgo } } }),
+          db.gymWorkout.findMany({ where: { userId, date: { gte: thirtyDaysAgo }, status: 'completed' } }),
+          db.ritualCompletion.findMany({ where: { userId, date: { gte: thirtyDaysAgo }, completed: true } }),
+          db.ritual.count({ where: { userId, status: 'active' } }),
+          db.fitnessDaily.findMany({ where: { userId, date: { gte: thirtyDaysAgo } } }),
+          db.userAiPattern.findFirst({
+            where: { userId, NOT: { leakType: 'tg_input_patterns' } },
+            orderBy: { updatedAt: 'desc' },
+            select: { leakType: true, lastAnalysis: true },
+          }),
+        ])
+
+      const avgMood = dailyStates.length
+        ? (dailyStates.reduce((s, d) => s + (d.mood ?? 5), 0) / dailyStates.length).toFixed(1)
+        : null
+      const avgEnergy = dailyStates.length
+        ? (dailyStates.reduce((s, d) => s + (d.energy ?? 5), 0) / dailyStates.length).toFixed(1)
+        : null
+      const avgSleep = dailyStates.filter(d => d.sleepHours).length
+        ? (dailyStates.reduce((s, d) => s + (d.sleepHours ?? 0), 0) / dailyStates.filter(d => d.sleepHours).length).toFixed(1)
+        : null
+      const ritualRate = activeRituals > 0
+        ? Math.round((ritualCompletions.length / (activeRituals * 30)) * 100)
+        : null
+      const avgCalories = fitnessDays.length
+        ? Math.round(fitnessDays.reduce((s, d) => s + (d.calories ?? 0), 0) / fitnessDays.length)
+        : null
+
+      const context = [
+        `Пользователь: ${userRec?.firstName ?? 'Аноним'}, стрик ${userRec?.streak ?? 0} дней`,
+        `Вопрос: ${question}`,
+        `--- Данные за 30 дней ---`,
+        avgMood !== null ? `Среднее настроение: ${avgMood}/10` : null,
+        avgEnergy !== null ? `Средняя энергия: ${avgEnergy}/10` : null,
+        avgSleep !== null ? `Средний сон: ${avgSleep} ч` : null,
+        `Тренировок: ${gymWorkouts.length}`,
+        ritualRate !== null ? `Ритуалы: ${ritualRate}%` : null,
+        avgCalories !== null ? `Среднее ккал/день: ${avgCalories}` : null,
+        topLeak?.leakType ? `Основная проблемная зона: ${topLeak.leakType.replace(/_/g, ' ')}` : null,
+      ].filter(Boolean).join('\n')
+
+      const result = await callAI(COACH_SYSTEM, context, { userId, callType: 'tg_coach' })
+      return { reply: `🏋️ <b>AI Тренер</b>\n\n${result.text}`, keyboard: backBtn() }
+    } catch (err) {
+      console.error('[TG /тренер]', err)
+      return { reply: '❌ AI-тренер временно недоступен. Попробуй через минуту.' }
+    }
+  }
+
   // Unknown — try AI classification
   return { reply: '__AI_CLASSIFY__' }
 }
@@ -1389,6 +1481,25 @@ async function handleCallback(
     await answerCallback(cbQueryId, '✅ Тренировка выполнена!')
     const { text, keyboard } = await getGymSummary(userId, today)
     await editMessageText(chatId, messageId, text, keyboard)
+    return
+  }
+
+  // Add set to exercise via ForceReply
+  if (data.startsWith('gym_addset_')) {
+    const exerciseId = data.replace('gym_addset_', '')
+    const exercise = await db.gymExercise.findUnique({
+      where: { id: exerciseId },
+      select: { name: true, targetReps: true },
+    })
+    if (!exercise) { await answerCallback(cbQueryId, '❌ Упражнение не найдено'); return }
+    const repsHint = exercise.targetReps ? `${exercise.targetReps} повт` : '8 повт'
+    const botMsgId = await sendForceReply(
+      chatId,
+      `💪 <b>${exercise.name}</b>\n\nВведи вес × повторения:\n<code>75x8</code>  или  <code>75 8</code>  или  <code>75</code> (${repsHint})`
+    )
+    if (botMsgId) {
+      await storePending(userId, { __type: 'gymSet', exerciseId, exerciseName: exercise.name })
+    }
     return
   }
 
@@ -1530,9 +1641,44 @@ export async function POST(request: NextRequest) {
     // ── Check if this is a reply to a ForceReply prompt ───────────────────
     if (message.reply_to_message) {
       const pending = await getPendingForUserId(user.id)
+      const today = normalizeToDate(new Date())
+
+      // Gym set ForceReply
+      if (pending && pending.__type === 'gymSet') {
+        await clearPendingForUserId(user.id)
+        const { exerciseId, exerciseName } = pending
+        // Parse: "75x8" / "75х8" / "75 8" / "75" (weight only)
+        const setRe = /^(\d+(?:[.,]\d+)?)\s*[xхXХ×*]\s*(\d+)$|^(\d+(?:[.,]\d+)?)\s+(\d+)$|^(\d+(?:[.,]\d+)?)$/
+        const m = text.trim().match(setRe)
+        if (!m) {
+          await sendMessage(chatId, `❌ Не понял формат. Введи: <code>75x8</code> или <code>75 8</code>`)
+          return NextResponse.json({ ok: true })
+        }
+        const weight = parseFloat((m[1] ?? m[3] ?? m[5]).replace(',', '.'))
+        const reps = m[2] ? parseInt(m[2]) : (m[4] ? parseInt(m[4]) : null)
+        if (isNaN(weight) || weight <= 0) {
+          await sendMessage(chatId, `❌ Некорректный вес. Введи: <code>75x8</code>`)
+          return NextResponse.json({ ok: true })
+        }
+        // Count existing sets to get setNum
+        const existingSets = await db.gymExerciseSet.count({ where: { exerciseId } })
+        await db.gymExerciseSet.create({
+          data: {
+            exerciseId,
+            setNum: existingSets + 1,
+            weight,
+            ...(reps !== null && { reps }),
+            isWarmup: false,
+            completed: true,
+          },
+        })
+        const repsStr = reps !== null ? `×${reps}` : ''
+        await sendMessage(chatId, `💪 <b>${exerciseName}</b>\nСет ${existingSets + 1}: <b>${weight}кг${repsStr}</b> записан! ✅`)
+        return NextResponse.json({ ok: true })
+      }
+
       if (pending && pending.__type === 'forceReply') {
         await clearPendingForUserId(user.id)
-        const today = normalizeToDate(new Date())
         const val = text.trim().replace(',', '.')
         const num = parseFloat(val)
         let reply = ''
@@ -1558,7 +1704,7 @@ export async function POST(request: NextRequest) {
             reply = `⚡ Энергия <b>${score}/10</b> записана!`; break
           }
         }
-        if (reply) { await sendMessage(chatId, reply); return }
+        if (reply) { await sendMessage(chatId, reply); return NextResponse.json({ ok: true }) }
       }
     }
 
