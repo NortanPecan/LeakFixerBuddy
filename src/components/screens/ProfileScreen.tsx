@@ -843,6 +843,21 @@ export function ProfileScreen() {
         </CardContent>
       </Card>
 
+      {/* Calorie Goal */}
+      <Card className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors" onClick={() => setScreen('calorie-goal')}>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              🎯 Цель по калоражу
+            </CardTitle>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">Адаптивный план питания до цели по весу</p>
+        </CardContent>
+      </Card>
+
       {/* Navigation settings */}
       <Card className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors" onClick={() => setScreen('settings')}>
         <CardHeader className="pb-2">
@@ -1005,6 +1020,7 @@ export function ProfileScreen() {
               { id: 'supplements', label: 'БАДы (в сводке)' },
               { id: 'quickinput', label: 'Быстрый ввод' },
               { id: 'ai_recommendations', label: 'AI Рекомендации' },
+              { id: 'daily_tip', label: 'Совет дня (AI)' },
             ].map(({ id, label }) => {
               const hidden = (settings.hiddenWidgets ?? []).includes(id)
               return (

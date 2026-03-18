@@ -10,8 +10,6 @@ import { Progress } from '@/components/ui/progress'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  Play,
-  BookOpen,
   Flame,
   Trophy,
   CalendarDays,
@@ -65,13 +63,6 @@ function isUnlocked(id: string, userDay: number): boolean {
   return config ? userDay >= config.unlockDay : true
 }
 
-interface Lesson {
-  id: string
-  day: number
-  title: string
-  description: string | null
-}
-
 interface DailySummary {
   water: { current: number; target: number; percentage: number }
   food: { calories: number; entriesCount: number; qualityBreakdown: { good: number; neutral: number; bad: number }; firstMeal: string | null; lastMeal: string | null; eatingWindowHours: number | null; avgCalories7d: number | null }
@@ -90,9 +81,6 @@ interface DailySummary {
 
 export function HomeScreen() {
   const { user, globalState, updateGlobalState, updateProgress, isDemoMode, selectedDate, setScreen } = useAppStore()
-  const [lesson, setLesson] = useState<Lesson | null>(null)
-  const [upcomingLessons, setUpcomingLessons] = useState<Lesson[]>([])
-  const [lessonCompleted, setLessonCompleted] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [showMoodDialog, setShowMoodDialog] = useState(false)
   const [moodValue, setMoodValue] = useState(globalState?.mood || 5)
@@ -134,31 +122,10 @@ export function HomeScreen() {
     provider: string | null
     updatedAt: string
   } | null>(null)
-
-  const currentDay = user?.day || 1
-  const progress = ((currentDay - 1) / 30) * 100
+  const [dailyTip, setDailyTip] = useState<{ tip: string; provider: string; cached: boolean } | null>(null)
 
   // Days with app (since account creation — approximated by streak + day)
   const daysWithApp = user?.day || 1
-
-  // Load lesson
-  useEffect(() => {
-    const loadLesson = async () => {
-      if (!user?.id) return
-      setIsLoading(true)
-      try {
-        const response = await fetch(`/api/lessons?day=${currentDay}`)
-        const data = await response.json()
-        setLesson(data.lesson)
-        setUpcomingLessons(data.upcomingLessons || [])
-      } catch (error) {
-        console.error('Failed to load lesson:', error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    loadLesson()
-  }, [user?.id, currentDay])
 
   // Load today's check-in status
   useEffect(() => {
@@ -281,6 +248,24 @@ export function HomeScreen() {
     loadAiRec()
   }, [user?.id])
 
+  // Load AI daily tip (background, cached per day)
+  useEffect(() => {
+    const loadDailyTip = async () => {
+      if (!user?.id) return
+      if (hiddenWidgets.includes('daily_tip')) return
+      try {
+        const res = await fetch(`/api/ai/daily-tip?userId=${user.id}`)
+        if (res.ok) {
+          const data = await res.json() as { tip: string; provider: string; cached: boolean }
+          setDailyTip(data)
+        }
+      } catch {
+        // silent
+      }
+    }
+    loadDailyTip()
+  }, [user?.id, hiddenWidgets])
+
   // Load weight data
   useEffect(() => {
     const loadWeight = async () => {
@@ -337,12 +322,6 @@ export function HomeScreen() {
     } finally {
       setWeightSaving(false)
     }
-  }
-
-  const handleCompleteLesson = async () => {
-    if (!user?.id) return
-    await updateProgress(currentDay + 1, (user.streak || 0) + 1, (user.points || 0) + 10)
-    setLessonCompleted(true)
   }
 
   const handleSaveMood = async () => {
@@ -553,25 +532,6 @@ export function HomeScreen() {
         isEveningTime={isEveningTime}
         onOpenDailySummary={() => setScreen('daily-summary')}
       />
-
-      {/* Progress bar */}
-      <div className="space-y-2">
-        <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground">Прогресс курса</span>
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-primary">{Math.round(progress)}%</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-xs bg-primary/10 hover:bg-primary/20"
-              onClick={() => setScreen('journey')}
-            >
-              🗺️ Journey
-            </Button>
-          </div>
-        </div>
-        <Progress value={progress} className="h-2" />
-      </div>
 
       {/* Global State Widget (Mood/Energy Scale) */}
       {!hiddenWidgets.includes('mood') && <Card className="bg-gradient-to-br from-slate-900/80 to-slate-800/50 border-white/10 backdrop-blur-xl">
@@ -1095,6 +1055,21 @@ export function HomeScreen() {
         )
       })()}
 
+      {/* AI Daily Tip widget */}
+      {dailyTip && !hiddenWidgets.includes('daily_tip') && (
+        <Card className="bg-gradient-to-br from-violet-900/30 to-indigo-900/20 border-violet-500/20">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <span className="text-xl flex-shrink-0">🧠</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs text-violet-400 font-medium mb-1 uppercase tracking-wider">Совет дня</div>
+                <p className="text-sm text-white/90 leading-snug">{dailyTip.tip}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Weekly report shortcut — unlocks day 8 */}
       {isUnlocked('weekly_report', user?.day ?? 1) && <Card
         className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors"
@@ -1205,71 +1180,6 @@ export function HomeScreen() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Current lesson card */}
-      <Card className="border-primary/20 bg-card/50 backdrop-blur">
-        <CardHeader className="pb-2">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-              <BookOpen className="w-6 h-6 text-primary" />
-            </div>
-            <div>
-              <CardTitle className="text-lg">
-                {lesson?.title || `Урок ${currentDay}`}
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                День {currentDay} из 30
-              </p>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-muted-foreground">
-            {lesson?.description || 'Описание урока загружается...'}
-          </p>
-          {lessonCompleted ? (
-            <Button className="w-full bg-emerald-600 hover:bg-emerald-700" size="lg" disabled>
-              <CheckCircle2 className="w-4 h-4 mr-2" />
-              Урок завершён!
-            </Button>
-          ) : (
-            <Button
-              className="w-full bg-primary hover:bg-primary/90"
-              size="lg"
-              onClick={handleCompleteLesson}
-              disabled={isLoading}
-            >
-              <Play className="w-4 h-4 mr-2" />
-              Завершить урок
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Upcoming lessons */}
-      {upcomingLessons.length > 0 && (
-        <Card className="bg-card/50 backdrop-blur">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Следующие уроки</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            {upcomingLessons.slice(0, 3).map((l) => (
-              <div
-                key={l.id}
-                className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-sm font-medium">
-                    {l.day}
-                  </div>
-                  <span className="text-sm">{l.title}</span>
-                </div>
-                <ChevronRight className="w-4 h-4 text-muted-foreground" />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
 
       {/* Demo mode notice */}
       {isDemoMode && (

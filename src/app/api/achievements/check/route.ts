@@ -77,7 +77,6 @@ const ACHIEVEMENTS = [
     desc: 'Первый раз набрать 80+ баллов за день',
     check: async (userId: string, todayScore: number | null) => {
       if (!todayScore || todayScore < 80) return false
-      // Check it's the first time
       const existing = await db.achievement.findUnique({
         where: { userId_code: { userId, code: 'GREAT_DAY_FIRST' } },
       })
@@ -91,29 +90,89 @@ const ACHIEVEMENTS = [
     desc: '7 дней подряд с результатом 70+ баллов',
     check: async (userId: string, todayScore: number | null) => {
       if (!todayScore || todayScore < 70) return false
-      // Check last 7 days all have score >= 70
-      const sevenDaysAgo = new Date()
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
-      sevenDaysAgo.setHours(0, 0, 0, 0)
-
-      // Get a streak counter by computing scores for last 7 days
       const dates: Date[] = []
       for (let i = 0; i < 7; i++) {
         const d = new Date()
         d.setDate(d.getDate() - i)
         dates.push(normalizeToDate(d))
       }
-
       for (const d of dates) {
         const s = await calcDayScore(userId, d)
         if (!s || s < 70) return false
       }
-
-      // Don't re-award if already earned today
       const existing = await db.achievement.findUnique({
         where: { userId_code: { userId, code: 'QUALITY_WEEK' } },
       })
       return !existing
+    },
+  },
+  {
+    code: 'STREAK_7',
+    label: '7 дней подряд',
+    emoji: '🔥',
+    desc: 'Использовать приложение 7 дней без перерыва',
+    check: async (userId: string, _todayScore: number | null) => {
+      const existing = await db.achievement.findUnique({
+        where: { userId_code: { userId, code: 'STREAK_7' } },
+      })
+      if (existing) return false
+      const user = await db.user.findUnique({ where: { id: userId }, select: { streak: true } })
+      return (user?.streak ?? 0) >= 7
+    },
+  },
+  {
+    code: 'STREAK_30',
+    label: '30 дней подряд',
+    emoji: '💎',
+    desc: 'Использовать приложение 30 дней без перерыва',
+    check: async (userId: string, _todayScore: number | null) => {
+      const existing = await db.achievement.findUnique({
+        where: { userId_code: { userId, code: 'STREAK_30' } },
+      })
+      if (existing) return false
+      const user = await db.user.findUnique({ where: { id: userId }, select: { streak: true } })
+      return (user?.streak ?? 0) >= 30
+    },
+  },
+  {
+    code: 'GYM_10',
+    label: '10 тренировок',
+    emoji: '💪',
+    desc: 'Завершить 10 тренировок в зале',
+    check: async (userId: string, _todayScore: number | null) => {
+      const existing = await db.achievement.findUnique({
+        where: { userId_code: { userId, code: 'GYM_10' } },
+      })
+      if (existing) return false
+      const count = await db.gymWorkout.count({
+        where: { userId, status: 'completed' },
+      })
+      return count >= 10
+    },
+  },
+  {
+    code: 'WATER_WEEK',
+    label: 'Водная неделя',
+    emoji: '💧',
+    desc: '7 дней подряд выполнять норму воды',
+    check: async (userId: string, _todayScore: number | null) => {
+      const existing = await db.achievement.findUnique({
+        where: { userId_code: { userId, code: 'WATER_WEEK' } },
+      })
+      if (existing) return false
+      const dates: Date[] = []
+      for (let i = 0; i < 7; i++) {
+        const d = new Date()
+        d.setDate(d.getDate() - i)
+        dates.push(normalizeToDate(d))
+      }
+      for (const d of dates) {
+        const fd = await db.fitnessDaily.findFirst({ where: { userId, date: d } })
+        if (!fd) return false
+        const target = fd.waterTarget ?? 2000
+        if ((fd.water ?? 0) < target) return false
+      }
+      return true
     },
   },
 ]

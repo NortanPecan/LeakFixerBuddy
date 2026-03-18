@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { normalizeToDate } from '@/lib/date-utils'
+import { callAI } from '@/lib/ai-provider'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const CRON_SECRET = process.env.CRON_SECRET
@@ -29,6 +30,7 @@ interface UserStats {
   morningEnergy: number | null
   ritualsDone: number
   ritualsTotal: number
+  dailyTip?: string | null
 }
 
 function buildMorningMessage(firstName: string, stats: UserStats): string {
@@ -48,7 +50,8 @@ function buildMorningMessage(firstName: string, stats: UserStats): string {
     `${streakLine}` +
     (motiveLine ? `${motiveLine}\n\n` : '\n') +
     `Не забудь сделать <b>утренний чек-ин</b> — поставь энергию, выбери фокус и задачи на день.\n\n` +
-    `🚀 Открой <b>LeakFixer Buddy</b> и начни день осознанно!`
+    `🚀 Открой <b>LeakFixer Buddy</b> и начни день осознанно!` +
+    (stats.dailyTip ? `\n\n💡 <i>${stats.dailyTip}</i>` : '')
   )
 }
 
@@ -186,11 +189,37 @@ async function handleNotify(
       // best-effort
     }
 
+    // Generate daily tip for morning notifications
+    let dailyTip: string | null = null
+    if (type === 'morning') {
+      try {
+        const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+        // Check cache first
+        const cachedLog = await db.aiLog.findFirst({
+          where: { userId: settings.userId, callType: 'daily_tip', success: true, createdAt: { gte: todayStart } },
+          select: { response: true },
+        })
+        if (cachedLog) {
+          dailyTip = cachedLog.response
+        } else {
+          const DAILY_TIP_SYSTEM = `Ты персональный коуч по саморазвитию. Пишешь на русском языке.
+Напиши короткий персонализированный совет на сегодня (1-2 предложения).
+Совет конкретный и actionable. Без заголовков и bullet points.`
+          const userCtx = `Пользователь ${firstName}, стрик ${user.streak ?? 0} дней.`
+          const result = await callAI(DAILY_TIP_SYSTEM, userCtx, { userId: settings.userId, callType: 'daily_tip' })
+          dailyTip = result.text
+        }
+      } catch {
+        // non-critical, skip tip
+      }
+    }
+
     const stats: UserStats = {
       streak: user.streak ?? 0,
       morningEnergy,
       ritualsDone,
       ritualsTotal,
+      dailyTip,
     }
 
     const message =
