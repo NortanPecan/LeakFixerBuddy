@@ -5,7 +5,9 @@
 -- Применить вручную в Supabase SQL Editor
 -- ============================================================
 
-CREATE OR REPLACE VIEW training_data AS
+DROP VIEW IF EXISTS training_data;
+
+CREATE VIEW training_data AS
 SELECT
   al.id,
   al.user_id,
