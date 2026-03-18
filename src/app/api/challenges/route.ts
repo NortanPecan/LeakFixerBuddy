@@ -346,14 +346,40 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PATCH /api/challenges - Update challenge
+// PATCH /api/challenges - Update challenge or manually mark a day
+// Special: { id, markDay: true } → increment ChallengeProgress.daysCompleted by 1
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, name, title, description, category, directionId, config, status, progress, endDate } = body
+    const { id, name, title, description, category, directionId, config, status, progress, endDate, markDay } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
+    }
+
+    // Manual day mark — used for custom challenges without ritual linking
+    if (markDay) {
+      const challenge = await db.challenge.findUnique({ where: { id } })
+      if (!challenge) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+      const existing = await db.challengeProgress.findFirst({ where: { challengeId: id } })
+      let daysCompleted = 1
+      if (existing) {
+        await db.challengeProgress.update({
+          where: { id: existing.id },
+          data: { daysCompleted: { increment: 1 }, currentStreak: { increment: 1 }, lastCheckedAt: new Date() },
+        })
+        daysCompleted = existing.daysCompleted + 1
+      } else {
+        await db.challengeProgress.create({ data: { challengeId: id, daysCompleted: 1, currentStreak: 1 } })
+      }
+      const newProgress = Math.min(100, Math.round((daysCompleted / challenge.duration) * 100))
+      const newStatus   = newProgress >= 100 ? 'completed' : challenge.status
+      const updated = await db.challenge.update({
+        where: { id },
+        data: { progress: newProgress, status: newStatus },
+      })
+      return NextResponse.json({ success: true, challenge: updated, daysCompleted })
     }
 
     const updateData: Record<string, unknown> = {}
@@ -370,9 +396,7 @@ export async function PATCH(request: NextRequest) {
     const challenge = await db.challenge.update({
       where: { id },
       data: updateData,
-      include: {
-        direction: { select: { id: true, title: true, color: true } }
-      }
+      include: { direction: { select: { id: true, title: true, color: true } } },
     })
 
     return NextResponse.json({ success: true, challenge })

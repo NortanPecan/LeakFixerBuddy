@@ -93,6 +93,11 @@ export async function POST(request: NextRequest) {
       await checkAchievements(userId, ritualId)
     }
 
+    // Auto-increment ChallengeProgress for active challenges linked to this ritual
+    if (completed) {
+      await incrementLinkedChallenges(userId, ritualId).catch(() => {/* non-critical */})
+    }
+
     return NextResponse.json({
       success: true,
       completion: {
@@ -180,6 +185,46 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Fetch completions error:', error)
     return NextResponse.json({ error: 'Failed to fetch completions' }, { status: 500 })
+  }
+}
+
+// Auto-increment ChallengeProgress for challenges linked to this ritual
+async function incrementLinkedChallenges(userId: string, ritualId: string) {
+  const activeChallenges = await db.challenge.findMany({
+    where: { userId, status: 'active', type: 'ritual' },
+    select: { id: true, config: true, duration: true },
+  })
+
+  for (const ch of activeChallenges) {
+    try {
+      const config = JSON.parse(ch.config || '{}') as { selectedRitualIds?: string[]; linkedRitualIds?: string[] }
+      const linked = config.selectedRitualIds ?? config.linkedRitualIds ?? []
+      // Empty means track all rituals; non-empty means only specific ones
+      if (linked.length > 0 && !linked.includes(ritualId)) continue
+
+      // Upsert ChallengeProgress and increment daysCompleted
+      const existing = await db.challengeProgress.findFirst({ where: { challengeId: ch.id } })
+      if (existing) {
+        await db.challengeProgress.update({
+          where: { id: existing.id },
+          data: {
+            daysCompleted: { increment: 1 },
+            currentStreak: { increment: 1 },
+            lastCheckedAt: new Date(),
+          },
+        })
+        // Mark challenge completed if goal reached
+        if (existing.daysCompleted + 1 >= ch.duration) {
+          await db.challenge.update({ where: { id: ch.id }, data: { status: 'completed', progress: 100 } })
+        }
+      } else {
+        await db.challengeProgress.create({
+          data: { challengeId: ch.id, daysCompleted: 1, currentStreak: 1 },
+        })
+      }
+    } catch {
+      // Per-challenge errors are non-critical
+    }
   }
 }
 

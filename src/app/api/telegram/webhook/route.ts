@@ -416,8 +416,17 @@ async function getFoodSummary(userId: string, today: Date): Promise<{ text: stri
   const qualityMap: Record<string, string> = { good: '🟢', neutral: '🟡', bad: '🔴' }
   const lines = entries.map((e) => {
     const q = qualityMap[e.quality ?? ''] ?? '⚪'
+    const amtStr = e.amount ? ` (${e.amount})` : ''
     const cal = e.calories ? ` — ${e.calories} ккал` : ''
-    return `${q} ${e.name}${cal}`
+    let line = `${q} ${e.name}${amtStr}${cal}`
+    if (e.protein != null || e.fat != null || e.carbs != null) {
+      const bju: string[] = []
+      if (e.protein != null) bju.push(`Б${Math.round(e.protein)}`)
+      if (e.fat    != null) bju.push(`Ж${Math.round(e.fat)}`)
+      if (e.carbs  != null) bju.push(`У${Math.round(e.carbs)}`)
+      line += ` · <i>${bju.join(' ')}</i>`
+    }
+    return line
   })
 
   const text = `🍽️ <b>Питание сегодня</b>\n\n${lines.join('\n')}\n\n<b>Итого: ${totalCal > 0 ? `${totalCal} ккал` : `${entries.length} записей`}</b>`
@@ -684,6 +693,9 @@ const AI_CLASSIFY_SYSTEM = `Ты анализируешь сообщения п�
 "выпил кофе" → {"type":"food","data":{"name":"кофе","calories":null,"weight_g":null},"display":"🍽️ кофе","confidence":0.85}
 "выпил протеиновый коктейль 300 ккал" → {"type":"food","data":{"name":"протеиновый коктейль","calories":300,"weight_g":null},"display":"🍽️ протеиновый коктейль (300 ккал)","confidence":0.95}
 "поел и выпил воды" → {"type":"food","data":{"name":"приём пищи","calories":null,"weight_g":null},"display":"🍽️ приём пищи","confidence":0.7}
+"доширак 70 440" → {"type":"food","data":{"name":"доширак","calories":308,"weight_g":70},"display":"🍽️ доширак (70г, 308 ккал)","confidence":0.92}
+"гречка 200 320" → {"type":"food","data":{"name":"гречка","calories":640,"weight_g":200},"display":"🍽️ гречка (200г, 640 ккал)","confidence":0.9}
+"творог 150 100" → {"type":"food","data":{"name":"творог","calories":150,"weight_g":150},"display":"🍽️ творог (150г, 150 ккал)","confidence":0.9}
 
 Примеры (вода):
 "выпил стакан воды" → {"type":"water","data":{"amount_ml":250},"display":"💧 +250 мл воды","confidence":0.85}
@@ -1080,7 +1092,7 @@ async function handleCommand(userId: string, text: string): Promise<{ reply: str
       }
     }
 
-    await db.foodEntry.create({
+    const foodEntry = await db.foodEntry.create({
       data: {
         userId,
         name: parsed.name,
@@ -1109,7 +1121,13 @@ async function handleCommand(userId: string, text: string): Promise<{ reply: str
       if (parsed.carbs   !== null) bju.push(`У ${parsed.carbs}г`)
       reply += `\n🥩 ${bju.join(' · ')}`
     }
-    return { reply }
+    reply += '\n\nКак это было?'
+    const qualityKeyboard: InlineKeyboard = [[
+      { text: '🟢 Здорово', callback_data: `food_q_${foodEntry.id}_good` },
+      { text: '🟡 Нормально', callback_data: `food_q_${foodEntry.id}_neutral` },
+      { text: '🔴 Срыв', callback_data: `food_q_${foodEntry.id}_bad` },
+    ]]
+    return { reply, keyboard: qualityKeyboard }
   }
 
   // Gym
@@ -1345,6 +1363,19 @@ async function handleCallback(
     const { text, keyboard } = await getRitualsSummary(userId, today)
     await answerCallback(cbQueryId, `🙌 ${done} ритуалов выполнено!`)
     await editMessageText(chatId, messageId, text, keyboard)
+    return
+  }
+
+  // Food quality rating
+  if (data.startsWith('food_q_')) {
+    const parts = data.split('_')
+    // food_q_{uuid}_{quality} — uuid contains dashes so split from right
+    const quality = parts[parts.length - 1]
+    const entryId = parts.slice(2, parts.length - 1).join('_')
+    const qualityLabel: Record<string, string> = { good: '🟢 Здорово', neutral: '🟡 Нормально', bad: '🔴 Срыв' }
+    await db.foodEntry.update({ where: { id: entryId }, data: { quality } })
+    await answerCallback(cbQueryId, qualityLabel[quality] ?? 'Сохранено!')
+    await editMessageText(chatId, messageId, `${qualityLabel[quality] ?? '✅'} Качество еды отмечено!`, backBtn())
     return
   }
 

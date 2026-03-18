@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { showSuccessToast, showErrorToast } from '@/lib/network-utils'
+import { useAppStore } from '@/lib/store'
 
 interface LeakSolution {
   text: string
@@ -81,6 +82,9 @@ export function LeakAiAnalysisCard({
   const [addingTasks, setAddingTasks] = useState(false)
   // feedbacks: index → true (worked) | false (not worked) | null (no feedback yet)
   const [feedbacks, setFeedbacks] = useState<Record<number, boolean | null>>({})
+  const [challengeCreated, setChallengeCreated] = useState(false)
+  const [creatingChallenge, setCreatingChallenge] = useState(false)
+  const { setScreen } = useAppStore()
 
   const analyze = async () => {
     if (analysis) {
@@ -160,6 +164,26 @@ export function LeakAiAnalysisCard({
       })
     } catch {
       // Фидбек не критичен — не показываем ошибку
+    }
+  }
+
+  const createChallenge = async () => {
+    if (challengeCreated || creatingChallenge) return
+    setCreatingChallenge(true)
+    try {
+      const res = await fetch('/api/challenges/ai-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, leakType, leakMessage }),
+      })
+      if (!res.ok) throw new Error()
+      setChallengeCreated(true)
+      showSuccessToast('🏆 AI-челлендж создан!')
+      setTimeout(() => setScreen('challenges'), 800)
+    } catch {
+      showErrorToast('Не удалось создать челлендж')
+    } finally {
+      setCreatingChallenge(false)
     }
   }
 
@@ -285,19 +309,32 @@ export function LeakAiAnalysisCard({
               </div>
             )}
 
-            {/* Кнопка «Добавить в задачи» */}
+            {/* Кнопки действий */}
             {analysis.solutions.length > 0 && (
-              <button
-                onClick={addTasksFromSolutions}
-                disabled={tasksAdded || addingTasks}
-                className={`w-full text-xs py-1.5 rounded-lg transition-colors font-medium ${
-                  tasksAdded
-                    ? 'bg-green-500/10 text-green-400 cursor-default'
-                    : 'bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 disabled:opacity-50'
-                }`}
-              >
-                {addingTasks ? '⏳ Добавляю...' : tasksAdded ? '✅ Задачи добавлены' : '📋 Добавить в задачи'}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={addTasksFromSolutions}
+                  disabled={tasksAdded || addingTasks}
+                  className={`flex-1 text-xs py-1.5 rounded-lg transition-colors font-medium ${
+                    tasksAdded
+                      ? 'bg-green-500/10 text-green-400 cursor-default'
+                      : 'bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 disabled:opacity-50'
+                  }`}
+                >
+                  {addingTasks ? '⏳...' : tasksAdded ? '✅ Задачи' : '📋 В задачи'}
+                </button>
+                <button
+                  onClick={createChallenge}
+                  disabled={challengeCreated || creatingChallenge}
+                  className={`flex-1 text-xs py-1.5 rounded-lg transition-colors font-medium ${
+                    challengeCreated
+                      ? 'bg-green-500/10 text-green-400 cursor-default'
+                      : 'bg-orange-500/15 text-orange-300 hover:bg-orange-500/25 disabled:opacity-50'
+                  }`}
+                >
+                  {creatingChallenge ? '⏳...' : challengeCreated ? '✅ Челлендж' : '🏆 Челлендж'}
+                </button>
+              </div>
             )}
           </CardContent>
         </Card>

@@ -87,7 +87,9 @@ model AppUser {
   accounts              Account[]
   categories            Category[]
   transactions          Transaction[]
-  challenges            Challenge[]
+  challenges              Challenge[]
+  buddyChallengesInitiated BuddyChallenge[] @relation("BuddyChallengeInitiator")
+  buddyChallengesReceived  BuddyChallenge[] @relation("BuddyChallengePartner")
   supplements           Supplement[]
   supplementIntakes     SupplementIntake[]
   foodEntries           FoodEntry[]
@@ -887,11 +889,31 @@ model Challenge {
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
-  user            AppUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  direction       Direction? @relation(fields: [directionId], references: [id], onDelete: SetNull)
+  user            AppUser          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  direction       Direction?       @relation(fields: [directionId], references: [id], onDelete: SetNull)
   progressDetails ChallengeProgress[]
+  buddyChallenges BuddyChallenge[]
 
   @@map("challenges")
+}
+
+/// Buddy challenge — two users competing on the same challenge goal
+model BuddyChallenge {
+  id                String   @id @default(uuid()) @db.Uuid
+  challengeId       String   @map("challenge_id") @db.Uuid
+  initiatorId       String   @map("initiator_id") @db.Uuid
+  partnerId         String   @map("partner_id") @db.Uuid
+  initiatorProgress Int      @default(0) @map("initiator_progress")
+  partnerProgress   Int      @default(0) @map("partner_progress")
+  status            String   @default("pending") // pending, accepted, declined
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  initiator AppUser   @relation("BuddyChallengeInitiator", fields: [initiatorId], references: [id], onDelete: Cascade)
+  partner   AppUser   @relation("BuddyChallengePartner",   fields: [partnerId],   references: [id], onDelete: Cascade)
+
+  @@map("buddy_challenges")
 }
 
 /// Challenge progress tracking

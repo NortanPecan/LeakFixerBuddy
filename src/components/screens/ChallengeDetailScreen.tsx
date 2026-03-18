@@ -10,6 +10,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select'
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import {
   ArrowLeft,
   Trophy,
   Flame,
@@ -25,9 +28,11 @@ import {
   RefreshCw,
   Heart,
   TrendingUp,
-  Play
+  Play,
+  Users,
 } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
+import { showSuccessToast, showErrorToast } from '@/lib/network-utils'
 
 // 8 categories with emojis
 const CATEGORY_OPTIONS = [
@@ -91,12 +96,33 @@ interface Challenge {
   linkedTraits?: Array<{ id: string; name: string; score: number }>
 }
 
+interface Buddy {
+  id: string          // buddy record id
+  partnerId: string   // userId of the partner
+  partnerName: string
+  status: string
+}
+
+interface BuddyChallengeInfo {
+  id: string
+  status: string
+  inviteeChallengeId: string | null
+  invitee?: { id: string; firstName: string | null; username: string | null }
+  inviter?: { id: string; firstName: string | null; username: string | null }
+  challenge?: { progressPercentage: number; daysCompleted: number }
+}
+
 export function ChallengeDetailScreen() {
-  const { selectedContentId, setScreen } = useAppStore()
-  const [challenge, setChallenge] = useState<Challenge | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [isUpdating, setIsUpdating] = useState(false)
+  const { selectedContentId, setScreen, user } = useAppStore()
+  const [challenge, setChallenge]       = useState<Challenge | null>(null)
+  const [loading, setLoading]           = useState(true)
+  const [error, setError]               = useState<string | null>(null)
+  const [isUpdating, setIsUpdating]     = useState(false)
+  // Buddy challenge state
+  const [showInvite, setShowInvite]     = useState(false)
+  const [buddies, setBuddies]           = useState<Buddy[]>([])
+  const [buddyChallenge, setBuddyChallenge] = useState<BuddyChallengeInfo | null>(null)
+  const [inviting, setInviting]         = useState(false)
 
   const loadChallenge = async () => {
     if (!selectedContentId) return
@@ -123,6 +149,57 @@ export function ChallengeDetailScreen() {
   useEffect(() => {
     loadChallenge()
   }, [selectedContentId])
+
+  // Load buddies + existing buddy challenge when challenge is loaded
+  useEffect(() => {
+    if (!challenge || !user?.id) return
+
+    // Load existing buddy challenge for this challenge
+    fetch(`/api/buddy-challenges?userId=${user.id}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.sent) {
+          const found = d.sent.find((bc: BuddyChallengeInfo & { challenge: { id: string } }) => bc.challenge?.id === challenge.id || bc.challengeId === challenge.id)
+          if (found) setBuddyChallenge(found)
+        }
+      })
+      .catch(() => {})
+
+    // Load accepted buddies for invite dialog
+    fetch(`/api/buddies?userId=${user.id}`)
+      .then(r => r.json())
+      .then(d => {
+        // Combine outgoing + incoming, filter accepted
+        const all: Buddy[] = [
+          ...(d.outgoing ?? []).filter((b: Buddy) => b.status === 'accepted'),
+          ...(d.incoming ?? []).filter((b: Buddy) => b.status === 'accepted'),
+        ]
+        setBuddies(all)
+      })
+      .catch(() => {})
+  }, [challenge?.id, user?.id])
+
+  const handleInviteBuddy = async (partnerId: string) => {
+    if (!challenge || !user?.id || inviting) return
+    const buddyUserId = partnerId
+    setInviting(true)
+    try {
+      const res = await fetch('/api/buddy-challenges', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ challengeId: challenge.id, initiatorId: user.id, partnerId: buddyUserId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'error')
+      setBuddyChallenge(data.buddyChallenge)
+      setShowInvite(false)
+      showSuccessToast('Приглашение отправлено!')
+    } catch (err) {
+      showErrorToast(err, 'отправка приглашения')
+    } finally {
+      setInviting(false)
+    }
+  }
 
   const handleDelete = async () => {
     if (!challenge || !confirm('Отменить челендж?')) return
@@ -495,10 +572,103 @@ export function ChallengeDetailScreen() {
         </CardContent>
       </Card>
 
+      {/* Manual day mark — for custom/ai challenges without ritual linking */}
+      {challenge.status === 'active' && (challenge.type === 'custom' || challenge.type === 'ai') && (
+        <Button
+          className="w-full bg-emerald-600 hover:bg-emerald-700"
+          onClick={async () => {
+            setIsUpdating(true)
+            try {
+              const res = await fetch('/api/challenges', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: challenge.id, markDay: true }),
+              })
+              const data = await res.json()
+              if (data.challenge) setChallenge(prev => prev ? { ...prev, ...data.challenge, progressPercentage: data.challenge.progress } : prev)
+              showSuccessToast('✅ День отмечен!')
+            } catch (err) {
+              showErrorToast(err, 'отметка дня')
+            } finally {
+              setIsUpdating(false)
+            }
+          }}
+          disabled={isUpdating}
+        >
+          <CheckCircle className="w-4 h-4 mr-2" />
+          Отметить сегодняшний день ✓
+        </Button>
+      )}
+
+      {/* Buddy Challenge section */}
+      {challenge.status === 'active' && (
+        <Card className="bg-card/50 backdrop-blur">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="w-4 h-4 text-blue-400" />
+              Buddy-челлендж
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {buddyChallenge ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Приглашён:</span>
+                  <span className="font-medium">{buddyChallenge.invitee?.firstName ?? buddyChallenge.invitee?.username ?? 'Бадди'}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Статус:</span>
+                  <Badge className={
+                    buddyChallenge.status === 'accepted'  ? 'bg-emerald-500/20 text-emerald-400' :
+                    buddyChallenge.status === 'declined'  ? 'bg-red-500/20 text-red-400' :
+                    'bg-yellow-500/20 text-yellow-400'
+                  }>
+                    {buddyChallenge.status === 'accepted' ? '✅ Принял' : buddyChallenge.status === 'declined' ? '❌ Отказал' : '⏳ Ожидает'}
+                  </Badge>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Пригласи бадди — соревнуйтесь вместе и видите прогресс друг друга.</p>
+                <Button size="sm" variant="outline" className="w-full" onClick={() => setShowInvite(true)}>
+                  <Users className="w-4 h-4 mr-1" />
+                  Пригласить бадди
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Invite dialog */}
+      <Dialog open={showInvite} onOpenChange={setShowInvite}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Пригласить бадди</DialogTitle>
+          </DialogHeader>
+          {buddies.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">У тебя пока нет бадди. Найди их в разделе «Бадди».</p>
+          ) : (
+            <div className="space-y-2 py-2">
+              {buddies.map(b => (
+                <button
+                  key={b.id}
+                  onClick={() => handleInviteBuddy(b.partnerId)}
+                  disabled={inviting}
+                  className="w-full text-left p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-colors"
+                >
+                  <p className="font-medium text-sm">{b.partnerName}</p>
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Delete button */}
       {challenge.status === 'active' && (
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           className="text-red-500 border-red-500/30 hover:bg-red-500/10"
           onClick={handleDelete}
         >
