@@ -156,6 +156,10 @@ export function ProfileScreen() {
   // AI patterns history
   const [aiPatterns, setAiPatterns] = useState<Array<{ leakType: string; analysisCount: number; whatWorked: unknown[]; updatedAt: string }>>([])
 
+  // AI transformation narrative (2.4)
+  const [transformation, setTransformation] = useState<{ narrative: string; cached: boolean; createdAt: string } | null>(null)
+  const [transformationLoading, setTransformationLoading] = useState(false)
+
   // New state
   const [bio, setBio] = useState('')
   const [isEditingBio, setIsEditingBio] = useState(false)
@@ -273,6 +277,16 @@ export function ProfileScreen() {
           .then(r => r.ok ? r.json() : null)
           .then(d => { if (d?.patterns) setAiPatterns(d.patterns) })
           .catch(() => {/* silent */})
+
+        // Load AI transformation narrative (2.4) — only if 30+ days
+        if ((user.day ?? 0) >= 30) {
+          setTransformationLoading(true)
+          fetch(`/api/ai/transformation?userId=${user.id}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(d => { if (d?.narrative) setTransformation(d) })
+            .catch(() => {/* silent */})
+            .finally(() => setTransformationLoading(false))
+        }
 
         // Set bio from profile
         if (profile?.bio) {
@@ -581,6 +595,30 @@ export function ProfileScreen() {
                 </span>
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* AI Transformation narrative (2.4) */}
+      {(user?.day ?? 0) >= 30 && (transformationLoading || transformation) && (
+        <Card className="bg-gradient-to-br from-purple-500/10 to-indigo-500/10 border-purple-500/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-purple-400" />
+              Как я изменился
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {transformationLoading && !transformation ? (
+              <p className="text-sm text-muted-foreground animate-pulse">AI анализирует твой прогресс…</p>
+            ) : transformation ? (
+              <>
+                <p className="text-sm text-foreground leading-relaxed">{transformation.narrative}</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {transformation.cached ? '📦 Из кеша' : '🤖 Только что'} · обновляется раз в 7 дней
+                </p>
+              </>
+            ) : null}
           </CardContent>
         </Card>
       )}
