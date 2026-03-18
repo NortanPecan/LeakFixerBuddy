@@ -60,12 +60,20 @@ interface WeeklyReport {
   leakHints: LeakHint[]
 }
 
+interface CorrelationPattern {
+  pattern: string
+  strength: 'strong' | 'moderate' | 'weak'
+  recommendation: string
+}
+
 export function WeeklyReportScreen() {
   const { user } = useAppStore()
   const [report, setReport] = useState<WeeklyReport | null>(null)
   const [prevSummary, setPrevSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
   const [weekOffset, setWeekOffset] = useState(0) // 0 = this week, -1 = last week
+  const [aiCorrelations, setAiCorrelations] = useState<CorrelationPattern[] | null>(null)
+  const [correlationsLoading, setCorrelationsLoading] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -93,6 +101,16 @@ export function WeeklyReportScreen() {
     }
     load()
   }, [user?.id, weekOffset])
+
+  useEffect(() => {
+    if (!user?.id) return
+    setCorrelationsLoading(true)
+    fetch(`/api/ai/correlations?userId=${user.id}`)
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d.patterns)) setAiCorrelations(d.patterns) })
+      .catch(() => {})
+      .finally(() => setCorrelationsLoading(false))
+  }, [user?.id])
 
   if (loading) {
     return (
@@ -276,6 +294,38 @@ export function WeeklyReportScreen() {
 
       {/* Correlation insights (3.2) */}
       <CorrelationInsights days={report.days} />
+
+      {/* AI Correlations (5) */}
+      {(correlationsLoading || (aiCorrelations && aiCorrelations.length > 0)) && (
+        <Card className="bg-card/50 backdrop-blur border-violet-500/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              🧬 AI-паттерны (30 дней)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {correlationsLoading ? (
+              <p className="text-sm text-white/40">Анализирую паттерны...</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {aiCorrelations!.map((p, i) => {
+                  const strengthColor = p.strength === 'strong' ? 'text-green-400' : p.strength === 'moderate' ? 'text-yellow-400' : 'text-white/50'
+                  const strengthLabel = p.strength === 'strong' ? '●●●' : p.strength === 'moderate' ? '●●○' : '●○○'
+                  return (
+                    <div key={i} className="border border-white/10 rounded-lg p-3">
+                      <p className="text-sm text-white/90">{p.pattern}</p>
+                      <p className={`text-xs mt-1 font-mono ${strengthColor}`}>{strengthLabel}</p>
+                      {p.recommendation && (
+                        <p className="text-xs text-white/60 mt-1">💡 {p.recommendation}</p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Smart recommendation (6.5) */}
       <SmartRecommendation report={report} />

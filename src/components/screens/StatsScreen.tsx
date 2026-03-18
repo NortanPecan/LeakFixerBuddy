@@ -68,7 +68,7 @@ interface StatsData {
     current: number
     max: number
   }
-  weeklySummary: WeeklySummary[]
+  weeklySummary: (WeeklySummary & { isBest: boolean })[]
   totals: {
     totalRituals: number
     totalHabits: number
@@ -77,6 +77,7 @@ interface StatsData {
     avgEnergy: number | null
     avgMorningEnergy: number | null
     avgEveningRating: number | null
+    avgDayScore: number | null
   }
 }
 
@@ -204,7 +205,7 @@ export function StatsScreen() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="grid grid-cols-4 gap-3 text-center">
                 <div>
                   <p className="text-2xl font-bold text-primary">{data.totals.totalRituals}</p>
                   <p className="text-xs text-muted-foreground">Ритуалов</p>
@@ -217,6 +218,12 @@ export function StatsScreen() {
                   <p className="text-2xl font-bold text-primary">{data.totals.totalTasks}</p>
                   <p className="text-xs text-muted-foreground">Дел</p>
                 </div>
+                {data.totals.avgDayScore !== null && (
+                  <div>
+                    <p className="text-2xl font-bold text-yellow-400">{data.totals.avgDayScore}</p>
+                    <p className="text-xs text-muted-foreground">Ср. балл</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -556,16 +563,25 @@ export function StatsScreen() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={data.weeklySummary}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis 
-                        dataKey="week" 
+                      <XAxis
+                        dataKey="week"
                         tick={{ fontSize: 9, fill: '#9ca3af' }}
                       />
                       <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} />
                       <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey="avgScore" name="Общий %" fill="#10b981" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="avgScore" name="Общий %" radius={[4, 4, 0, 0]}>
+                        {data.weeklySummary.map((entry, index) => (
+                          <Cell key={index} fill={entry.isBest ? '#f59e0b' : '#10b981'} />
+                        ))}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
+                {data.weeklySummary.some(w => w.isBest) && (
+                  <p className="text-xs text-yellow-400 mt-2 text-center">
+                    🏆 Лучшая неделя — {data.weeklySummary.find(w => w.isBest)?.week} ({data.weeklySummary.find(w => w.isBest)?.avgScore} баллов)
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}
