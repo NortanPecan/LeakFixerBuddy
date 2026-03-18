@@ -1087,12 +1087,12 @@ export function HomeScreen() {
 
       {/* Active challenges widget */}
       {activeChallenges.length > 0 && !hiddenWidgets.includes('challenges') && (
-        <Card
-          className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors"
-          onClick={() => setScreen('goals' as Screen)}
-        >
+        <Card className="bg-card/50 backdrop-blur">
           <CardContent className="pt-3 pb-3">
-            <div className="flex items-center justify-between mb-2">
+            <div
+              className="flex items-center justify-between mb-2 cursor-pointer"
+              onClick={() => setScreen('goals' as Screen)}
+            >
               <div className="flex items-center gap-2">
                 <Trophy className="w-4 h-4 text-yellow-400" />
                 <span className="text-sm font-medium">Активные челленджи</span>
@@ -1101,7 +1101,11 @@ export function HomeScreen() {
             </div>
             <div className="space-y-2">
               {activeChallenges.map(c => (
-                <div key={c.id}>
+                <div
+                  key={c.id}
+                  className="cursor-pointer hover:bg-white/5 rounded-md px-1 -mx-1 transition-colors"
+                  onClick={() => { setSelectedContentId(c.id); setScreen('challenge-detail' as Screen) }}
+                >
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="text-white/80 truncate max-w-[70%]">{c.name}</span>
                     <span className="font-medium text-white/60">{c.progressPercentage}%</span>

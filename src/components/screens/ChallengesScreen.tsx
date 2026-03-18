@@ -295,7 +295,7 @@ export function ChallengesScreen() {
   }
 
   const active    = challenges.filter(c => c.status === 'active')
-  const finished  = challenges.filter(c => c.status !== 'active')
+  const finished  = challenges.filter(c => c.status === 'completed' || c.status === 'failed')
 
   // ────────────────────────────────────────────────────────────────────────
   return (

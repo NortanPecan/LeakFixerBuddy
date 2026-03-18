@@ -75,12 +75,13 @@ import { QuickAccess, DonateCard } from '@/features/profile'
 
 // ─── All achievement definitions (earned + locked for motivation) ─────────────
 const ALL_ACHIEVEMENT_DEFS = [
-  { code: 'GREAT_DAY_FIRST', emoji: '🌟', label: 'Отличный день!', desc: 'Набрать 80+ баллов за день' },
-  { code: 'QUALITY_WEEK',    emoji: '🏆', label: 'Неделя качества', desc: '7 дней подряд 70+ баллов' },
-  { code: 'STREAK_7',        emoji: '🔥', label: '7 дней подряд',   desc: 'Серия из 7 дней' },
-  { code: 'STREAK_30',       emoji: '💎', label: 'Месяц силы',      desc: 'Серия из 30 дней' },
-  { code: 'WATER_WEEK',      emoji: '💧', label: 'Водный марафон',  desc: '7 дней норма воды' },
-  { code: 'GYM_10',          emoji: '💪', label: 'Железный',        desc: '10 тренировок выполнено' },
+  { code: 'GREAT_DAY_FIRST',  emoji: '🌟', label: 'Отличный день!', desc: 'Набрать 80+ баллов за день' },
+  { code: 'QUALITY_WEEK',     emoji: '🏆', label: 'Неделя качества', desc: '7 дней подряд 70+ баллов' },
+  { code: 'STREAK_7',         emoji: '🔥', label: '7 дней подряд',   desc: 'Серия из 7 дней' },
+  { code: 'STREAK_30',        emoji: '💎', label: 'Месяц силы',      desc: 'Серия из 30 дней' },
+  { code: 'WATER_WEEK',       emoji: '💧', label: 'Водный марафон',  desc: '7 дней норма воды' },
+  { code: 'GYM_10',           emoji: '💪', label: 'Железный',        desc: '10 тренировок выполнено' },
+  { code: 'CHALLENGE_FIRST',  emoji: '🏆', label: 'Первый вызов',    desc: 'Завершить первый челлендж' },
 ]
 
 const LEAK_TYPE_LABELS_PROFILE: Record<string, string> = {
@@ -658,8 +659,42 @@ export function ProfileScreen() {
         </Card>
       )}
 
-      {/* Achievements — hidden until further notice */}
-      {false && achievements.length >= 0 && null}
+      {/* Achievements */}
+      <Card className="bg-card/50 backdrop-blur">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center justify-between">
+            <span>🏅 Достижения</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              {achievements.length}/{ALL_ACHIEVEMENT_DEFS.length}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 gap-2">
+            {ALL_ACHIEVEMENT_DEFS.map(def => {
+              const earned = achievements.find(a => a.code === def.code)
+              return (
+                <div
+                  key={def.code}
+                  className={`flex flex-col items-center p-2 rounded-lg text-center ${
+                    earned ? 'bg-yellow-500/10' : 'bg-muted/20 grayscale opacity-50'
+                  }`}
+                >
+                  <span className="text-2xl">{def.emoji}</span>
+                  <p className="text-[11px] font-medium mt-1 leading-tight">{def.label}</p>
+                  {earned ? (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {new Date(earned.obtainedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground/60 mt-0.5 leading-tight">{def.desc}</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* AI Patterns History */}
       {aiPatterns.filter(p => p.leakType !== 'tg_input_patterns').length > 0 && (
