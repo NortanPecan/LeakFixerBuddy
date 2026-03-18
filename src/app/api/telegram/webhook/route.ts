@@ -746,13 +746,12 @@ async function getChallengesSummary(userId: string): Promise<{ text: string; key
     let cfg: Record<string, unknown> = {}
     try { cfg = JSON.parse(c.config ?? '{}') } catch { /* */ }
 
-    // Compute progress based on days elapsed (more accurate than c.progress raw field)
     const daysElapsed = Math.min(
       c.duration,
       Math.floor((now - new Date(c.startDate).getTime()) / 86400000),
     )
     const daysLeft = Math.max(0, c.duration - daysElapsed)
-    const pct = Math.round((daysElapsed / c.duration) * 100)
+    const pct = c.progress ?? 0
     const bar = '█'.repeat(Math.round(pct / 10)) + '░'.repeat(10 - Math.round(pct / 10))
 
     let progressStr = `${pct}% · осталось ${daysLeft} дн.`
@@ -760,7 +759,8 @@ async function getChallengesSummary(userId: string): Promise<{ text: string; key
       const metric = cfg.metric as string
       const target = cfg.target as number
       const unit = TRACKER_METRIC_LABELS[metric] ?? ''
-      progressStr = `${c.progress}/${target} ${unit} · осталось ${daysLeft} дн.`.trim()
+      const actual = Math.round((pct / 100) * target)
+      progressStr = `${actual}/${target} ${unit} · осталось ${daysLeft} дн.`.trim()
     }
 
     text += `<b>${c.name}</b>\n`
