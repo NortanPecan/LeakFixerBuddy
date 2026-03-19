@@ -6,6 +6,7 @@ import { requireSelf } from '@/lib/server-auth'
 const ConvertLeakPlanSchema = z.object({
   userId: z.string().min(1),
   mode: z.enum(['minimum', 'base', 'maximum']).optional(),
+  actionId: z.string().min(1).optional(),
 })
 
 type PlanMode = 'minimum' | 'base' | 'maximum'
@@ -130,7 +131,7 @@ export async function POST(
       )
     }
 
-    const { userId, mode } = parsed.data
+    const { userId, mode, actionId } = parsed.data
     const auth = requireSelf(request, userId)
     if ('error' in auth) return auth.error
 
@@ -165,6 +166,14 @@ export async function POST(
       return NextResponse.json({ error: 'Selected plan not found' }, { status: 404 })
     }
 
+    const targetActions = actionId
+      ? selectedPlan.actions.filter((action) => action.id === actionId)
+      : selectedPlan.actions
+
+    if (actionId && targetActions.length === 0) {
+      return NextResponse.json({ error: 'Selected action not found in plan' }, { status: 404 })
+    }
+
     const zone = mapSphereToZone(target.leak.sphere)
     const ritualCategory = mapSphereToRitualCategory(target.leak.sphere)
     const traitCategory = mapSphereToTraitCategory(target.leak.sphere)
@@ -173,7 +182,7 @@ export async function POST(
       const createdEntities: Array<{ entityType: EntityType; entityId: string; label: string }> = []
       let skippedActions = 0
 
-      for (const action of selectedPlan.actions) {
+      for (const action of targetActions) {
         const payload = getPayloadObject(action.payload)
 
         if (typeof payload.convertedEntityId === 'string' && payload.convertedEntityId) {
@@ -408,6 +417,7 @@ export async function POST(
       skippedActions: result.skippedActions,
       createdEntities: result.createdEntities,
       appliedMode: selectedPlan.mode,
+      appliedActionId: actionId || null,
     })
   } catch (error) {
     console.error('Error converting leak plan:', error)

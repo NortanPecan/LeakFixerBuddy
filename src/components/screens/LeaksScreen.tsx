@@ -319,6 +319,7 @@ export function LeaksScreen() {
   const [generatingPlansLeakId, setGeneratingPlansLeakId] = useState<string | null>(null)
   const [selectingPlanLeakId, setSelectingPlanLeakId] = useState<string | null>(null)
   const [applyingPlanLeakId, setApplyingPlanLeakId] = useState<string | null>(null)
+  const [applyingPlanActionId, setApplyingPlanActionId] = useState<string | null>(null)
   const [savingFeedbackActionId, setSavingFeedbackActionId] = useState<string | null>(null)
   const [savingPatternLeakType, setSavingPatternLeakType] = useState<string | null>(null)
 
@@ -632,6 +633,51 @@ export function LeaksScreen() {
       showErrorToast(error, 'apply leak plan')
     } finally {
       setApplyingPlanLeakId(null)
+    }
+  }
+
+  const applySinglePlanAction = async (
+    leak: LeakEntity,
+    mode: LeakSolutionPlan['mode'],
+    action: LeakPlanAction,
+  ) => {
+    if (!user?.id || isPlanActionConverted(action)) return
+
+    setApplyingPlanActionId(action.id)
+    try {
+      const response = await fetch(`/api/leaks/${leak.id}/convert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          mode,
+          actionId: action.id,
+        }),
+      })
+
+      if (!response.ok) throw response
+
+      const data = await response.json()
+      if (data.leak) {
+        setLeaks((current) =>
+          current.map((item) => (item.id === leak.id ? normalizeLeak(data.leak as LeakEntity) : item)),
+        )
+      }
+      setPlansByLeak((current) => ({
+        ...current,
+        [leak.id]: normalizePlans(data.plans || []),
+      }))
+
+      const createdEntity = Array.isArray(data.createdEntities) ? data.createdEntities[0] : null
+      showSuccessToast(
+        createdEntity?.label
+          ? `Создано: ${createdEntity.label}`
+          : 'Действие из плана применено',
+      )
+    } catch (error) {
+      showErrorToast(error, 'apply single leak action')
+    } finally {
+      setApplyingPlanActionId(null)
     }
   }
 
@@ -1408,6 +1454,19 @@ export function LeaksScreen() {
                                           <div className="text-xs text-white/40 self-center">
                                             {String(action.payload?.convertedEntityLabel || '')}
                                           </div>
+                                        </div>
+                                      )}
+                                      {!isPlanActionConverted(action) && (
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => applySinglePlanAction(leak, plan.mode, action)}
+                                            disabled={applyingPlanActionId === action.id || applyingPlanLeakId === leak.id}
+                                            className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
+                                          >
+                                            {applyingPlanActionId === action.id ? 'Создаю...' : 'Создать отдельно'}
+                                          </Button>
                                         </div>
                                       )}
                                       {isPlanActionConverted(action) && (
