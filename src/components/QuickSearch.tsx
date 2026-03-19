@@ -160,6 +160,11 @@ export function QuickSearch({ open, onClose }: QuickSearchProps) {
       type: 'navigate', screen: 'export',
     },
     {
+      id: 'leaks', label: 'Лики', emoji: '🧩',
+      keywords: ['лик', 'leak', 'паттерн', 'pattern', 'разобрать', 'сбой'],
+      type: 'navigate', screen: 'leaks',
+    },
+    {
       id: 'weekly-report', label: 'Недельный отчёт', emoji: '🔍',
       keywords: ['отчёт', 'лики', 'неделя', 'паттерны', 'report', 'weekly'],
       type: 'navigate', screen: 'weekly-report',

@@ -34,6 +34,7 @@ const TraitsScreen = lazy(() => import('@/components/screens/TraitsScreen').then
 const ExportScreen = lazy(() => import('@/components/screens/ExportScreen').then(m => ({ default: m.ExportScreen })))
 const StatsScreen = lazy(() => import('@/components/screens/StatsScreen').then(m => ({ default: m.StatsScreen })))
 const BuddyScreen = lazy(() => import('@/components/screens/BuddyScreen').then(m => ({ default: m.BuddyScreen })))
+const LeaksScreen = lazy(() => import('@/components/screens/LeaksScreen').then(m => ({ default: m.LeaksScreen })))
 const OnboardingScreen = lazy(() => import('@/components/screens/OnboardingScreen').then(m => ({ default: m.OnboardingScreen })))
 const ZonesScreen = lazy(() => import('@/components/screens/ZonesScreen').then(m => ({ default: m.ZonesScreen })))
 const AllRitualsScreen = lazy(() => import('@/components/screens/AllRitualsScreen').then(m => ({ default: m.AllRitualsScreen })))
@@ -45,7 +46,7 @@ const CalorieGoalScreen = lazy(() => import('@/components/screens/CalorieGoalScr
 const QuickEntryFAB = lazy(() => import('@/components/QuickEntryFAB').then(m => ({ default: m.QuickEntryFAB })))
 
 // Screens that show bottom nav
-const MAIN_SCREENS: Screen[] = ['home', 'fitness', 'rituals', 'gym', 'profile', 'tasks', 'notes', 'development', 'finance', 'challenges', 'health', 'daily-summary', 'goals', 'skills', 'traits', 'export']
+const MAIN_SCREENS: Screen[] = ['home', 'fitness', 'rituals', 'gym', 'profile', 'tasks', 'notes', 'development', 'finance', 'challenges', 'health', 'daily-summary', 'goals', 'skills', 'traits', 'export', 'leaks']
 
 // Minimal fallback while screen chunks load
 function ScreenFallback() {
@@ -117,6 +118,8 @@ function ScreenRouter({ screen, contentId }: { screen: Screen; contentId?: strin
             return <StatsScreen />
           case 'buddies':
             return <BuddyScreen />
+          case 'leaks':
+            return <LeaksScreen />
           case 'onboarding':
             return <OnboardingScreen onComplete={() => {}} />
           case 'zones':

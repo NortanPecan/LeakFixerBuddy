@@ -42,12 +42,15 @@ const SCREEN_TITLES: Record<Screen, string> = {
   'stats': 'Статистика',
   'buddies': 'Бадди',
   'journey': 'Путь',
+  'leaks': 'Лики',
   'onboarding': 'Начало',
   'zones': 'Зоны',
   'note-detail': 'Заметка',
   'settings': 'Настройки',
   'weekly-report': 'Лики недели',
+  'monthly-report': 'Месячный отчёт',
   'habits': 'Привычки',
+  'calorie-goal': 'Цель по калориям',
 }
 
 // Screens that show "back" button instead of "menu"
@@ -259,6 +262,7 @@ export function TopNav() {
                   { screen: 'health' as Screen, icon: '❤️', label: 'Здоровье' },
                   { screen: 'finance' as Screen, icon: '💰', label: 'Финансы' },
                   { screen: 'challenges' as Screen, icon: '🏆', label: 'Челленджи' },
+                  { screen: 'leaks' as Screen, icon: '🧩', label: 'Лики' },
                   { screen: 'goals' as Screen, icon: '🎯', label: 'Цели' },
                   { screen: 'skills' as Screen, icon: '📈', label: 'Навыки' },
                   { screen: 'traits' as Screen, icon: '✨', label: 'Черты' },
