@@ -648,11 +648,30 @@ model Leak {
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz
   resolvedAt      DateTime? @map("resolved_at") @db.Timestamptz
 
-  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    AppUser           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  actions LeakActionLink[]
 
   @@index([userId, status])
   @@index([userId, updatedAt])
   @@map("leaks")
+}
+
+model LeakActionLink {
+  id         String    @id @default(uuid()) @db.Uuid
+  leakId     String    @map("leak_id") @db.Uuid
+  entityType String    @map("entity_type") // task, ritual, challenge
+  entityId   String    @map("entity_id") @db.Uuid
+  label      String
+  status     String    @default("active")
+  metadata   Json?
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  leak Leak @relation(fields: [leakId], references: [id], onDelete: Cascade)
+
+  @@unique([leakId, entityType, entityId])
+  @@index([leakId, createdAt])
+  @@map("leak_action_links")
 }
 
 /// Link between note and other entities (task, ritual, chain, content)

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useAppStore } from '@/lib/store'
+import { useAppStore, type Screen } from '@/lib/store'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,6 +24,19 @@ interface LeakEntity {
   createdAt: string
   updatedAt: string
   resolvedAt: string | null
+  contextSnapshot?: Record<string, unknown> | null
+  actions: LeakActionLink[]
+}
+
+interface LeakActionLink {
+  id: string
+  entityType: 'task' | 'ritual' | 'challenge'
+  entityId: string
+  label: string
+  status: string
+  metadata?: Record<string, unknown> | null
+  createdAt: string
+  updatedAt: string
 }
 
 interface LeakHint {
@@ -114,6 +127,80 @@ function buildLeakMessage(leak: LeakEntity) {
   return leak.description?.trim() || leak.title
 }
 
+function normalizeLeak(rawLeak: LeakEntity): LeakEntity {
+  return {
+    ...rawLeak,
+    actions: Array.isArray(rawLeak.actions) ? rawLeak.actions : [],
+    contextSnapshot:
+      rawLeak.contextSnapshot && typeof rawLeak.contextSnapshot === 'object'
+        ? rawLeak.contextSnapshot
+        : null,
+  }
+}
+
+function getActionScreen(entityType: LeakActionLink['entityType']): Screen {
+  switch (entityType) {
+    case 'task':
+      return 'tasks'
+    case 'ritual':
+      return 'rituals'
+    case 'challenge':
+    default:
+      return 'challenges'
+  }
+}
+
+function getActionLabel(entityType: LeakActionLink['entityType']) {
+  switch (entityType) {
+    case 'task':
+      return 'Задача'
+    case 'ritual':
+      return 'Ритуал'
+    case 'challenge':
+    default:
+      return 'Челлендж'
+  }
+}
+
+function getSourceLabel(source: LeakEntity['source']) {
+  switch (source) {
+    case 'manual':
+      return 'Ручной ввод'
+    case 'signal':
+      return 'Автосигнал'
+    case 'imported':
+      return 'Импорт'
+    case 'ai_suggested':
+    default:
+      return 'AI'
+  }
+}
+
+function getContextSnapshotItems(contextSnapshot?: Record<string, unknown> | null) {
+  if (!contextSnapshot) return []
+
+  return Object.entries(contextSnapshot).flatMap(([key, value]) => {
+    if (value === null || value === undefined || value === '') return []
+
+    const label = key === 'days' ? 'Дни' : key
+
+    if (Array.isArray(value)) {
+      const normalized = value
+        .map((item) => (typeof item === 'string' || typeof item === 'number' ? String(item) : null))
+        .filter((item): item is string => Boolean(item))
+
+      if (normalized.length === 0) return []
+      return [`${label}: ${normalized.join(', ')}`]
+    }
+
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return [`${label}: ${String(value)}`]
+    }
+
+    return []
+  })
+}
+
 export function LeaksScreen() {
   const { user, setScreen } = useAppStore()
   const [loading, setLoading] = useState(true)
@@ -131,6 +218,7 @@ export function LeaksScreen() {
   const [updatingLeakId, setUpdatingLeakId] = useState<string | null>(null)
   const [actionLeakId, setActionLeakId] = useState<string | null>(null)
   const [savingSignalKey, setSavingSignalKey] = useState<string | null>(null)
+  const [expandedLeakId, setExpandedLeakId] = useState<string | null>(null)
 
   const hasDraft = title.trim().length > 0 || details.trim().length > 0
 
@@ -152,7 +240,7 @@ export function LeaksScreen() {
       const signalsData = await signalsRes.json()
       const patternsData = await patternsRes.json()
 
-      setLeaks(Array.isArray(leaksData.leaks) ? leaksData.leaks : [])
+      setLeaks(Array.isArray(leaksData.leaks) ? leaksData.leaks.map(normalizeLeak) : [])
       setSignals(Array.isArray(signalsData.leakHints) ? signalsData.leakHints : [])
       setPatterns(Array.isArray(patternsData.patterns) ? patternsData.patterns : [])
     } catch (error) {
@@ -211,9 +299,10 @@ export function LeaksScreen() {
       }
 
       const data = await response.json()
-      const createdLeak = data.leak as LeakEntity
+      const createdLeak = normalizeLeak(data.leak as LeakEntity)
 
       setLeaks((current) => [createdLeak, ...current])
+      setExpandedLeakId(createdLeak.id)
       setTitle('')
       setDetails('')
       setSeverity('warning')
@@ -256,7 +345,7 @@ export function LeaksScreen() {
       }
 
       const data = await response.json()
-      const updatedLeak = data.leak as LeakEntity
+      const updatedLeak = normalizeLeak(data.leak as LeakEntity)
 
       setLeaks((current) =>
         current.map((leak) => (leak.id === leakId ? updatedLeak : leak)),
@@ -268,6 +357,41 @@ export function LeaksScreen() {
       setUpdatingLeakId(null)
     }
   }
+
+  const saveLeakAction = async (
+    leak: LeakEntity,
+    action: {
+      entityType: LeakActionLink['entityType']
+      entityId: string
+      label: string
+      metadata?: Record<string, unknown> | null
+    },
+  ) => {
+    if (!user?.id) return
+
+    const response = await fetch('/api/leaks', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: user.id,
+        id: leak.id,
+        status: leak.status === 'new' ? 'in_progress' : undefined,
+        appendAction: action,
+      }),
+    })
+
+    if (!response.ok) {
+      throw response
+    }
+
+    const data = await response.json()
+    const updatedLeak = normalizeLeak(data.leak as LeakEntity)
+    setLeaks((current) => current.map((item) => (item.id === leak.id ? updatedLeak : item)))
+    setExpandedLeakId(leak.id)
+  }
+
+  const hasActionType = (leak: LeakEntity, entityType: LeakActionLink['entityType']) =>
+    leak.actions?.some((action) => action.entityType === entityType)
 
   const convertLeakToTask = async (leak: LeakEntity) => {
     if (!user?.id || actionLeakId) return
@@ -286,10 +410,13 @@ export function LeaksScreen() {
       })
 
       if (!response.ok) throw response
-
-      if (leak.status === 'new') {
-        await updateLeakStatus(leak.id, 'in_progress')
-      }
+      const data = await response.json()
+      await saveLeakAction(leak, {
+        entityType: 'task',
+        entityId: data.task.id,
+        label: data.task.text,
+        metadata: { zone: data.task.zone || null },
+      })
       showSuccessToast('Задача создана из лика')
       setScreen('tasks')
     } catch (error) {
@@ -321,10 +448,13 @@ export function LeaksScreen() {
       })
 
       if (!response.ok) throw response
-
-      if (leak.status === 'new') {
-        await updateLeakStatus(leak.id, 'in_progress')
-      }
+      const data = await response.json()
+      await saveLeakAction(leak, {
+        entityType: 'ritual',
+        entityId: data.ritual.id,
+        label: data.ritual.title,
+        metadata: { category: data.ritual.category || null },
+      })
       showSuccessToast('Ритуал создан из лика')
       setScreen('rituals')
     } catch (error) {
@@ -350,10 +480,13 @@ export function LeaksScreen() {
       })
 
       if (!response.ok) throw response
-
-      if (leak.status === 'new') {
-        await updateLeakStatus(leak.id, 'in_progress')
-      }
+      const data = await response.json()
+      await saveLeakAction(leak, {
+        entityType: 'challenge',
+        entityId: data.challenge.id,
+        label: data.challenge.title || data.challenge.name,
+        metadata: { duration: data.challenge.duration || null },
+      })
       showSuccessToast('AI-челлендж создан из лика')
       setScreen('challenges')
     } catch (error) {
@@ -385,8 +518,9 @@ export function LeaksScreen() {
       if (!response.ok) throw response
 
       const data = await response.json()
-      const createdLeak = data.leak as LeakEntity
+      const createdLeak = normalizeLeak(data.leak as LeakEntity)
       setLeaks((current) => [createdLeak, ...current])
+      setExpandedLeakId(createdLeak.id)
       showSuccessToast('Сигнал сохранён как leak')
       setActiveTab('inbox')
     } catch (error) {
@@ -597,11 +731,31 @@ export function LeaksScreen() {
                     <div className="flex flex-wrap justify-end gap-2">
                       <Badge className={STATUS_STYLES[leak.status]}>{STATUS_LABELS[leak.status]}</Badge>
                       <Badge className={SEVERITY_STYLES[leak.severity]}>{leak.severity}</Badge>
+                      {leak.actions.length > 0 && (
+                        <Badge className="bg-white/10 text-white/75 border-white/10">
+                          Действий: {leak.actions.length}
+                        </Badge>
+                      )}
                     </div>
                   </div>
 
                   {leak.description && (
                     <p className="text-sm text-white/72 whitespace-pre-wrap">{leak.description}</p>
+                  )}
+
+                  {leak.actions.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {leak.actions.map((action) => (
+                        <button
+                          key={action.id}
+                          type="button"
+                          onClick={() => setScreen(getActionScreen(action.entityType))}
+                          className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70 hover:bg-white/10"
+                        >
+                          {getActionLabel(action.entityType)}: {action.label}
+                        </button>
+                      ))}
+                    </div>
                   )}
 
                   <div className="flex flex-wrap gap-2">
@@ -652,6 +806,14 @@ export function LeaksScreen() {
                     <Button
                       size="sm"
                       variant="outline"
+                      onClick={() => setExpandedLeakId((current) => (current === leak.id ? null : leak.id))}
+                      className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                    >
+                      {expandedLeakId === leak.id ? 'Скрыть детали' : 'Детали'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={() =>
                         setSelectedDraft({
                           leakType: leak.title,
@@ -667,7 +829,7 @@ export function LeaksScreen() {
                       size="sm"
                       variant="outline"
                       onClick={() => convertLeakToTask(leak)}
-                      disabled={actionLeakId === leak.id}
+                      disabled={actionLeakId === leak.id || hasActionType(leak, 'task')}
                       className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
                     >
                       В задачу
@@ -676,7 +838,7 @@ export function LeaksScreen() {
                       size="sm"
                       variant="outline"
                       onClick={() => convertLeakToRitual(leak)}
-                      disabled={actionLeakId === leak.id}
+                      disabled={actionLeakId === leak.id || hasActionType(leak, 'ritual')}
                       className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
                     >
                       В ритуал
@@ -685,12 +847,83 @@ export function LeaksScreen() {
                       size="sm"
                       variant="outline"
                       onClick={() => convertLeakToChallenge(leak)}
-                      disabled={actionLeakId === leak.id}
+                      disabled={actionLeakId === leak.id || hasActionType(leak, 'challenge')}
                       className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
                     >
                       AI-челлендж
                     </Button>
                   </div>
+
+                  {expandedLeakId === leak.id && (
+                    <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                      <div className="flex flex-wrap gap-2">
+                        <Badge className="bg-white/10 text-white/75 border-white/10">
+                          Источник: {getSourceLabel(leak.source)}
+                        </Badge>
+                        {leak.sphere && (
+                          <Badge className="bg-white/10 text-white/75 border-white/10">
+                            Сфера: {leak.sphere}
+                          </Badge>
+                        )}
+                      </div>
+
+                      {getContextSnapshotItems(leak.contextSnapshot).length > 0 && (
+                        <div className="space-y-2">
+                          <div className="text-xs uppercase tracking-wide text-white/40">
+                            Контекст
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {getContextSnapshotItems(leak.contextSnapshot).map((item) => (
+                              <Badge
+                                key={item}
+                                variant="outline"
+                                className="border-white/10 text-white/60 whitespace-normal text-left"
+                              >
+                                {item}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <div className="text-xs uppercase tracking-wide text-white/40">
+                          Что уже создано из лика
+                        </div>
+                        {leak.actions.length === 0 ? (
+                          <p className="text-sm text-white/55">
+                            Пока ничего. Можно превратить лик в задачу, ритуал или AI-челлендж.
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            {leak.actions.map((action) => (
+                              <div
+                                key={action.id}
+                                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"
+                              >
+                                <div>
+                                  <div className="text-sm text-white">
+                                    {getActionLabel(action.entityType)}: {action.label}
+                                  </div>
+                                  <div className="text-xs text-white/40">
+                                    Создано: {formatDate(action.createdAt)}
+                                  </div>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setScreen(getActionScreen(action.entityType))}
+                                  className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                >
+                                  Открыть
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))

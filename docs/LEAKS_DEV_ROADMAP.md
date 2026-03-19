@@ -425,3 +425,12 @@
 5. Дать пользователю менять статус прямо в UI.
 
 Это будет первый настоящий шаг от `v1 foundation` к реальному продукту.
+
+## Update 2026-03-20
+
+- Added `LeakActionLink` as a separate relation for task / ritual / challenge conversions.
+- `/api/leaks` now returns action links and can append a new link during leak updates.
+- `LeaksScreen` now shows leak details, context snapshot, and created actions.
+- Conversion buttons are protected from duplicate creation for the same leak/action type.
+- Added SQL migration:
+  - `prisma/migrations/20260320_leak_action_links.sql`

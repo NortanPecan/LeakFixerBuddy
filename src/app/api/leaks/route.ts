@@ -6,6 +6,15 @@ import { requireSelf } from '@/lib/server-auth'
 const LeakStatusSchema = z.enum(['new', 'in_progress', 'resolved', 'archived'])
 const LeakSeveritySchema = z.enum(['info', 'warning', 'critical'])
 const LeakSourceSchema = z.enum(['manual', 'signal', 'imported', 'ai_suggested'])
+const LeakActionEntitySchema = z.enum(['task', 'ritual', 'challenge'])
+
+const LeakActionLinkSchema = z.object({
+  entityType: LeakActionEntitySchema,
+  entityId: z.string().min(1),
+  label: z.string().min(1).max(200),
+  status: z.string().max(50).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
+})
 
 const CreateLeakSchema = z.object({
   userId: z.string().min(1),
@@ -26,6 +35,7 @@ const UpdateLeakSchema = z.object({
   severity: LeakSeveritySchema.optional(),
   sphere: z.string().max(100).optional().nullable(),
   contextSnapshot: z.record(z.string(), z.unknown()).optional().nullable(),
+  appendAction: LeakActionLinkSchema.optional(),
 })
 
 // GET /api/leaks?userId=...&status=...
@@ -58,6 +68,14 @@ export async function GET(request: NextRequest) {
 
     const leaks = await db.leak.findMany({
       where,
+      include: {
+        actions: {
+          orderBy: [
+            { createdAt: 'desc' },
+            { updatedAt: 'desc' },
+          ],
+        },
+      },
       orderBy: [
         { updatedAt: 'desc' },
         { createdAt: 'desc' },
@@ -100,6 +118,14 @@ export async function POST(request: NextRequest) {
         sphere: sphere?.trim() || null,
         contextSnapshot: contextSnapshot ?? null,
       },
+      include: {
+        actions: {
+          orderBy: [
+            { createdAt: 'desc' },
+            { updatedAt: 'desc' },
+          ],
+        },
+      },
     })
 
     return NextResponse.json({ leak })
@@ -122,7 +148,7 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    const { userId, id, title, description, status, severity, sphere, contextSnapshot } = parsed.data
+    const { userId, id, title, description, status, severity, sphere, contextSnapshot, appendAction } = parsed.data
 
     const auth = requireSelf(request, userId)
     if ('error' in auth) return auth.error
@@ -140,23 +166,66 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const leak = await db.leak.update({
-      where: { id },
-      data: {
-        title: title?.trim(),
-        description: description !== undefined ? (description?.trim() || null) : undefined,
-        status,
-        severity,
-        sphere: sphere !== undefined ? (sphere?.trim() || null) : undefined,
-        contextSnapshot: contextSnapshot !== undefined ? (contextSnapshot ?? null) : undefined,
-        resolvedAt:
-          status === 'resolved'
-            ? new Date()
-            : status && existingLeak.status === 'resolved'
-              ? null
-              : undefined,
-      },
+    const leak = await db.$transaction(async (tx) => {
+      await tx.leak.update({
+        where: { id },
+        data: {
+          title: title?.trim(),
+          description: description !== undefined ? (description?.trim() || null) : undefined,
+          status,
+          severity,
+          sphere: sphere !== undefined ? (sphere?.trim() || null) : undefined,
+          contextSnapshot: contextSnapshot !== undefined ? (contextSnapshot ?? null) : undefined,
+          resolvedAt:
+            status === 'resolved'
+              ? new Date()
+              : status && existingLeak.status === 'resolved'
+                ? null
+                : undefined,
+        },
+      })
+
+      if (appendAction) {
+        await tx.leakActionLink.upsert({
+          where: {
+            leakId_entityType_entityId: {
+              leakId: id,
+              entityType: appendAction.entityType,
+              entityId: appendAction.entityId,
+            },
+          },
+          update: {
+            label: appendAction.label.trim(),
+            status: appendAction.status || 'active',
+            metadata: appendAction.metadata ?? null,
+          },
+          create: {
+            leakId: id,
+            entityType: appendAction.entityType,
+            entityId: appendAction.entityId,
+            label: appendAction.label.trim(),
+            status: appendAction.status || 'active',
+            metadata: appendAction.metadata ?? null,
+          },
+        })
+      }
+
+      return tx.leak.findUnique({
+        where: { id },
+        include: {
+          actions: {
+            orderBy: [
+              { createdAt: 'desc' },
+              { updatedAt: 'desc' },
+            ],
+          },
+        },
+      })
     })
+
+    if (!leak) {
+      return NextResponse.json({ error: 'Leak not found after update' }, { status: 404 })
+    }
 
     return NextResponse.json({ leak })
   } catch (error) {
