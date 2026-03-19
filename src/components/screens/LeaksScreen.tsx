@@ -30,7 +30,7 @@ interface LeakEntity {
 
 interface LeakActionLink {
   id: string
-  entityType: 'task' | 'ritual' | 'challenge'
+  entityType: 'task' | 'ritual' | 'challenge' | 'content' | 'skill' | 'trait'
   entityId: string
   label: string
   status: string
@@ -193,7 +193,15 @@ function normalizeLeak(rawLeak: LeakEntity): LeakEntity {
 function normalizePlan(rawPlan: LeakSolutionPlan): LeakSolutionPlan {
   return {
     ...rawPlan,
-    actions: Array.isArray(rawPlan.actions) ? rawPlan.actions : [],
+    actions: Array.isArray(rawPlan.actions)
+      ? rawPlan.actions.map((action) => ({
+          ...action,
+          payload:
+            action.payload && typeof action.payload === 'object' && !Array.isArray(action.payload)
+              ? action.payload
+              : null,
+        }))
+      : [],
   }
 }
 
@@ -207,6 +215,12 @@ function getActionScreen(entityType: LeakActionLink['entityType']): Screen {
       return 'tasks'
     case 'ritual':
       return 'rituals'
+    case 'content':
+      return 'development'
+    case 'skill':
+      return 'skills'
+    case 'trait':
+      return 'traits'
     case 'challenge':
     default:
       return 'challenges'
@@ -219,6 +233,12 @@ function getActionLabel(entityType: LeakActionLink['entityType']) {
       return 'Задача'
     case 'ritual':
       return 'Ритуал'
+    case 'content':
+      return 'Материал'
+    case 'skill':
+      return 'Навык'
+    case 'trait':
+      return 'Качество'
     case 'challenge':
     default:
       return 'Челлендж'
@@ -286,6 +306,7 @@ export function LeaksScreen() {
   const [loadingPlansLeakId, setLoadingPlansLeakId] = useState<string | null>(null)
   const [generatingPlansLeakId, setGeneratingPlansLeakId] = useState<string | null>(null)
   const [selectingPlanLeakId, setSelectingPlanLeakId] = useState<string | null>(null)
+  const [applyingPlanLeakId, setApplyingPlanLeakId] = useState<string | null>(null)
 
   const hasDraft = title.trim().length > 0 || details.trim().length > 0
 
@@ -547,6 +568,54 @@ export function LeaksScreen() {
 
     if (willOpen && !plansByLeak[leakId] && loadingPlansLeakId !== leakId) {
       await loadPlansForLeak(leakId)
+    }
+  }
+
+  const isPlanActionConverted = (action: LeakPlanAction) =>
+    Boolean(action.payload?.convertedEntityId && action.payload?.convertedEntityType)
+
+  const applySelectedPlan = async (leak: LeakEntity, mode?: LeakSolutionPlan['mode']) => {
+    if (!user?.id) return
+
+    setApplyingPlanLeakId(leak.id)
+    try {
+      const response = await fetch(`/api/leaks/${leak.id}/convert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          mode,
+        }),
+      })
+
+      if (!response.ok) throw response
+
+      const data = await response.json()
+      if (data.leak) {
+        setLeaks((current) =>
+          current.map((item) => (item.id === leak.id ? normalizeLeak(data.leak as LeakEntity) : item)),
+        )
+      }
+      setPlansByLeak((current) => ({
+        ...current,
+        [leak.id]: normalizePlans(data.plans || []),
+      }))
+
+      const createdCount = typeof data.createdCount === 'number' ? data.createdCount : 0
+      const skippedCount = typeof data.skippedActions === 'number' ? data.skippedActions : 0
+      if (createdCount > 0) {
+        showSuccessToast(
+          skippedCount > 0
+            ? `Применил режим: создано ${createdCount}, пропущено ${skippedCount}`
+            : `Применил режим: создано ${createdCount}`,
+        )
+      } else {
+        showSuccessToast('Новых сущностей не создано, всё уже было применено')
+      }
+    } catch (error) {
+      showErrorToast(error, 'apply leak plan')
+    } finally {
+      setApplyingPlanLeakId(null)
     }
   }
 
@@ -1156,6 +1225,30 @@ export function LeaksScreen() {
                                   </Button>
                                 </div>
 
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => applySelectedPlan(leak, plan.mode)}
+                                    disabled={
+                                      applyingPlanLeakId === leak.id ||
+                                      plan.actions.every((action) => isPlanActionConverted(action))
+                                    }
+                                    className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
+                                  >
+                                    {applyingPlanLeakId === leak.id
+                                      ? 'Применяю...'
+                                      : plan.actions.every((action) => isPlanActionConverted(action))
+                                        ? 'Режим уже применён'
+                                        : 'Применить режим'}
+                                  </Button>
+                                  {plan.isSelected && (
+                                    <Badge className="bg-white/10 text-white/70 border-white/10">
+                                      Активный режим для этого лика
+                                    </Badge>
+                                  )}
+                                </div>
+
                                 <div className="mt-3 space-y-2">
                                   {plan.actions.map((action) => (
                                     <div
@@ -1167,9 +1260,35 @@ export function LeaksScreen() {
                                           {PLAN_KIND_LABELS[action.kind]}
                                         </Badge>
                                         <div className="text-sm text-white">{action.title}</div>
+                                        {isPlanActionConverted(action) && (
+                                          <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
+                                            Создано
+                                          </Badge>
+                                        )}
                                       </div>
                                       {action.description && (
                                         <p className="mt-1 text-xs text-white/55">{action.description}</p>
+                                      )}
+                                      {isPlanActionConverted(action) && (
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() =>
+                                              setScreen(
+                                                getActionScreen(
+                                                  action.payload?.convertedEntityType as LeakActionLink['entityType'],
+                                                ),
+                                              )
+                                            }
+                                            className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                          >
+                                            Открыть созданное
+                                          </Button>
+                                          <div className="text-xs text-white/40 self-center">
+                                            {String(action.payload?.convertedEntityLabel || '')}
+                                          </div>
+                                        </div>
                                       )}
                                     </div>
                                   ))}
