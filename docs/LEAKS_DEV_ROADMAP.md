@@ -450,3 +450,4 @@
   - `LeaksScreen` updates the Patterns tab immediately after saving action feedback
   - patterns are no longer a dead end: a learned pattern can now be turned into an `ai_suggested` leak
   - selected plans can now be applied action-by-action, not only as a whole bundle
+  - leaks now support fast sphere classification during capture and quick sphere reassignment in details

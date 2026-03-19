@@ -163,6 +163,16 @@ const PLAN_KIND_LABELS: Record<LeakPlanAction['kind'], string> = {
   content: 'Материал',
 }
 
+const SPHERE_OPTIONS = [
+  { id: 'work', label: 'Работа' },
+  { id: 'body', label: 'Тело' },
+  { id: 'relationships', label: 'Отношения' },
+  { id: 'mindset', label: 'Мышление' },
+  { id: 'finance', label: 'Финансы' },
+  { id: 'learning', label: 'Развитие' },
+  { id: 'poker', label: 'Покер' },
+] as const
+
 function getCurrentMonday(): string {
   const today = new Date()
   const day = today.getDay()
@@ -308,6 +318,7 @@ export function LeaksScreen() {
   const [title, setTitle] = useState('')
   const [details, setDetails] = useState('')
   const [severity, setSeverity] = useState<'info' | 'warning' | 'critical'>('warning')
+  const [sphere, setSphere] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [selectedDraft, setSelectedDraft] = useState<LeakDraft | null>(null)
   const [updatingLeakId, setUpdatingLeakId] = useState<string | null>(null)
@@ -394,6 +405,7 @@ export function LeaksScreen() {
           description: details.trim() || null,
           severity,
           source: 'manual',
+          sphere,
         }),
       })
 
@@ -409,6 +421,7 @@ export function LeaksScreen() {
       setTitle('')
       setDetails('')
       setSeverity('warning')
+      setSphere(null)
       setActiveTab('inbox')
       setStatusFilter('all')
 
@@ -456,6 +469,37 @@ export function LeaksScreen() {
       showSuccessToast('Статус лика обновлён')
     } catch (error) {
       showErrorToast(error, 'update leak status')
+    } finally {
+      setUpdatingLeakId(null)
+    }
+  }
+
+  const updateLeakSphere = async (leakId: string, nextSphere: string | null) => {
+    if (!user?.id || updatingLeakId) return
+
+    setUpdatingLeakId(leakId)
+    try {
+      const response = await fetch('/api/leaks', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          id: leakId,
+          sphere: nextSphere,
+        }),
+      })
+
+      if (!response.ok) throw response
+
+      const data = await response.json()
+      const updatedLeak = normalizeLeak(data.leak as LeakEntity)
+
+      setLeaks((current) =>
+        current.map((leak) => (leak.id === leakId ? updatedLeak : leak)),
+      )
+      showSuccessToast('Сфера лика обновлена')
+    } catch (error) {
+      showErrorToast(error, 'update leak sphere')
     } finally {
       setUpdatingLeakId(null)
     }
@@ -1032,6 +1076,39 @@ export function LeaksScreen() {
             })}
           </div>
 
+          <div className="space-y-2">
+            <div className="text-xs uppercase tracking-wide text-white/40">
+              Сфера
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setSphere(null)}
+                className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                  sphere === null
+                    ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
+                    : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                }`}
+              >
+                Без сферы
+              </button>
+              {SPHERE_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setSphere(option.id)}
+                  className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                    sphere === option.id
+                      ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
+                      : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={() => createLeak(true)}
@@ -1257,6 +1334,41 @@ export function LeaksScreen() {
                             Сфера: {leak.sphere}
                           </Badge>
                         )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-xs uppercase tracking-wide text-white/40">
+                          Сфера
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => updateLeakSphere(leak.id, null)}
+                            disabled={updatingLeakId === leak.id}
+                            className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                              !leak.sphere
+                                ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
+                                : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                            }`}
+                          >
+                            Без сферы
+                          </button>
+                          {SPHERE_OPTIONS.map((option) => (
+                            <button
+                              key={option.id}
+                              type="button"
+                              onClick={() => updateLeakSphere(leak.id, option.id)}
+                              disabled={updatingLeakId === leak.id}
+                              className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                                leak.sphere === option.id
+                                  ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
+                                  : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
 
                       {getContextSnapshotItems(leak.contextSnapshot).length > 0 && (
