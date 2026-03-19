@@ -651,6 +651,7 @@ model Leak {
   user    AppUser           @relation(fields: [userId], references: [id], onDelete: Cascade)
   actions LeakActionLink[]
   plans   LeakSolutionPlan[]
+  feedbacks LeakFeedback[]
 
   @@index([userId, status])
   @@index([userId, updatedAt])
@@ -707,9 +708,27 @@ model LeakSolutionAction {
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 
   plan LeakSolutionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  feedbacks LeakFeedback[]
 
   @@index([planId, sortOrder])
   @@map("leak_solution_actions")
+}
+
+model LeakFeedback {
+  id               String    @id @default(uuid()) @db.Uuid
+  leakId           String    @map("leak_id") @db.Uuid
+  solutionActionId String    @map("solution_action_id") @db.Uuid
+  result           String
+  comment          String?
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  leak           Leak               @relation(fields: [leakId], references: [id], onDelete: Cascade)
+  solutionAction LeakSolutionAction @relation(fields: [solutionActionId], references: [id], onDelete: Cascade)
+
+  @@unique([leakId, solutionActionId])
+  @@index([leakId, createdAt])
+  @@map("leak_feedback")
 }
 
 /// Link between note and other entities (task, ritual, chain, content)

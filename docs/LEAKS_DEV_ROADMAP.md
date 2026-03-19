@@ -439,5 +439,8 @@
   - added `/api/leaks/[leakId]/plans`
   - `LeaksScreen` can now build and select `minimum / base / maximum` plans
   - selected plan can now be converted into real product entities through `/api/leaks/[leakId]/convert`
+  - added `LeakFeedback` and `/api/leaks/[leakId]/feedback`
+  - applied plan actions can now collect `worked / partially / not_worked` feedback
   - added SQL migration:
     - `prisma/migrations/20260320_leak_solution_plans.sql`
+    - `prisma/migrations/20260320_leak_feedback.sql`

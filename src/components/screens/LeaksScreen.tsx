@@ -48,6 +48,17 @@ interface LeakPlanAction {
   sortOrder: number
   createdAt: string
   updatedAt: string
+  feedbacks: LeakPlanFeedback[]
+}
+
+interface LeakPlanFeedback {
+  id: string
+  leakId: string
+  solutionActionId: string
+  result: 'worked' | 'partially' | 'not_worked'
+  comment: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 interface LeakSolutionPlan {
@@ -200,6 +211,7 @@ function normalizePlan(rawPlan: LeakSolutionPlan): LeakSolutionPlan {
             action.payload && typeof action.payload === 'object' && !Array.isArray(action.payload)
               ? action.payload
               : null,
+          feedbacks: Array.isArray(action.feedbacks) ? action.feedbacks : [],
         }))
       : [],
   }
@@ -307,6 +319,7 @@ export function LeaksScreen() {
   const [generatingPlansLeakId, setGeneratingPlansLeakId] = useState<string | null>(null)
   const [selectingPlanLeakId, setSelectingPlanLeakId] = useState<string | null>(null)
   const [applyingPlanLeakId, setApplyingPlanLeakId] = useState<string | null>(null)
+  const [savingFeedbackActionId, setSavingFeedbackActionId] = useState<string | null>(null)
 
   const hasDraft = title.trim().length > 0 || details.trim().length > 0
 
@@ -574,6 +587,8 @@ export function LeaksScreen() {
   const isPlanActionConverted = (action: LeakPlanAction) =>
     Boolean(action.payload?.convertedEntityId && action.payload?.convertedEntityType)
 
+  const getActionFeedback = (action: LeakPlanAction) => action.feedbacks?.[0] || null
+
   const applySelectedPlan = async (leak: LeakEntity, mode?: LeakSolutionPlan['mode']) => {
     if (!user?.id) return
 
@@ -616,6 +631,40 @@ export function LeaksScreen() {
       showErrorToast(error, 'apply leak plan')
     } finally {
       setApplyingPlanLeakId(null)
+    }
+  }
+
+  const sendPlanActionFeedback = async (
+    leakId: string,
+    actionId: string,
+    result: LeakPlanFeedback['result'],
+  ) => {
+    if (!user?.id) return
+
+    setSavingFeedbackActionId(actionId)
+    try {
+      const response = await fetch(`/api/leaks/${leakId}/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          solutionActionId: actionId,
+          result,
+        }),
+      })
+
+      if (!response.ok) throw response
+
+      const data = await response.json()
+      setPlansByLeak((current) => ({
+        ...current,
+        [leakId]: normalizePlans(data.plans || []),
+      }))
+      showSuccessToast('Фидбек по действию сохранён')
+    } catch (error) {
+      showErrorToast(error, 'save plan feedback')
+    } finally {
+      setSavingFeedbackActionId(null)
     }
   }
 
@@ -1288,6 +1337,42 @@ export function LeaksScreen() {
                                           <div className="text-xs text-white/40 self-center">
                                             {String(action.payload?.convertedEntityLabel || '')}
                                           </div>
+                                        </div>
+                                      )}
+                                      {isPlanActionConverted(action) && (
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                          {(['worked', 'partially', 'not_worked'] as const).map((result) => {
+                                            const feedback = getActionFeedback(action)
+                                            const isActive = feedback?.result === result
+                                            const label =
+                                              result === 'worked'
+                                                ? 'Сработало'
+                                                : result === 'partially'
+                                                  ? 'Частично'
+                                                  : 'Не помогло'
+
+                                            return (
+                                              <Button
+                                                key={result}
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => sendPlanActionFeedback(leak.id, action.id, result)}
+                                                disabled={savingFeedbackActionId === action.id}
+                                                className={
+                                                  isActive
+                                                    ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
+                                                    : 'border-white/15 bg-white/5 hover:bg-white/10 text-white'
+                                                }
+                                              >
+                                                {label}
+                                              </Button>
+                                            )
+                                          })}
+                                          {getActionFeedback(action) && (
+                                            <div className="text-xs text-white/40 self-center">
+                                              Последний фидбек: {formatDate(getActionFeedback(action)!.updatedAt)}
+                                            </div>
+                                          )}
                                         </div>
                                       )}
                                     </div>

@@ -372,6 +372,14 @@ export async function POST(
         where: { leakId },
         include: {
           actions: {
+            include: {
+              feedbacks: {
+                orderBy: [
+                  { updatedAt: 'desc' },
+                  { createdAt: 'desc' },
+                ],
+              },
+            },
             orderBy: [
               { sortOrder: 'asc' },
               { createdAt: 'asc' },
