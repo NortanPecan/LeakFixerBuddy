@@ -13,10 +13,17 @@ import { LeakAiAnalysisCard } from '@/components/LeakAiAnalysisCard'
 import { showErrorToast, showSuccessToast } from '@/lib/network-utils'
 import { Brain, Lightbulb, NotebookPen, RefreshCw, Sparkles } from 'lucide-react'
 
-interface LeakNote {
+interface LeakEntity {
   id: string
-  text: string
+  title: string
+  description: string | null
+  source: 'manual' | 'signal' | 'imported' | 'ai_suggested'
+  status: 'new' | 'in_progress' | 'resolved' | 'archived'
+  severity: 'info' | 'warning' | 'critical'
+  sphere: string | null
   createdAt: string
+  updatedAt: string
+  resolvedAt: string | null
 }
 
 interface LeakHint {
@@ -34,11 +41,13 @@ interface LeakPattern {
   updatedAt: string
 }
 
-interface ManualLeakDraft {
+interface LeakDraft {
   leakType: string
   leakMessage: string
   severity: 'info' | 'warning' | 'critical'
 }
+
+type LeakStatusFilter = 'all' | 'new' | 'in_progress' | 'resolved' | 'archived'
 
 const SEVERITY_OPTIONS: Array<{
   id: 'info' | 'warning' | 'critical'
@@ -49,6 +58,28 @@ const SEVERITY_OPTIONS: Array<{
   { id: 'warning', label: 'Проблема', description: 'Повторяется и уже мешает' },
   { id: 'critical', label: 'Срочно', description: 'Сильно влияет и требует реакции' },
 ]
+
+const STATUS_OPTIONS: Array<{ id: LeakStatusFilter; label: string }> = [
+  { id: 'all', label: 'Все' },
+  { id: 'new', label: 'Новые' },
+  { id: 'in_progress', label: 'В работе' },
+  { id: 'resolved', label: 'Решённые' },
+  { id: 'archived', label: 'Архив' },
+]
+
+const STATUS_LABELS: Record<Exclude<LeakStatusFilter, 'all'>, string> = {
+  new: 'Новый',
+  in_progress: 'В работе',
+  resolved: 'Решён',
+  archived: 'Архив',
+}
+
+const STATUS_STYLES: Record<Exclude<LeakStatusFilter, 'all'>, string> = {
+  new: 'bg-white/10 text-white/80 border-white/10',
+  in_progress: 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20',
+  resolved: 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20',
+  archived: 'bg-white/5 text-white/45 border-white/10',
+}
 
 const SEVERITY_STYLES: Record<'info' | 'warning' | 'critical', string> = {
   info: 'bg-sky-500/10 text-sky-300 border-sky-500/20',
@@ -66,17 +97,7 @@ function getCurrentMonday(): string {
   return monday.toISOString().split('T')[0]
 }
 
-function extractTitle(text: string): string {
-  const [firstLine] = text.split('\n').map(line => line.trim()).filter(Boolean)
-  if (!firstLine) return 'Новый лик'
-  return firstLine.slice(0, 60)
-}
-
-function extractPreview(text: string): string {
-  return text.replace(/\s+/g, ' ').trim().slice(0, 180)
-}
-
-function formatDate(date: string): string {
+function formatDate(date: string) {
   try {
     return new Date(date).toLocaleDateString('ru-RU', {
       day: '2-digit',
@@ -89,19 +110,25 @@ function formatDate(date: string): string {
   }
 }
 
+function buildLeakMessage(leak: LeakEntity) {
+  return leak.description?.trim() || leak.title
+}
+
 export function LeaksScreen() {
   const { user, setScreen } = useAppStore()
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [notes, setNotes] = useState<LeakNote[]>([])
+  const [leaks, setLeaks] = useState<LeakEntity[]>([])
   const [signals, setSignals] = useState<LeakHint[]>([])
   const [patterns, setPatterns] = useState<LeakPattern[]>([])
   const [activeTab, setActiveTab] = useState('inbox')
+  const [statusFilter, setStatusFilter] = useState<LeakStatusFilter>('all')
   const [title, setTitle] = useState('')
   const [details, setDetails] = useState('')
   const [severity, setSeverity] = useState<'info' | 'warning' | 'critical'>('warning')
   const [submitting, setSubmitting] = useState(false)
-  const [selectedDraft, setSelectedDraft] = useState<ManualLeakDraft | null>(null)
+  const [selectedDraft, setSelectedDraft] = useState<LeakDraft | null>(null)
+  const [updatingLeakId, setUpdatingLeakId] = useState<string | null>(null)
 
   const hasDraft = title.trim().length > 0 || details.trim().length > 0
 
@@ -113,17 +140,17 @@ export function LeaksScreen() {
 
     try {
       const weekStart = getCurrentMonday()
-      const [notesRes, signalsRes, patternsRes] = await Promise.all([
-        fetch(`/api/notes?userId=${user.id}&zone=leaks&limit=20`),
+      const [leaksRes, signalsRes, patternsRes] = await Promise.all([
+        fetch(`/api/leaks?userId=${user.id}&status=all&limit=100`),
         fetch(`/api/weekly-report?userId=${user.id}&weekStart=${weekStart}`),
         fetch(`/api/ai/patterns?userId=${user.id}`),
       ])
 
-      const notesData = await notesRes.json()
+      const leaksData = await leaksRes.json()
       const signalsData = await signalsRes.json()
       const patternsData = await patternsRes.json()
 
-      setNotes(Array.isArray(notesData.notes) ? notesData.notes : [])
+      setLeaks(Array.isArray(leaksData.leaks) ? leaksData.leaks : [])
       setSignals(Array.isArray(signalsData.leakHints) ? signalsData.leakHints : [])
       setPatterns(Array.isArray(patternsData.patterns) ? patternsData.patterns : [])
     } catch (error) {
@@ -138,21 +165,42 @@ export function LeaksScreen() {
     loadData(true)
   }, [user?.id])
 
-  const createLeakNote = async (prepareAnalysis: boolean) => {
-    if (!user?.id) return
-    if (!title.trim() && !details.trim()) return
+  const filteredLeaks = useMemo(() => {
+    if (statusFilter === 'all') return leaks
+    return leaks.filter((leak) => leak.status === statusFilter)
+  }, [leaks, statusFilter])
+
+  const leakCounts = useMemo(() => {
+    return leaks.reduce(
+      (acc, leak) => {
+        acc.all += 1
+        acc[leak.status] += 1
+        return acc
+      },
+      {
+        all: 0,
+        new: 0,
+        in_progress: 0,
+        resolved: 0,
+        archived: 0,
+      } as Record<LeakStatusFilter, number>,
+    )
+  }, [leaks])
+
+  const createLeak = async (prepareAnalysis: boolean) => {
+    if (!user?.id || !hasDraft) return
 
     setSubmitting(true)
     try {
-      const text = [title.trim(), details.trim()].filter(Boolean).join('\n')
-      const response = await fetch('/api/notes', {
+      const response = await fetch('/api/leaks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: user.id,
-          text,
-          type: 'leak',
-          zone: 'leaks',
+          title: title.trim() || 'Новый лик',
+          description: details.trim() || null,
+          severity,
+          source: 'manual',
         }),
       })
 
@@ -160,36 +208,66 @@ export function LeaksScreen() {
         throw response
       }
 
-      const noteTitle = title.trim() || extractTitle(text)
-      const noteMessage = details.trim() || text
+      const data = await response.json()
+      const createdLeak = data.leak as LeakEntity
 
-      showSuccessToast(prepareAnalysis ? 'Лик сохранён и готов к разбору' : 'Лик сохранён в inbox')
-
+      setLeaks((current) => [createdLeak, ...current])
       setTitle('')
       setDetails('')
       setSeverity('warning')
       setActiveTab('inbox')
+      setStatusFilter('all')
 
       if (prepareAnalysis) {
         setSelectedDraft({
-          leakType: noteTitle,
-          leakMessage: noteMessage,
-          severity,
+          leakType: createdLeak.title,
+          leakMessage: buildLeakMessage(createdLeak),
+          severity: createdLeak.severity,
         })
       }
 
-      await loadData(false)
+      showSuccessToast(prepareAnalysis ? 'Лик сохранён и готов к разбору' : 'Лик сохранён')
     } catch (error) {
-      showErrorToast(error, 'create leak note')
+      showErrorToast(error, 'create leak')
     } finally {
       setSubmitting(false)
     }
   }
 
-  const selectedDraftLabel = useMemo(() => {
-    if (!selectedDraft) return null
-    return extractTitle(selectedDraft.leakType)
-  }, [selectedDraft])
+  const updateLeakStatus = async (leakId: string, status: Exclude<LeakStatusFilter, 'all'>) => {
+    if (!user?.id || updatingLeakId) return
+
+    setUpdatingLeakId(leakId)
+    try {
+      const response = await fetch('/api/leaks', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          id: leakId,
+          status,
+        }),
+      })
+
+      if (!response.ok) {
+        throw response
+      }
+
+      const data = await response.json()
+      const updatedLeak = data.leak as LeakEntity
+
+      setLeaks((current) =>
+        current.map((leak) => (leak.id === leakId ? updatedLeak : leak)),
+      )
+      showSuccessToast('Статус лика обновлён')
+    } catch (error) {
+      showErrorToast(error, 'update leak status')
+    } finally {
+      setUpdatingLeakId(null)
+    }
+  }
+
+  const selectedDraftLabel = useMemo(() => selectedDraft?.leakType ?? null, [selectedDraft])
 
   if (!user?.id) {
     return (
@@ -247,7 +325,7 @@ export function LeaksScreen() {
         </CardHeader>
         <CardContent className="pt-0">
           <div className="flex flex-wrap gap-2">
-            <Badge className="bg-white/10 text-white/80 border-white/10">Inbox: {notes.length}</Badge>
+            <Badge className="bg-white/10 text-white/80 border-white/10">Inbox: {leakCounts.all}</Badge>
             <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">Signals: {signals.length}</Badge>
             <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">Patterns: {patterns.length}</Badge>
           </div>
@@ -261,7 +339,7 @@ export function LeaksScreen() {
             Быстрый capture
           </CardTitle>
           <CardDescription className="text-white/55">
-            Сохрани мысль сейчас, а разбор сделай сразу или позже.
+            Теперь это уже отдельная сущность leak-inbox, а не временная заметка.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -301,7 +379,7 @@ export function LeaksScreen() {
 
           <div className="flex flex-wrap gap-2">
             <Button
-              onClick={() => createLeakNote(true)}
+              onClick={() => createLeak(true)}
               disabled={!hasDraft || submitting}
               className="bg-indigo-600 hover:bg-indigo-500 text-white"
             >
@@ -309,7 +387,7 @@ export function LeaksScreen() {
             </Button>
             <Button
               variant="outline"
-              onClick={() => createLeakNote(false)}
+              onClick={() => createLeak(false)}
               disabled={!hasDraft || submitting}
               className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
             >
@@ -350,48 +428,116 @@ export function LeaksScreen() {
             </Card>
           )}
 
-          {notes.length === 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {STATUS_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setStatusFilter(option.id)}
+                className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                  statusFilter === option.id
+                    ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
+                    : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                }`}
+              >
+                {option.label} ({leakCounts[option.id]})
+              </button>
+            ))}
+          </div>
+
+          {filteredLeaks.length === 0 ? (
             <Card style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
               <CardContent className="pt-6">
                 <p className="text-sm text-white/60">
-                  Здесь будут лежать сохранённые лики и наблюдения, которые можно разобрать позже.
+                  Здесь будут лежать сохранённые лики. У них теперь есть собственный lifecycle: новый, в работе, решён, архив.
                 </p>
               </CardContent>
             </Card>
           ) : (
-            notes.map((note) => {
-              const noteTitle = extractTitle(note.text)
-              const notePreview = extractPreview(note.text)
-
-              return (
-                <Card key={note.id} style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  <CardContent className="pt-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-white font-medium">{noteTitle}</div>
-                        <div className="text-xs text-white/35 mt-1">{formatDate(note.createdAt)}</div>
-                        <p className="text-sm text-white/70 mt-2">{notePreview}</p>
+            filteredLeaks.map((leak) => (
+              <Card key={leak.id} style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <CardContent className="pt-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-white font-medium">{leak.title}</div>
+                      <div className="text-xs text-white/35 mt-1">
+                        Создан: {formatDate(leak.createdAt)}
+                        {leak.resolvedAt ? ` • Решён: ${formatDate(leak.resolvedAt)}` : ''}
                       </div>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Badge className={STATUS_STYLES[leak.status]}>{STATUS_LABELS[leak.status]}</Badge>
+                      <Badge className={SEVERITY_STYLES[leak.severity]}>{leak.severity}</Badge>
+                    </div>
+                  </div>
+
+                  {leak.description && (
+                    <p className="text-sm text-white/72 whitespace-pre-wrap">{leak.description}</p>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    {leak.status === 'new' && (
                       <Button
-                        variant="outline"
                         size="sm"
-                        onClick={() => {
-                          setSelectedDraft({
-                            leakType: noteTitle,
-                            leakMessage: note.text,
-                            severity: 'warning',
-                          })
-                          setActiveTab('inbox')
-                        }}
+                        variant="outline"
+                        onClick={() => updateLeakStatus(leak.id, 'in_progress')}
+                        disabled={updatingLeakId === leak.id}
                         className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
                       >
-                        Разобрать
+                        В работу
                       </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })
+                    )}
+                    {leak.status !== 'resolved' && leak.status !== 'archived' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => updateLeakStatus(leak.id, 'resolved')}
+                        disabled={updatingLeakId === leak.id}
+                        className="border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-200"
+                      >
+                        Решено
+                      </Button>
+                    )}
+                    {leak.status !== 'archived' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => updateLeakStatus(leak.id, 'archived')}
+                        disabled={updatingLeakId === leak.id}
+                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                      >
+                        В архив
+                      </Button>
+                    )}
+                    {(leak.status === 'resolved' || leak.status === 'archived') && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => updateLeakStatus(leak.id, 'in_progress')}
+                        disabled={updatingLeakId === leak.id}
+                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                      >
+                        Вернуть в работу
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setSelectedDraft({
+                          leakType: leak.title,
+                          leakMessage: buildLeakMessage(leak),
+                          severity: leak.severity,
+                        })
+                      }
+                      className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
+                    >
+                      Разобрать
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
           )}
         </TabsContent>
 

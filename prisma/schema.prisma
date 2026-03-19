@@ -80,6 +80,7 @@ model AppUser {
   achievements          Achievement[]
   chains                Chain[]
   tasks                 Task[]
+  leaks                 Leak[]
   notes                 Note[]
   contentItems          ContentItem[]
   settings              UserSettings?
@@ -630,6 +631,28 @@ model Note {
   links NoteLink[]
 
   @@map("notes")
+}
+
+model Leak {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  title           String
+  description     String?
+  source          String    @default("manual") // manual, signal, imported, ai_suggested
+  status          String    @default("new") // new, in_progress, resolved, archived
+  severity        String    @default("warning") // info, warning, critical
+  sphere          String?
+  contextSnapshot Json?     @map("context_snapshot")
+  sourceNoteId    String?   @unique @map("source_note_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  resolvedAt      DateTime? @map("resolved_at") @db.Timestamptz
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([userId, updatedAt])
+  @@map("leaks")
 }
 
 /// Link between note and other entities (task, ritual, chain, content)
