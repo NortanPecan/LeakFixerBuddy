@@ -39,6 +39,31 @@ interface LeakActionLink {
   updatedAt: string
 }
 
+interface LeakPlanAction {
+  id: string
+  kind: 'task' | 'ritual' | 'skill' | 'trait' | 'challenge' | 'content'
+  title: string
+  description: string | null
+  payload?: Record<string, unknown> | null
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+interface LeakSolutionPlan {
+  id: string
+  leakId: string
+  mode: 'minimum' | 'base' | 'maximum'
+  summary: string
+  confidenceLabel: 'low' | 'medium' | 'high'
+  confidenceReason: string | null
+  isSelected: boolean
+  source: string
+  createdAt: string
+  updatedAt: string
+  actions: LeakPlanAction[]
+}
+
 interface LeakHint {
   type: string
   severity: 'info' | 'warning' | 'critical'
@@ -100,6 +125,33 @@ const SEVERITY_STYLES: Record<'info' | 'warning' | 'critical', string> = {
   critical: 'bg-rose-500/10 text-rose-300 border-rose-500/20',
 }
 
+const PLAN_MODE_LABELS: Record<LeakSolutionPlan['mode'], string> = {
+  minimum: 'Минимум',
+  base: 'База',
+  maximum: 'Максимум',
+}
+
+const PLAN_MODE_STYLES: Record<LeakSolutionPlan['mode'], string> = {
+  minimum: 'bg-sky-500/10 text-sky-300 border-sky-500/20',
+  base: 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20',
+  maximum: 'bg-fuchsia-500/10 text-fuchsia-200 border-fuchsia-500/20',
+}
+
+const PLAN_CONFIDENCE_STYLES: Record<LeakSolutionPlan['confidenceLabel'], string> = {
+  low: 'bg-rose-500/10 text-rose-200 border-rose-500/20',
+  medium: 'bg-amber-500/10 text-amber-200 border-amber-500/20',
+  high: 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20',
+}
+
+const PLAN_KIND_LABELS: Record<LeakPlanAction['kind'], string> = {
+  task: 'Задача',
+  ritual: 'Ритуал',
+  skill: 'Навык',
+  trait: 'Качество',
+  challenge: 'Челлендж',
+  content: 'Материал',
+}
+
 function getCurrentMonday(): string {
   const today = new Date()
   const day = today.getDay()
@@ -136,6 +188,17 @@ function normalizeLeak(rawLeak: LeakEntity): LeakEntity {
         ? rawLeak.contextSnapshot
         : null,
   }
+}
+
+function normalizePlan(rawPlan: LeakSolutionPlan): LeakSolutionPlan {
+  return {
+    ...rawPlan,
+    actions: Array.isArray(rawPlan.actions) ? rawPlan.actions : [],
+  }
+}
+
+function normalizePlans(rawPlans: LeakSolutionPlan[]) {
+  return Array.isArray(rawPlans) ? rawPlans.map(normalizePlan) : []
 }
 
 function getActionScreen(entityType: LeakActionLink['entityType']): Screen {
@@ -219,6 +282,10 @@ export function LeaksScreen() {
   const [actionLeakId, setActionLeakId] = useState<string | null>(null)
   const [savingSignalKey, setSavingSignalKey] = useState<string | null>(null)
   const [expandedLeakId, setExpandedLeakId] = useState<string | null>(null)
+  const [plansByLeak, setPlansByLeak] = useState<Record<string, LeakSolutionPlan[]>>({})
+  const [loadingPlansLeakId, setLoadingPlansLeakId] = useState<string | null>(null)
+  const [generatingPlansLeakId, setGeneratingPlansLeakId] = useState<string | null>(null)
+  const [selectingPlanLeakId, setSelectingPlanLeakId] = useState<string | null>(null)
 
   const hasDraft = title.trim().length > 0 || details.trim().length > 0
 
@@ -392,6 +459,96 @@ export function LeaksScreen() {
 
   const hasActionType = (leak: LeakEntity, entityType: LeakActionLink['entityType']) =>
     leak.actions?.some((action) => action.entityType === entityType)
+
+  const loadPlansForLeak = async (leakId: string) => {
+    if (!user?.id) return
+
+    setLoadingPlansLeakId(leakId)
+    try {
+      const response = await fetch(`/api/leaks/${leakId}/plans?userId=${user.id}`, {
+        cache: 'no-store',
+      })
+
+      if (!response.ok) throw response
+
+      const data = await response.json()
+      setPlansByLeak((current) => ({
+        ...current,
+        [leakId]: normalizePlans(data.plans || []),
+      }))
+    } catch (error) {
+      showErrorToast(error, 'load leak plans')
+    } finally {
+      setLoadingPlansLeakId(null)
+    }
+  }
+
+  const generatePlansForLeak = async (leakId: string, regenerate = false) => {
+    if (!user?.id) return
+
+    setGeneratingPlansLeakId(leakId)
+    try {
+      const response = await fetch(`/api/leaks/${leakId}/plans`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          regenerate,
+        }),
+      })
+
+      if (!response.ok) throw response
+
+      const data = await response.json()
+      setPlansByLeak((current) => ({
+        ...current,
+        [leakId]: normalizePlans(data.plans || []),
+      }))
+      showSuccessToast(regenerate ? 'Планы пересобраны' : 'Планы для лика готовы')
+    } catch (error) {
+      showErrorToast(error, 'generate leak plans')
+    } finally {
+      setGeneratingPlansLeakId(null)
+    }
+  }
+
+  const selectPlanMode = async (leakId: string, mode: LeakSolutionPlan['mode']) => {
+    if (!user?.id) return
+
+    setSelectingPlanLeakId(leakId)
+    try {
+      const response = await fetch(`/api/leaks/${leakId}/plans`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          mode,
+        }),
+      })
+
+      if (!response.ok) throw response
+
+      const data = await response.json()
+      setPlansByLeak((current) => ({
+        ...current,
+        [leakId]: normalizePlans(data.plans || []),
+      }))
+      showSuccessToast(`Выбран режим: ${PLAN_MODE_LABELS[mode]}`)
+    } catch (error) {
+      showErrorToast(error, 'select leak plan')
+    } finally {
+      setSelectingPlanLeakId(null)
+    }
+  }
+
+  const toggleLeakDetails = async (leakId: string) => {
+    const willOpen = expandedLeakId !== leakId
+    setExpandedLeakId(willOpen ? leakId : null)
+
+    if (willOpen && !plansByLeak[leakId] && loadingPlansLeakId !== leakId) {
+      await loadPlansForLeak(leakId)
+    }
+  }
 
   const convertLeakToTask = async (leak: LeakEntity) => {
     if (!user?.id || actionLeakId) return
@@ -806,7 +963,7 @@ export function LeaksScreen() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => setExpandedLeakId((current) => (current === leak.id ? null : leak.id))}
+                      onClick={() => toggleLeakDetails(leak.id)}
                       className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
                     >
                       {expandedLeakId === leak.id ? 'Скрыть детали' : 'Детали'}
@@ -920,6 +1077,110 @@ export function LeaksScreen() {
                               </div>
                             ))}
                           </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-xs uppercase tracking-wide text-white/40">
+                            Планы решения
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => generatePlansForLeak(leak.id, false)}
+                              disabled={generatingPlansLeakId === leak.id}
+                              className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
+                            >
+                              {generatingPlansLeakId === leak.id ? 'Собираю...' : 'Сделать 3 плана'}
+                            </Button>
+                            {plansByLeak[leak.id]?.length > 0 && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => generatePlansForLeak(leak.id, true)}
+                                disabled={generatingPlansLeakId === leak.id}
+                                className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                              >
+                                Пересобрать
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+
+                        {loadingPlansLeakId === leak.id ? (
+                          <div className="space-y-2">
+                            <Skeleton className="h-20 w-full rounded-2xl" />
+                            <Skeleton className="h-20 w-full rounded-2xl" />
+                          </div>
+                        ) : plansByLeak[leak.id]?.length ? (
+                          <div className="space-y-3">
+                            {plansByLeak[leak.id].map((plan) => (
+                              <div
+                                key={plan.id}
+                                className={`rounded-2xl border p-3 ${
+                                  plan.isSelected
+                                    ? 'border-emerald-500/30 bg-emerald-500/10'
+                                    : 'border-white/10 bg-white/[0.03]'
+                                }`}
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <div className="space-y-2">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge className={PLAN_MODE_STYLES[plan.mode]}>
+                                        {PLAN_MODE_LABELS[plan.mode]}
+                                      </Badge>
+                                      <Badge className={PLAN_CONFIDENCE_STYLES[plan.confidenceLabel]}>
+                                        Шанс: {plan.confidenceLabel}
+                                      </Badge>
+                                      {plan.isSelected && (
+                                        <Badge className="bg-emerald-500/15 text-emerald-200 border-emerald-500/20">
+                                          Выбран
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <p className="text-sm text-white/85">{plan.summary}</p>
+                                    {plan.confidenceReason && (
+                                      <p className="text-xs text-white/50">{plan.confidenceReason}</p>
+                                    )}
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => selectPlanMode(leak.id, plan.mode)}
+                                    disabled={selectingPlanLeakId === leak.id || plan.isSelected}
+                                    className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                  >
+                                    {plan.isSelected ? 'Текущий режим' : 'Выбрать'}
+                                  </Button>
+                                </div>
+
+                                <div className="mt-3 space-y-2">
+                                  {plan.actions.map((action) => (
+                                    <div
+                                      key={action.id}
+                                      className="rounded-xl border border-white/10 bg-black/10 px-3 py-2"
+                                    >
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <Badge variant="outline" className="border-white/10 text-white/55">
+                                          {PLAN_KIND_LABELS[action.kind]}
+                                        </Badge>
+                                        <div className="text-sm text-white">{action.title}</div>
+                                      </div>
+                                      {action.description && (
+                                        <p className="mt-1 text-xs text-white/55">{action.description}</p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-white/55">
+                            Здесь появятся режимы `minimum / base / maximum`, чтобы выбрать реалистичный план под текущую жизнь.
+                          </p>
                         )}
                       </div>
                     </div>

@@ -434,3 +434,9 @@
 - Conversion buttons are protected from duplicate creation for the same leak/action type.
 - Added SQL migration:
   - `prisma/migrations/20260320_leak_action_links.sql`
+- Phase 3 foundation started:
+  - added `LeakSolutionPlan` and `LeakSolutionAction`
+  - added `/api/leaks/[leakId]/plans`
+  - `LeaksScreen` can now build and select `minimum / base / maximum` plans
+  - added SQL migration:
+    - `prisma/migrations/20260320_leak_solution_plans.sql`

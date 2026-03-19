@@ -1,0 +1,299 @@
+import { db } from '@/lib/db'
+import { callAI } from '@/lib/ai-provider'
+
+export type LeakPlanMode = 'minimum' | 'base' | 'maximum'
+export type LeakPlanConfidence = 'low' | 'medium' | 'high'
+export type LeakPlanActionKind = 'task' | 'ritual' | 'skill' | 'trait' | 'challenge' | 'content'
+
+export interface LeakPlanActionDraft {
+  kind: LeakPlanActionKind
+  title: string
+  description?: string | null
+  payload?: Record<string, unknown> | null
+}
+
+export interface LeakPlanDraft {
+  mode: LeakPlanMode
+  summary: string
+  confidenceLabel: LeakPlanConfidence
+  confidenceReason: string
+  actions: LeakPlanActionDraft[]
+}
+
+interface LeakPlanInput {
+  userId: string
+  leak: {
+    id: string
+    title: string
+    description: string | null
+    severity: string
+    sphere: string | null
+    contextSnapshot?: unknown
+  }
+}
+
+const PLAN_MODES: LeakPlanMode[] = ['minimum', 'base', 'maximum']
+const ACTION_KINDS: LeakPlanActionKind[] = ['task', 'ritual', 'skill', 'trait', 'challenge', 'content']
+const CONFIDENCE_LABELS: LeakPlanConfidence[] = ['low', 'medium', 'high']
+
+const SYSTEM_PROMPT = `Ты строишь 3 реалистичных плана решения лика для LeakFixer Buddy.
+
+Ответь только JSON без markdown:
+{
+  "plans": [
+    {
+      "mode": "minimum",
+      "summary": "Короткое объяснение режима",
+      "confidenceLabel": "medium",
+      "confidenceReason": "Почему шанс именно такой",
+      "actions": [
+        {
+          "kind": "task",
+          "title": "Конкретное действие",
+          "description": "Краткое пояснение",
+          "payload": { "suggestedDeadline": "today" }
+        }
+      ]
+    }
+  ]
+}
+
+Правила:
+- Всегда верни 3 режима: minimum, base, maximum.
+- minimum должен быть реально выполним даже в тяжёлой неделе.
+- base должен быть нормальным рабочим планом.
+- maximum должен быть сильным, но всё ещё реалистичным.
+- В каждом режиме дай от 2 до 5 действий.
+- kind используй только из списка: task, ritual, skill, trait, challenge, content.
+- Пиши по-русски.
+- Не обещай 100% результат.
+- Учитывай контекст пользователя и уже сработавшие решения, если они есть.`
+
+function parseJsonBlock(raw: string): unknown {
+  const match = raw.match(/```json\s*([\s\S]+?)\s*```/) ?? raw.match(/(\{[\s\S]+\})/)
+  if (!match) return null
+
+  try {
+    return JSON.parse(match[1]) as unknown
+  } catch {
+    return null
+  }
+}
+
+function normalizeAction(rawAction: unknown): LeakPlanActionDraft | null {
+  if (!rawAction || typeof rawAction !== 'object') return null
+
+  const candidate = rawAction as Record<string, unknown>
+  const rawKind = typeof candidate.kind === 'string' ? candidate.kind : 'task'
+  const kind = ACTION_KINDS.includes(rawKind as LeakPlanActionKind)
+    ? (rawKind as LeakPlanActionKind)
+    : 'task'
+
+  const title = typeof candidate.title === 'string' ? candidate.title.trim() : ''
+  if (!title) return null
+
+  const description = typeof candidate.description === 'string'
+    ? candidate.description.trim()
+    : null
+
+  const payload =
+    candidate.payload && typeof candidate.payload === 'object' && !Array.isArray(candidate.payload)
+      ? (candidate.payload as Record<string, unknown>)
+      : null
+
+  return {
+    kind,
+    title,
+    description,
+    payload,
+  }
+}
+
+function normalizePlan(rawPlan: unknown, fallbackMode: LeakPlanMode): LeakPlanDraft {
+  const candidate = rawPlan && typeof rawPlan === 'object' ? (rawPlan as Record<string, unknown>) : {}
+  const rawMode = typeof candidate.mode === 'string' ? candidate.mode : fallbackMode
+  const mode = PLAN_MODES.includes(rawMode as LeakPlanMode)
+    ? (rawMode as LeakPlanMode)
+    : fallbackMode
+
+  const rawConfidence = typeof candidate.confidenceLabel === 'string'
+    ? candidate.confidenceLabel
+    : 'medium'
+  const confidenceLabel = CONFIDENCE_LABELS.includes(rawConfidence as LeakPlanConfidence)
+    ? (rawConfidence as LeakPlanConfidence)
+    : 'medium'
+
+  const actions = Array.isArray(candidate.actions)
+    ? candidate.actions
+        .map(normalizeAction)
+        .filter((item): item is LeakPlanActionDraft => Boolean(item))
+        .slice(0, 5)
+    : []
+
+  return {
+    mode,
+    summary:
+      typeof candidate.summary === 'string' && candidate.summary.trim().length > 0
+        ? candidate.summary.trim()
+        : `Режим ${mode}`,
+    confidenceLabel,
+    confidenceReason:
+      typeof candidate.confidenceReason === 'string' && candidate.confidenceReason.trim().length > 0
+        ? candidate.confidenceReason.trim()
+        : 'Оценка основана на общем паттерне и текущем контексте пользователя.',
+    actions,
+  }
+}
+
+function buildFallbackPlans(leak: LeakPlanInput['leak']): LeakPlanDraft[] {
+  const title = leak.title.trim()
+  const detail = leak.description?.trim() || `Наблюдение: ${title}`
+  const sphere = leak.sphere ? `Сфера: ${leak.sphere}.` : ''
+
+  return [
+    {
+      mode: 'minimum',
+      summary: 'Минимальный режим, чтобы начать исправление без перегруза.',
+      confidenceLabel: 'medium',
+      confidenceReason: 'Подходит, когда нужна очень лёгкая точка входа и важна стабильность.',
+      actions: [
+        {
+          kind: 'task',
+          title: `Зафиксировать один триггер для "${title}"`,
+          description: `${detail}. ${sphere}`.trim(),
+          payload: { suggestedDeadline: 'today' },
+        },
+        {
+          kind: 'task',
+          title: `Сделать одно маленькое действие против "${title}"`,
+          description: 'Выбери действие, которое займёт до 10 минут и не требует идеальных условий.',
+          payload: { suggestedDeadline: 'this_week' },
+        },
+      ],
+    },
+    {
+      mode: 'base',
+      summary: 'Рабочий режим с регулярным действием и одним контролем результата.',
+      confidenceLabel: 'high',
+      confidenceReason: 'Хороший баланс между реалистичностью и шансом увидеть заметный сдвиг.',
+      actions: [
+        {
+          kind: 'task',
+          title: `Разобрать причину "${title}" и записать 2 наблюдения`,
+          description: detail,
+          payload: { suggestedDeadline: 'today' },
+        },
+        {
+          kind: 'ritual',
+          title: `Добавить короткий ритуал против "${title}"`,
+          description: 'Повторяй ежедневно или в ключевые дни, когда риск лика выше.',
+          payload: { days: [1, 2, 3, 4, 5, 6, 7] },
+        },
+        {
+          kind: 'task',
+          title: `Проверить прогресс по "${title}" через 7 дней`,
+          description: 'Сравни, стало ли меньше повторений и что реально помогло.',
+          payload: { suggestedDeadline: 'next_week' },
+        },
+      ],
+    },
+    {
+      mode: 'maximum',
+      summary: 'Сильный режим с ритуалом, контролем среды и дополнительным вызовом.',
+      confidenceLabel: 'medium',
+      confidenceReason: 'Может дать лучший эффект, если у пользователя есть ресурс удерживать более насыщенный план.',
+      actions: [
+        {
+          kind: 'task',
+          title: `Убрать 1 главный триггер для "${title}"`,
+          description: 'Измени окружение или расписание так, чтобы лик запускался реже.',
+          payload: { suggestedDeadline: 'this_week' },
+        },
+        {
+          kind: 'ritual',
+          title: `Сделать ежедневный ритуал поддержки против "${title}"`,
+          description: 'Ритуал должен быть конкретным и легко отмечаться в приложении.',
+          payload: { days: [1, 2, 3, 4, 5, 6, 7] },
+        },
+        {
+          kind: 'challenge',
+          title: `Запустить челлендж по теме "${title}"`,
+          description: 'Нужен короткий период с понятным критерием победы.',
+          payload: { suggestedDurationDays: 14 },
+        },
+        {
+          kind: 'content',
+          title: `Подобрать один материал по теме "${title}"`,
+          description: 'Что прочитать или посмотреть, чтобы усилить план действия.',
+          payload: { contentType: 'article' },
+        },
+      ],
+    },
+  ]
+}
+
+export async function generateLeakPlans(input: LeakPlanInput): Promise<{
+  plans: LeakPlanDraft[]
+  provider: 'groq' | 'gemini' | 'fallback'
+}> {
+  const { userId, leak } = input
+
+  const existingPattern = await db.userAiPattern.findUnique({
+    where: { userId_leakType: { userId, leakType: leak.title } },
+    select: {
+      whatWorked: true,
+      triedSolutions: true,
+    },
+  })
+
+  const whatWorked = Array.isArray(existingPattern?.whatWorked)
+    ? (existingPattern?.whatWorked as string[])
+    : []
+  const triedSolutions = Array.isArray(existingPattern?.triedSolutions)
+    ? (existingPattern?.triedSolutions as Array<{ text?: string }>).map((item) => item.text).filter(Boolean)
+    : []
+
+  const userMessage = [
+    `Лик: ${leak.title}`,
+    leak.description ? `Описание: ${leak.description}` : null,
+    `Severity: ${leak.severity}`,
+    leak.sphere ? `Сфера: ${leak.sphere}` : null,
+    leak.contextSnapshot ? `Контекст: ${JSON.stringify(leak.contextSnapshot)}` : null,
+    whatWorked.length > 0 ? `Что уже срабатывало: ${whatWorked.join('; ')}` : null,
+    triedSolutions.length > 0 ? `Что уже пробовали: ${triedSolutions.join('; ')}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  try {
+    const aiResult = await callAI(SYSTEM_PROMPT, userMessage, {
+      userId,
+      callType: 'leak-plan',
+      leakType: leak.title,
+    })
+
+    const parsed = parseJsonBlock(aiResult.text) as { plans?: unknown[] } | null
+    const rawPlans = Array.isArray(parsed?.plans) ? parsed?.plans : []
+
+    const byMode = new Map<LeakPlanMode, LeakPlanDraft>()
+    PLAN_MODES.forEach((mode, index) => {
+      const normalized = normalizePlan(rawPlans[index], mode)
+      if (normalized.actions.length === 0) {
+        const fallback = buildFallbackPlans(leak).find((item) => item.mode === mode)
+        byMode.set(mode, fallback || normalized)
+      } else {
+        byMode.set(mode, normalized)
+      }
+    })
+
+    return {
+      plans: PLAN_MODES.map((mode) => byMode.get(mode) || buildFallbackPlans(leak).find((item) => item.mode === mode)!).filter(Boolean),
+      provider: aiResult.provider,
+    }
+  } catch {
+    return {
+      plans: buildFallbackPlans(leak),
+      provider: 'fallback',
+    }
+  }
+}

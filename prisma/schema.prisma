@@ -650,6 +650,7 @@ model Leak {
 
   user    AppUser           @relation(fields: [userId], references: [id], onDelete: Cascade)
   actions LeakActionLink[]
+  plans   LeakSolutionPlan[]
 
   @@index([userId, status])
   @@index([userId, updatedAt])
@@ -672,6 +673,43 @@ model LeakActionLink {
   @@unique([leakId, entityType, entityId])
   @@index([leakId, createdAt])
   @@map("leak_action_links")
+}
+
+model LeakSolutionPlan {
+  id               String    @id @default(uuid()) @db.Uuid
+  leakId           String    @map("leak_id") @db.Uuid
+  mode             String
+  summary          String
+  confidenceLabel  String    @default("medium") @map("confidence_label")
+  confidenceReason String?   @map("confidence_reason")
+  isSelected       Boolean   @default(false) @map("is_selected")
+  source           String    @default("ai")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  leak    Leak                 @relation(fields: [leakId], references: [id], onDelete: Cascade)
+  actions LeakSolutionAction[]
+
+  @@unique([leakId, mode])
+  @@index([leakId, isSelected])
+  @@map("leak_solution_plans")
+}
+
+model LeakSolutionAction {
+  id          String    @id @default(uuid()) @db.Uuid
+  planId      String    @map("plan_id") @db.Uuid
+  kind        String
+  title       String
+  description String?
+  payload     Json?
+  sortOrder   Int       @default(0) @map("sort_order")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  plan LeakSolutionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, sortOrder])
+  @@map("leak_solution_actions")
 }
 
 /// Link between note and other entities (task, ritual, chain, content)
