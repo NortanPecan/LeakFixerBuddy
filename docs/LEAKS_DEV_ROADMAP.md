@@ -448,3 +448,4 @@
   - leak action link validation now supports `content`, `skill`, and `trait`
   - feedback now updates `whatWorked` in both directions, so old successes do not stay stuck after a downgrade
   - `LeaksScreen` updates the Patterns tab immediately after saving action feedback
+  - patterns are no longer a dead end: a learned pattern can now be turned into an `ai_suggested` leak

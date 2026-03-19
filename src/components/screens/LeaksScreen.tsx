@@ -320,6 +320,7 @@ export function LeaksScreen() {
   const [selectingPlanLeakId, setSelectingPlanLeakId] = useState<string | null>(null)
   const [applyingPlanLeakId, setApplyingPlanLeakId] = useState<string | null>(null)
   const [savingFeedbackActionId, setSavingFeedbackActionId] = useState<string | null>(null)
+  const [savingPatternLeakType, setSavingPatternLeakType] = useState<string | null>(null)
 
   const hasDraft = title.trim().length > 0 || details.trim().length > 0
 
@@ -821,6 +822,57 @@ export function LeaksScreen() {
       showErrorToast(error, 'save signal as leak')
     } finally {
       setSavingSignalKey(null)
+    }
+  }
+
+  const createLeakFromPattern = async (pattern: LeakPattern) => {
+    if (!user?.id || savingPatternLeakType) return
+
+    const normalizedLeakType = pattern.leakType.trim().toLowerCase()
+    const existingLeak = leaks.find((leak) =>
+      leak.title.trim().toLowerCase() === normalizedLeakType &&
+      leak.status !== 'resolved' &&
+      leak.status !== 'archived',
+    )
+
+    if (existingLeak) {
+      setActiveTab('inbox')
+      setStatusFilter('all')
+      setExpandedLeakId(existingLeak.id)
+      showSuccessToast('Для этого паттерна уже есть активный leak')
+      return
+    }
+
+    setSavingPatternLeakType(pattern.leakType)
+    try {
+      const response = await fetch('/api/leaks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          title: pattern.leakType,
+          source: 'ai_suggested',
+          severity: 'warning',
+          contextSnapshot: {
+            analysisCount: pattern.analysisCount,
+            whatWorked: pattern.whatWorked,
+          },
+        }),
+      })
+
+      if (!response.ok) throw response
+
+      const data = await response.json()
+      const createdLeak = normalizeLeak(data.leak as LeakEntity)
+      setLeaks((current) => [createdLeak, ...current])
+      setActiveTab('inbox')
+      setStatusFilter('all')
+      setExpandedLeakId(createdLeak.id)
+      showSuccessToast('Паттерн сохранён как leak')
+    } catch (error) {
+      showErrorToast(error, 'save pattern as leak')
+    } finally {
+      setSavingPatternLeakType(null)
     }
   }
 
@@ -1511,6 +1563,18 @@ export function LeaksScreen() {
                     <Badge className="bg-white/10 text-white/75 border-white/10">
                       Анализов: {pattern.analysisCount}
                     </Badge>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => createLeakFromPattern(pattern)}
+                      disabled={savingPatternLeakType === pattern.leakType}
+                      className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
+                    >
+                      {savingPatternLeakType === pattern.leakType ? 'Сохраняю...' : 'В leak'}
+                    </Button>
                   </div>
 
                   {pattern.whatWorked.length > 0 ? (
