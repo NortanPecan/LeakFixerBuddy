@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateTelegramUser, verifyTelegramInitData } from '@/lib/auth-telegram'
-import { supabaseAuth } from '@/lib/auth-telegram'
 import { db } from '@/lib/db'
+
+function isDemoModeEnabled() {
+  return process.env.DEMO_MODE === 'true'
+}
 
 /**
  * POST /api/auth/telegram
@@ -15,6 +18,13 @@ export async function POST(request: NextRequest) {
     let telegramUser
 
     if (isDemo) {
+      if (!isDemoModeEnabled()) {
+        return NextResponse.json(
+          { error: 'Demo mode is disabled' },
+          { status: 403 }
+        )
+      }
+
       // Demo mode - create fake Telegram user
       telegramUser = {
         id: 9000000001,
@@ -143,11 +153,18 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const isDemo = searchParams.get('demo') === 'true'
-  
+
   if (!isDemo) {
     return NextResponse.json(
       { error: 'Use POST with Telegram initData' },
       { status: 400 }
+    )
+  }
+
+  if (!isDemoModeEnabled()) {
+    return NextResponse.json(
+      { error: 'Demo mode is disabled' },
+      { status: 403 }
     )
   }
 

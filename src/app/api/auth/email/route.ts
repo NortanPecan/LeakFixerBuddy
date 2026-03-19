@@ -3,6 +3,8 @@ import { db } from '@/lib/db'
 import { createHash, randomBytes } from 'crypto'
 import { getMoodStatusText } from '@/lib/mood-utils'
 
+const RESERVED_EMAILS = new Set(['demo@leakfixer.local', 'owner@leakfixer.local'])
+
 // Simple password hashing with SHA-256 + salt
 // For production consider bcrypt — but this avoids native dependencies for now
 function hashPassword(password: string, salt: string): string {
@@ -39,6 +41,10 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedEmail = email.toLowerCase().trim()
+
+    if (action === 'signup' && RESERVED_EMAILS.has(normalizedEmail)) {
+      return NextResponse.json({ error: 'This email is reserved' }, { status: 403 })
+    }
 
     if (action === 'signup') {
       // Check if user already exists

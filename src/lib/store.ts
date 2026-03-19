@@ -130,7 +130,7 @@ interface AppState {
   setIsInitialized: (initialized: boolean) => void
 
   // Actions
-  login: (isDemo?: boolean, isOwner?: boolean) => Promise<boolean>
+  login: (isDemo?: boolean) => Promise<boolean>
   loginWithEmail: (email: string, password: string, action: 'signin' | 'signup', name?: string) => Promise<{ ok: boolean; error?: string }>
   logout: () => void
   updateProgress: (day?: number, streak?: number, points?: number) => Promise<void>
@@ -230,14 +230,12 @@ export const useAppStore = create<AppState>()(
       setIsInitialized: (initialized) => set({ isInitialized: initialized }),
 
       // Login
-      login: async (isDemo = false, isOwner = false) => {
+      login: async (isDemo = false) => {
         set({ isLoading: true })
 
         // Save auth mode to localStorage for persistence
         if (typeof window !== 'undefined') {
-          if (isOwner) {
-            localStorage.setItem('leakfixer-auth-mode', 'owner')
-          } else if (isDemo) {
+          if (isDemo) {
             localStorage.setItem('leakfixer-auth-mode', 'demo')
           }
         }
@@ -245,12 +243,9 @@ export const useAppStore = create<AppState>()(
         try {
           let response: Response
 
-          if (isDemo || isOwner) {
-            // Demo/Owner mode - use legacy endpoint for now
-            const endpoint = isOwner ? '/api/auth?owner=true' : '/api/auth?demo=true'
-            response = await fetch(endpoint)
+          if (isDemo) {
+            response = await fetch('/api/auth?demo=true')
           } else {
-            // Telegram auth - use Supabase endpoint
             const tg = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp
             const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : ''
             const isTelegramContext = !!tg || /Telegram/i.test(userAgent)
@@ -275,11 +270,14 @@ export const useAppStore = create<AppState>()(
                 set({ isLoading: false })
                 return false
               }
-              // Local dev / browser preview — fall back to demo without persisting
-              return get().login(true)
+              if (typeof window !== 'undefined') {
+                ;(window as unknown as { __leakfixerAuthError?: string }).__leakfixerAuthError =
+                  'Открой мини-приложение через Telegram или войди по email.'
+              }
+              set({ isLoading: false })
+              return false
             }
 
-            // Use main Telegram auth endpoint (with HMAC validation)
             response = await fetch('/api/auth', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -311,7 +309,7 @@ export const useAppStore = create<AppState>()(
             profile: data.profile,
             globalState,
             isDemoMode: data.isDemo || false,
-            isOwnerMode: data.isOwner || false,
+            isOwnerMode: false,
             isInitialized: true,
             isLoading: false
           })

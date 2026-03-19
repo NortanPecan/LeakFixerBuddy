@@ -13,13 +13,7 @@ interface TelegramUser {
 }
 
 const DEMO_TELEGRAM_ID_TEXT = '9000000001'
-const DEMO_TELEGRAM_ID_BIGINT = 9000000001n
 const DEMO_EMAIL = 'demo@leakfixer.local'
-
-// Owner user constants (for testing with clean data)
-const OWNER_TELEGRAM_ID_TEXT = '9000000002'
-const OWNER_EMAIL = 'owner@leakfixer.local'
-const OWNER_USERNAME = 'liveleak_owner'
 
 function makeConfigHint() {
   return {
@@ -28,6 +22,10 @@ function makeConfigHint() {
     demoMode: process.env.DEMO_MODE ?? null,
     telegramBotToken: !!process.env.TELEGRAM_BOT_TOKEN,
   }
+}
+
+function isDemoModeEnabled() {
+  return process.env.DEMO_MODE === 'true'
 }
 
 function classifyAuthError(scope: 'auth' | 'demo', error: unknown) {
@@ -212,30 +210,28 @@ export async function POST(request: NextRequest) {
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN
 
-    let tgUser: TelegramUser
-
-    if (botToken) {
-      const validation = validateTelegramInitData(initData, botToken)
-      if (!validation.valid || !validation.user) {
-        return NextResponse.json(
-          {
-            error: 'Invalid Telegram signature',
-            hint: 'Make sure TELEGRAM_BOT_TOKEN is set correctly',
-          },
-          { status: 401 },
-        )
-      }
-      tgUser = validation.user
-    } else {
-      const params = new URLSearchParams(initData)
-      const userJson = params.get('user')
-
-      if (!userJson) {
-        return NextResponse.json({ error: 'No user data in initData' }, { status: 400 })
-      }
-
-      tgUser = JSON.parse(userJson)
+    if (!botToken) {
+      return NextResponse.json(
+        {
+          error: 'TELEGRAM_BOT_TOKEN is not configured',
+          hint: 'Set TELEGRAM_BOT_TOKEN in the server environment to enable Telegram auth',
+        },
+        { status: 500 },
+      )
     }
+
+    const validation = validateTelegramInitData(initData, botToken)
+    if (!validation.valid || !validation.user) {
+      return NextResponse.json(
+        {
+          error: 'Invalid Telegram signature',
+          hint: 'Make sure TELEGRAM_BOT_TOKEN is set correctly',
+        },
+        { status: 401 },
+      )
+    }
+
+    const tgUser = validation.user
 
     const baseUserData = normalizeTgUser(tgUser)
 
@@ -349,128 +345,31 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Demo auth for local and production fallback
- * GET /api/auth?demo=true - Login as demo user (with pre-filled data)
- * GET /api/auth?owner=true - Login as owner user (clean slate for testing)
+ * Controlled demo auth
+ * GET /api/auth?demo=true - Login as demo user only when DEMO_MODE=true
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const demo = searchParams.get('demo')
-  const owner = searchParams.get('owner')
 
-  if (demo !== 'true' && owner !== 'true') {
+  if (demo !== 'true') {
     return NextResponse.json(
       {
-        error: 'Use POST with initData, GET ?demo=true, or GET ?owner=true',
-        hint: 'In production, send Telegram WebApp initData via POST',
+        error: 'Use POST with initData',
+        hint: 'Demo auth is available only when DEMO_MODE=true',
       },
       { status: 400 },
     )
   }
 
-  // Owner login - clean slate user for testing
-  if (owner === 'true') {
-    try {
-      let user = await db.appUser.findUnique({
-        where: { email: OWNER_EMAIL },
-        include: { profile: true },
-      })
-
-      if (!user) {
-        user = await db.appUser.create({
-          data: {
-            telegramId: BigInt(OWNER_TELEGRAM_ID_TEXT),
-            telegramUsername: OWNER_USERNAME,
-            telegramFirstName: 'Owner',
-            telegramLastName: 'LeakFixer',
-            telegramLanguageCode: 'ru',
-            username: OWNER_USERNAME,
-            firstName: 'Owner',
-            lastName: 'LeakFixer',
-            language: 'ru',
-            day: 1,
-            streak: 0,
-            points: 0,
-            authProvider: 'owner',
-            email: OWNER_EMAIL,
-            lastLoginAt: new Date(),
-            profile: {
-              create: {
-                waterBaseline: 2000,
-              },
-            },
-          },
-          include: { profile: true },
-        })
-      } else {
-        user = await db.appUser.update({
-          where: { id: user.id },
-          data: { lastLoginAt: new Date() },
-          include: { profile: true },
-        })
-      }
-
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-
-      let todayState = await db.dailyState.findFirst({
-        where: { userId: user.id, date: today },
-      })
-
-      if (!todayState) {
-        todayState = await db.dailyState.create({
-          data: {
-            userId: user.id,
-            date: today,
-            mood: 5,
-            energy: 5,
-          },
-        })
-      }
-
-      const globalState = {
-        mood: todayState.mood || 5,
-        energy: todayState.energy || 5,
-        trend: 0,
-        status: getMoodStatusText(todayState.mood || 5),
-      }
-
-      return NextResponse.json({
-        success: true,
-        isOwner: true,
-        isDemo: false,
-        user: {
-          id: user.id,
-          telegramId: serializeTelegramId(user.telegramId),
-          username: user.username,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          photoUrl: user.photoUrl,
-          language: user.language,
-          day: user.day,
-          streak: user.streak,
-          points: user.points,
-          streakShieldUsedAt: user.streakShieldUsedAt?.toISOString() ?? null,
-        },
-        profile: user.profile
-          ? {
-              weight: user.profile.weight,
-              height: user.profile.height,
-              age: user.profile.age,
-              sex: user.profile.sex,
-              targetWeight: user.profile.targetWeight,
-              targetCalories: user.profile.targetCalories,
-              workProfile: user.profile.workProfile,
-              waterBaseline: user.profile.waterBaseline,
-            }
-          : null,
-        globalState,
-      })
-    } catch (error) {
-      console.error('[Owner Auth] Error:', error)
-      const mapped = classifyAuthError('demo', error)
-      return NextResponse.json(mapped, { status: mapped.status })
-    }
+  if (!isDemoModeEnabled()) {
+    return NextResponse.json(
+      {
+        error: 'Demo mode is disabled',
+        hint: 'Set DEMO_MODE=true only for controlled development access',
+      },
+      { status: 403 },
+    )
   }
 
   try {

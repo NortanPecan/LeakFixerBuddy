@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { createHmac, timingSafeEqual } from 'crypto'
 import {
   getSupabaseUrl,
   getSupabaseServiceKey,
@@ -141,20 +142,42 @@ export function verifyTelegramInitData(initData: string): {
   error?: string
 } {
   try {
-    // Parse initData
+    const botToken = process.env.TELEGRAM_BOT_TOKEN
+    if (!botToken) {
+      return { valid: false, error: 'TELEGRAM_BOT_TOKEN is not configured' }
+    }
+
     const params = new URLSearchParams(initData)
+    const hash = params.get('hash')
     const userParam = params.get('user')
-    
+
+    if (!hash) {
+      return { valid: false, error: 'No hash in initData' }
+    }
+
     if (!userParam) {
       return { valid: false, error: 'No user data in initData' }
     }
-    
+
+    params.delete('hash')
+
+    const dataCheckString = [...params.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, value]) => `${key}=${value}`)
+      .join('\n')
+
+    const secretKey = createHmac('sha256', 'WebAppData').update(botToken).digest()
+    const calculatedHash = createHmac('sha256', secretKey).update(dataCheckString).digest('hex')
+
+    const providedHash = Buffer.from(hash, 'hex')
+    const expectedHash = Buffer.from(calculatedHash, 'hex')
+
+    if (providedHash.length !== expectedHash.length || !timingSafeEqual(providedHash, expectedHash)) {
+      return { valid: false, error: 'Invalid Telegram signature' }
+    }
+
     const userData = JSON.parse(userParam)
-    
-    // In production, you should verify the hash
-    // For development/demo, we just parse the user data
-    // See: https://core.telegram.org/bots/webapps#validating-data-received-via-the-web-app
-    
+
     return {
       valid: true,
       user: {

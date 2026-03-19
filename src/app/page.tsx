@@ -200,8 +200,6 @@ export default function Home() {
           }
         }
 
-        const urlParams = new URLSearchParams(window.location.search)
-        const ownerParam = urlParams.get('owner')
         let storedMode = localStorage.getItem('leakfixer-auth-mode')
 
         // If Telegram SDK is present, we're inside a real MiniApp — never use cached demo mode
@@ -212,26 +210,17 @@ export default function Home() {
         }
 
         let isDemo = false
-        let isOwner = false
 
-        if (ownerParam === 'true') {
-          isOwner = true
-          localStorage.setItem('leakfixer-auth-mode', 'owner')
-        } else if (storedMode === 'owner') {
-          isOwner = true
-        } else if (storedMode === 'demo') {
+        if (storedMode === 'owner') {
+          localStorage.removeItem('leakfixer-auth-mode')
+          storedMode = null
+        }
+
+        if (storedMode === 'demo') {
           isDemo = true
         }
 
-        if (ownerParam) {
-          urlParams.delete('owner')
-          const newUrl = urlParams.toString()
-            ? `${window.location.pathname}?${urlParams.toString()}`
-            : window.location.pathname
-          window.history.replaceState({}, '', newUrl)
-        }
-
-        const ok = await login(isDemo, isOwner)
+        const ok = await login(isDemo)
         if (!ok && typeof window !== 'undefined') {
           const message = (window as unknown as { __leakfixerAuthError?: string }).__leakfixerAuthError
           setAuthError(message || 'Auth failed')
@@ -304,6 +293,9 @@ export default function Home() {
 function AuthErrorScreen({ message }: { message: string }) {
   const { login, setIsLoading } = useAppStore()
   const [showEmail, setShowEmail] = useState(false)
+  const canUseDemo =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
 
   if (showEmail) {
     return <EmailAuthScreen onBack={() => setShowEmail(false)} />
@@ -346,17 +338,19 @@ function AuthErrorScreen({ message }: { message: string }) {
             >
               Войти через Telegram
             </Button>
-            <Button
-              variant="outline"
-              onClick={async () => {
-                setIsLoading(true)
-                await login(true)
-                setIsLoading(false)
-              }}
-              className="rounded-xl bg-white/5 border-white/10 text-white/50 hover:bg-white/10 text-sm"
-            >
-              Демо-режим
-            </Button>
+            {canUseDemo && (
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  setIsLoading(true)
+                  await login(true)
+                  setIsLoading(false)
+                }}
+                className="rounded-xl bg-white/5 border-white/10 text-white/50 hover:bg-white/10 text-sm"
+              >
+                Демо-режим
+              </Button>
+            )}
           </div>
         </div>
       </div>
