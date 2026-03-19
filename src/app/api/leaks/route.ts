@@ -6,7 +6,7 @@ import { requireSelf } from '@/lib/server-auth'
 const LeakStatusSchema = z.enum(['new', 'in_progress', 'resolved', 'archived'])
 const LeakSeveritySchema = z.enum(['info', 'warning', 'critical'])
 const LeakSourceSchema = z.enum(['manual', 'signal', 'imported', 'ai_suggested'])
-const LeakActionEntitySchema = z.enum(['task', 'ritual', 'challenge'])
+const LeakActionEntitySchema = z.enum(['task', 'ritual', 'challenge', 'content', 'skill', 'trait'])
 
 const LeakActionLinkSchema = z.object({
   entityType: LeakActionEntitySchema,

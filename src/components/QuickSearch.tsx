@@ -23,6 +23,12 @@ interface QuickSearchProps {
   onClose: () => void
 }
 
+function buildLeakTitle(rawValue: string) {
+  const normalized = rawValue.trim().replace(/\s+/g, ' ')
+  if (normalized.length <= 72) return normalized
+  return `${normalized.slice(0, 69)}...`
+}
+
 export function QuickSearch({ open, onClose }: QuickSearchProps) {
   const { user, setScreen } = useAppStore()
   const [query, setQuery] = useState('')
@@ -46,6 +52,33 @@ export function QuickSearch({ open, onClose }: QuickSearchProps) {
   }, [setScreen, onClose])
 
   const ACTIONS: SearchAction[] = [
+    {
+      id: 'capture-leak', label: 'Записать лик', sublabel: 'что произошло?', emoji: '🧩',
+      keywords: ['лик', 'leak', 'problem', 'issue', 'pattern', 'сбой', 'проблема'],
+      type: 'quick-log',
+      handler: async () => {
+        if (!user?.id || !logValue.trim()) return
+
+        const response = await fetch('/api/leaks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            title: buildLeakTitle(logValue),
+            description: logValue.trim(),
+            source: 'manual',
+            severity: 'warning',
+          }),
+        })
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => null)
+          throw new Error(error?.error || 'Failed to save leak')
+        }
+
+        showSuccessToast('Лик сохранён')
+      },
+    },
     {
       id: 'weight', label: 'Записать вес', sublabel: 'кг', emoji: '⚖️',
       keywords: ['вес', 'kg', 'кг', 'weight'],

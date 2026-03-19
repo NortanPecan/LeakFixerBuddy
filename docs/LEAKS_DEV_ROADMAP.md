@@ -444,3 +444,5 @@
   - added SQL migration:
     - `prisma/migrations/20260320_leak_solution_plans.sql`
     - `prisma/migrations/20260320_leak_feedback.sql`
+  - QuickSearch can now create a manual leak directly through `POST /api/leaks`
+  - leak action link validation now supports `content`, `skill`, and `trait`
