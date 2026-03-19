@@ -129,6 +129,8 @@ export function LeaksScreen() {
   const [submitting, setSubmitting] = useState(false)
   const [selectedDraft, setSelectedDraft] = useState<LeakDraft | null>(null)
   const [updatingLeakId, setUpdatingLeakId] = useState<string | null>(null)
+  const [actionLeakId, setActionLeakId] = useState<string | null>(null)
+  const [savingSignalKey, setSavingSignalKey] = useState<string | null>(null)
 
   const hasDraft = title.trim().length > 0 || details.trim().length > 0
 
@@ -264,6 +266,133 @@ export function LeaksScreen() {
       showErrorToast(error, 'update leak status')
     } finally {
       setUpdatingLeakId(null)
+    }
+  }
+
+  const convertLeakToTask = async (leak: LeakEntity) => {
+    if (!user?.id || actionLeakId) return
+
+    setActionLeakId(leak.id)
+    try {
+      const response = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          text: leak.title,
+          zone: 'LeakFixer',
+          notes: buildLeakMessage(leak),
+        }),
+      })
+
+      if (!response.ok) throw response
+
+      if (leak.status === 'new') {
+        await updateLeakStatus(leak.id, 'in_progress')
+      }
+      showSuccessToast('Задача создана из лика')
+      setScreen('tasks')
+    } catch (error) {
+      showErrorToast(error, 'create task from leak')
+    } finally {
+      setActionLeakId(null)
+    }
+  }
+
+  const convertLeakToRitual = async (leak: LeakEntity) => {
+    if (!user?.id || actionLeakId) return
+
+    setActionLeakId(leak.id)
+    try {
+      const response = await fetch('/api/rituals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          title: leak.title,
+          category: 'mind',
+          type: 'regular',
+          days: [1, 2, 3, 4, 5, 6, 7],
+          timeWindow: 'any',
+          description: buildLeakMessage(leak),
+          goalShort: 'Исправить лик',
+          attributes: ['mind', 'will'],
+        }),
+      })
+
+      if (!response.ok) throw response
+
+      if (leak.status === 'new') {
+        await updateLeakStatus(leak.id, 'in_progress')
+      }
+      showSuccessToast('Ритуал создан из лика')
+      setScreen('rituals')
+    } catch (error) {
+      showErrorToast(error, 'create ritual from leak')
+    } finally {
+      setActionLeakId(null)
+    }
+  }
+
+  const convertLeakToChallenge = async (leak: LeakEntity) => {
+    if (!user?.id || actionLeakId) return
+
+    setActionLeakId(leak.id)
+    try {
+      const response = await fetch('/api/challenges/ai-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          leakType: leak.title,
+          leakMessage: buildLeakMessage(leak),
+        }),
+      })
+
+      if (!response.ok) throw response
+
+      if (leak.status === 'new') {
+        await updateLeakStatus(leak.id, 'in_progress')
+      }
+      showSuccessToast('AI-челлендж создан из лика')
+      setScreen('challenges')
+    } catch (error) {
+      showErrorToast(error, 'create challenge from leak')
+    } finally {
+      setActionLeakId(null)
+    }
+  }
+
+  const createLeakFromSignal = async (signal: LeakHint) => {
+    if (!user?.id || savingSignalKey) return
+
+    const signalKey = `${signal.type}:${signal.message}`
+    setSavingSignalKey(signalKey)
+    try {
+      const response = await fetch('/api/leaks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          title: signal.type,
+          description: signal.message,
+          source: 'signal',
+          severity: signal.severity,
+          contextSnapshot: signal.days?.length ? { days: signal.days } : null,
+        }),
+      })
+
+      if (!response.ok) throw response
+
+      const data = await response.json()
+      const createdLeak = data.leak as LeakEntity
+      setLeaks((current) => [createdLeak, ...current])
+      showSuccessToast('Сигнал сохранён как leak')
+      setActiveTab('inbox')
+    } catch (error) {
+      showErrorToast(error, 'save signal as leak')
+    } finally {
+      setSavingSignalKey(null)
     }
   }
 
@@ -534,6 +663,33 @@ export function LeaksScreen() {
                     >
                       Разобрать
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => convertLeakToTask(leak)}
+                      disabled={actionLeakId === leak.id}
+                      className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                    >
+                      В задачу
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => convertLeakToRitual(leak)}
+                      disabled={actionLeakId === leak.id}
+                      className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                    >
+                      В ритуал
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => convertLeakToChallenge(leak)}
+                      disabled={actionLeakId === leak.id}
+                      className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
+                    >
+                      AI-челлендж
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -586,6 +742,17 @@ export function LeaksScreen() {
                         ))}
                       </div>
                       <p className="text-sm text-white/75">{signal.message}</p>
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => createLeakFromSignal(signal)}
+                          disabled={savingSignalKey === `${signal.type}:${signal.message}`}
+                          className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                        >
+                          Сохранить как leak
+                        </Button>
+                      </div>
                       <LeakAiAnalysisCard
                         userId={user.id}
                         leakType={signal.type}
