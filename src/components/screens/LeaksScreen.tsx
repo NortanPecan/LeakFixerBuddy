@@ -656,10 +656,29 @@ export function LeaksScreen() {
       if (!response.ok) throw response
 
       const data = await response.json()
+      const nextPattern = data.pattern && typeof data.pattern.leakType === 'string'
+        ? {
+            leakType: data.pattern.leakType,
+            analysisCount: typeof data.pattern.analysisCount === 'number' ? data.pattern.analysisCount : 0,
+            whatWorked: Array.isArray(data.pattern.whatWorked)
+              ? data.pattern.whatWorked.filter((item: unknown): item is string => typeof item === 'string')
+              : [],
+            updatedAt:
+              typeof data.pattern.updatedAt === 'string'
+                ? data.pattern.updatedAt
+                : new Date().toISOString(),
+          } satisfies LeakPattern
+        : null
       setPlansByLeak((current) => ({
         ...current,
         [leakId]: normalizePlans(data.plans || []),
       }))
+      if (nextPattern) {
+        setPatterns((current) => {
+          const filtered = current.filter((pattern) => pattern.leakType !== nextPattern.leakType)
+          return [nextPattern, ...filtered]
+        })
+      }
       showSuccessToast('Фидбек по действию сохранён')
     } catch (error) {
       showErrorToast(error, 'save plan feedback')

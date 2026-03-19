@@ -103,7 +103,7 @@ export async function POST(
       return NextResponse.json({ error: 'Plan action not found' }, { status: 404 })
     }
 
-    await db.$transaction(async (tx) => {
+    const updatedPattern = await db.$transaction(async (tx) => {
       await tx.leakFeedback.upsert({
         where: {
           leakId_solutionActionId: {
@@ -161,11 +161,18 @@ export async function POST(
         ? ([...(existingPattern?.whatWorked as string[])] as string[])
         : []
 
-      if (result === 'worked' && !whatWorked.includes(action.title)) {
-        whatWorked.push(action.title)
+      if (result === 'worked') {
+        if (!whatWorked.includes(action.title)) {
+          whatWorked.push(action.title)
+        }
+      } else {
+        const existingWorkedIndex = whatWorked.indexOf(action.title)
+        if (existingWorkedIndex >= 0) {
+          whatWorked.splice(existingWorkedIndex, 1)
+        }
       }
 
-      await tx.userAiPattern.upsert({
+      return tx.userAiPattern.upsert({
         where: { userId_leakType: { userId, leakType: leak.title } },
         update: {
           triedSolutions,
@@ -180,11 +187,17 @@ export async function POST(
           analysisCount: existingPattern?.analysisCount ?? 1,
           lastProvider: null,
         },
+        select: {
+          leakType: true,
+          analysisCount: true,
+          whatWorked: true,
+          updatedAt: true,
+        },
       })
     })
 
     const plans = await loadPlans(leakId)
-    return NextResponse.json({ success: true, plans, result })
+    return NextResponse.json({ success: true, plans, result, pattern: updatedPattern })
   } catch (error) {
     console.error('Error saving leak feedback:', error)
     return NextResponse.json({ error: 'Failed to save leak feedback' }, { status: 500 })
