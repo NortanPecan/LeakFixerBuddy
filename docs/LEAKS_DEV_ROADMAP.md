@@ -452,3 +452,4 @@
   - selected plans can now be applied action-by-action, not only as a whole bundle
   - leaks now support fast sphere classification during capture and quick sphere reassignment in details
   - leak title and description can now be refined directly inside the leak card
+  - signals and learned patterns now reopen an existing active leak instead of creating silent duplicates

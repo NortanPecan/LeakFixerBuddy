@@ -200,6 +200,10 @@ function buildLeakMessage(leak: LeakEntity) {
   return leak.description?.trim() || leak.title
 }
 
+function normalizeLookupValue(value: string | null | undefined) {
+  return String(value || '').trim().toLowerCase()
+}
+
 function normalizeLeak(rawLeak: LeakEntity): LeakEntity {
   return {
     ...rawLeak,
@@ -589,6 +593,17 @@ export function LeaksScreen() {
   const hasActionType = (leak: LeakEntity, entityType: LeakActionLink['entityType']) =>
     leak.actions?.some((action) => action.entityType === entityType)
 
+  const findOpenLeak = (title: string, description?: string | null) =>
+    leaks.find((leak) => {
+      if (leak.status === 'resolved' || leak.status === 'archived') return false
+
+      const sameTitle = normalizeLookupValue(leak.title) === normalizeLookupValue(title)
+      if (!sameTitle) return false
+
+      if (!description) return true
+      return normalizeLookupValue(leak.description) === normalizeLookupValue(description)
+    })
+
   const loadPlansForLeak = async (leakId: string) => {
     if (!user?.id) return
 
@@ -933,6 +948,15 @@ export function LeaksScreen() {
   const createLeakFromSignal = async (signal: LeakHint) => {
     if (!user?.id || savingSignalKey) return
 
+    const existingLeak = findOpenLeak(signal.type, signal.message)
+    if (existingLeak) {
+      setActiveTab('inbox')
+      setStatusFilter('all')
+      setExpandedLeakId(existingLeak.id)
+      showSuccessToast('Этот сигнал уже сохранён в inbox')
+      return
+    }
+
     const signalKey = `${signal.type}:${signal.message}`
     setSavingSignalKey(signalKey)
     try {
@@ -967,12 +991,7 @@ export function LeaksScreen() {
   const createLeakFromPattern = async (pattern: LeakPattern) => {
     if (!user?.id || savingPatternLeakType) return
 
-    const normalizedLeakType = pattern.leakType.trim().toLowerCase()
-    const existingLeak = leaks.find((leak) =>
-      leak.title.trim().toLowerCase() === normalizedLeakType &&
-      leak.status !== 'resolved' &&
-      leak.status !== 'archived',
-    )
+    const existingLeak = findOpenLeak(pattern.leakType)
 
     if (existingLeak) {
       setActiveTab('inbox')
