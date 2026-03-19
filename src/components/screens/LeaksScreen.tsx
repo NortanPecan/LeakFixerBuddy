@@ -322,6 +322,9 @@ export function LeaksScreen() {
   const [submitting, setSubmitting] = useState(false)
   const [selectedDraft, setSelectedDraft] = useState<LeakDraft | null>(null)
   const [updatingLeakId, setUpdatingLeakId] = useState<string | null>(null)
+  const [editingLeakId, setEditingLeakId] = useState<string | null>(null)
+  const [editingLeakTitle, setEditingLeakTitle] = useState('')
+  const [editingLeakDescription, setEditingLeakDescription] = useState('')
   const [actionLeakId, setActionLeakId] = useState<string | null>(null)
   const [savingSignalKey, setSavingSignalKey] = useState<string | null>(null)
   const [expandedLeakId, setExpandedLeakId] = useState<string | null>(null)
@@ -500,6 +503,52 @@ export function LeaksScreen() {
       showSuccessToast('Сфера лика обновлена')
     } catch (error) {
       showErrorToast(error, 'update leak sphere')
+    } finally {
+      setUpdatingLeakId(null)
+    }
+  }
+
+  const startEditingLeak = (leak: LeakEntity) => {
+    setEditingLeakId(leak.id)
+    setEditingLeakTitle(leak.title)
+    setEditingLeakDescription(leak.description || '')
+    setExpandedLeakId(leak.id)
+  }
+
+  const cancelEditingLeak = () => {
+    setEditingLeakId(null)
+    setEditingLeakTitle('')
+    setEditingLeakDescription('')
+  }
+
+  const saveLeakEdits = async (leakId: string) => {
+    if (!user?.id || updatingLeakId || !editingLeakTitle.trim()) return
+
+    setUpdatingLeakId(leakId)
+    try {
+      const response = await fetch('/api/leaks', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          id: leakId,
+          title: editingLeakTitle.trim(),
+          description: editingLeakDescription.trim() || null,
+        }),
+      })
+
+      if (!response.ok) throw response
+
+      const data = await response.json()
+      const updatedLeak = normalizeLeak(data.leak as LeakEntity)
+
+      setLeaks((current) =>
+        current.map((leak) => (leak.id === leakId ? updatedLeak : leak)),
+      )
+      cancelEditingLeak()
+      showSuccessToast('Лик обновлён')
+    } catch (error) {
+      showErrorToast(error, 'save leak edits')
     } finally {
       setUpdatingLeakId(null)
     }
@@ -1297,6 +1346,14 @@ export function LeaksScreen() {
                     <Button
                       size="sm"
                       variant="outline"
+                      onClick={() => startEditingLeak(leak)}
+                      className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                    >
+                      Редактировать
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={() => convertLeakToTask(leak)}
                       disabled={actionLeakId === leak.id || hasActionType(leak, 'task')}
                       className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
@@ -1335,6 +1392,41 @@ export function LeaksScreen() {
                           </Badge>
                         )}
                       </div>
+
+                      {editingLeakId === leak.id && (
+                        <div className="space-y-3 rounded-2xl border border-white/10 bg-black/10 p-3">
+                          <Input
+                            value={editingLeakTitle}
+                            onChange={(event) => setEditingLeakTitle(event.target.value)}
+                            placeholder="Название лика"
+                            className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
+                          />
+                          <Textarea
+                            value={editingLeakDescription}
+                            onChange={(event) => setEditingLeakDescription(event.target.value)}
+                            placeholder="Уточни, что именно происходит и что хочешь исправить"
+                            className="min-h-24 bg-white/5 border-white/10 text-white placeholder:text-white/30"
+                          />
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => saveLeakEdits(leak.id)}
+                              disabled={!editingLeakTitle.trim() || updatingLeakId === leak.id}
+                              className="bg-indigo-600 hover:bg-indigo-500 text-white"
+                            >
+                              {updatingLeakId === leak.id ? 'Сохраняю...' : 'Сохранить'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={cancelEditingLeak}
+                              className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                            >
+                              Отмена
+                            </Button>
+                          </div>
+                        </div>
+                      )}
 
                       <div className="space-y-2">
                         <div className="text-xs uppercase tracking-wide text-white/40">
