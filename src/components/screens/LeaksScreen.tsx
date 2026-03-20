@@ -661,9 +661,48 @@ function getContextSnapshotItems(contextSnapshot?: Record<string, unknown> | nul
         lines.push(`Контекст собран: ${formatDate(live.generatedAt)}`)
       }
       if (live.metrics && typeof live.metrics === 'object' && !Array.isArray(live.metrics)) {
-        Object.entries(live.metrics as Record<string, unknown>).forEach(([metricKey, metricValue]) =>
-          pushValue(metricKey, metricValue),
-        )
+        const metrics = live.metrics as Record<string, unknown>
+        Object.entries(metrics).forEach(([metricKey, metricValue]) => {
+          if (
+            metricKey === 'latestFeedbackResult' ||
+            metricKey === 'latestFeedbackAt' ||
+            metricKey === 'latestFeedbackActionTitle'
+          ) {
+            return
+          }
+          pushValue(metricKey, metricValue)
+        })
+
+        const latestFeedbackResult =
+          typeof metrics.latestFeedbackResult === 'string'
+            ? metrics.latestFeedbackResult
+            : null
+        const latestFeedbackAt =
+          typeof metrics.latestFeedbackAt === 'string'
+            ? metrics.latestFeedbackAt
+            : null
+        const latestFeedbackActionTitle =
+          typeof metrics.latestFeedbackActionTitle === 'string'
+            ? metrics.latestFeedbackActionTitle
+            : null
+        if (latestFeedbackResult || latestFeedbackActionTitle || latestFeedbackAt) {
+          const resultLabel =
+            latestFeedbackResult === 'worked'
+              ? 'Сработало'
+              : latestFeedbackResult === 'partially'
+                ? 'Частично'
+                : latestFeedbackResult === 'not_worked'
+                  ? 'Не помогло'
+                  : latestFeedbackResult
+          const parts = [
+            latestFeedbackActionTitle ? `шаг: ${latestFeedbackActionTitle}` : null,
+            resultLabel ? `результат: ${resultLabel}` : null,
+            latestFeedbackAt ? `дата: ${formatDate(latestFeedbackAt)}` : null,
+          ].filter(Boolean)
+          if (parts.length > 0) {
+            lines.push(`Последний feedback: ${parts.join(' • ')}`)
+          }
+        }
       }
       if (typeof live.lookbackDays === 'number') {
         pushValue('lookbackDays', live.lookbackDays)
@@ -1023,6 +1062,8 @@ function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null
   const feedbackCoverageRate = toNum('feedbackCoverageRate')
   const feedbackWorkedCount = toNum('feedbackWorkedCount')
   const feedbackFailedCount = toNum('feedbackFailedCount')
+  const latestFeedbackResult =
+    typeof metrics.latestFeedbackResult === 'string' ? metrics.latestFeedbackResult : null
 
   if (sleepHoursAvg !== null && sleepHoursAvg < 6.5) {
     hypotheses.push('Наблюдение: недосып может усиливать leak. Стоит проверить связь сна и срывов.')
@@ -1073,6 +1114,9 @@ function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null
     feedbackFailedCount >= 2
   ) {
     hypotheses.push('Наблюдение: нерабочих шагов больше, чем сработавших. Имеет смысл перейти на другой режим и пересобрать план.')
+  }
+  if (latestFeedbackResult === 'not_worked') {
+    hypotheses.push('Наблюдение: последний feedback отрицательный. Лучше быстро сделать retry с фокусом на этот шаг, пока контекст свежий.')
   }
 
   return hypotheses.slice(0, 3)
