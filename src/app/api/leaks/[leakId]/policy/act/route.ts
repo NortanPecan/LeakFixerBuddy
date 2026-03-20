@@ -89,6 +89,9 @@ export async function POST(
     let requiresRegenerate = false
 
     if (decision === 'accepted') {
+      snapshot.activePolicyCorrelationId = correlationId || null
+      snapshot.activePolicyActionType = actionType
+      snapshot.activePolicyAcceptedAt = now
       if (actionType === 'switch_mode') {
         if (!targetMode) {
           return NextResponse.json({ error: 'targetMode is required for switch_mode' }, { status: 400 })
@@ -168,6 +171,9 @@ export async function POST(
         snapshot.focusActionKind = actionKind || null
         executed = true
       }
+    } else {
+      snapshot.lastPolicyRejectedAt = now
+      snapshot.lastPolicyRejectedReason = reason || null
     }
 
     snapshot.contextUpdatedAt = now

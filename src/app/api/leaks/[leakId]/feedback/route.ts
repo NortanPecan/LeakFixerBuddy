@@ -264,6 +264,11 @@ export async function POST(
         },
       })
       const snapshot = normalizeSnapshot(leakSnapshotSource?.contextSnapshot)
+      const snapshotPolicyCorrelationId =
+        typeof snapshot.activePolicyCorrelationId === 'string'
+          ? snapshot.activePolicyCorrelationId
+          : null
+      const effectivePolicyCorrelationId = policyCorrelationId || snapshotPolicyCorrelationId
       const feedbackLog = normalizeFeedbackLog(snapshot.feedbackLog)
 
       const existingPattern = await tx.userAiPattern.findUnique({
@@ -427,10 +432,10 @@ export async function POST(
           actionTitle: action.title,
           result,
           note: normalizedComment,
-          policyCorrelationId: policyCorrelationId || null,
+          policyCorrelationId: effectivePolicyCorrelationId || null,
         })
         Object.assign(snapshot, withFeedback)
-        if (policyCorrelationId) {
+        if (effectivePolicyCorrelationId) {
           const withOutcome = appendRunJournal(snapshot, {
             type: 'policy_outcome',
             at: updatedAt,
@@ -438,10 +443,12 @@ export async function POST(
             actionId: action.id,
             actionTitle: action.title,
             result,
-            policyCorrelationId,
+            policyCorrelationId: effectivePolicyCorrelationId,
             note: normalizedComment,
           })
           Object.assign(snapshot, withOutcome)
+          snapshot.lastPolicyOutcomeAt = updatedAt
+          snapshot.lastPolicyOutcomeResult = result
         }
       }
 
@@ -479,7 +486,7 @@ export async function POST(
         },
       })
 
-      return { pattern, reopened }
+      return { pattern, reopened, effectivePolicyCorrelationId }
     })
 
     const plans = await loadPlans(leakId)
@@ -501,6 +508,7 @@ export async function POST(
       leak: refreshedLeak,
       affectedActionIds: targetActionIds,
       bulk: targetActionIds.length > 1,
+      policyCorrelationId: updatedPattern.effectivePolicyCorrelationId || null,
     })
   } catch (error) {
     console.error('Error saving leak feedback:', error)
