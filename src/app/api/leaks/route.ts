@@ -108,11 +108,47 @@ export async function POST(request: NextRequest) {
     const auth = requireSelf(request, userId)
     if ('error' in auth) return auth.error
 
+    const normalizedTitle = title.trim()
+    const normalizedDescription = description?.trim() || null
+
+    const duplicateLeak = await db.leak.findFirst({
+      where: {
+        userId,
+        status: {
+          in: ['new', 'in_progress'],
+        },
+        title: {
+          equals: normalizedTitle,
+          mode: 'insensitive',
+        },
+      },
+      include: {
+        actions: {
+          orderBy: [
+            { createdAt: 'desc' },
+            { updatedAt: 'desc' },
+          ],
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    })
+
+    if (duplicateLeak) {
+      const sameDescription =
+        !normalizedDescription ||
+        (duplicateLeak.description || '').trim().toLowerCase() === normalizedDescription.toLowerCase()
+      if (sameDescription) {
+        return NextResponse.json({ leak: duplicateLeak, deduped: true })
+      }
+    }
+
     const leak = await db.leak.create({
       data: {
         userId,
-        title: title.trim(),
-        description: description?.trim() || null,
+        title: normalizedTitle,
+        description: normalizedDescription,
         source: source || 'manual',
         severity: severity || 'warning',
         sphere: sphere?.trim() || null,

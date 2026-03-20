@@ -1020,6 +1020,13 @@ export function LeaksScreen() {
 
       const data = await response.json()
       const createdLeak = normalizeLeak(data.leak as LeakEntity)
+      if (data.deduped) {
+        setActiveTab('inbox')
+        setStatusFilter('all')
+        setExpandedLeakId(createdLeak.id)
+        showSuccessToast('Похожий активный leak уже есть, открыл его вместо дубля')
+        return
+      }
 
       setLeaks((current) => [createdLeak, ...current])
       setExpandedLeakId(createdLeak.id)
@@ -1739,6 +1746,13 @@ export function LeaksScreen() {
 
       const data = await response.json()
       const createdLeak = normalizeLeak(data.leak as LeakEntity)
+      if (data.deduped) {
+        setActiveTab('inbox')
+        setStatusFilter('all')
+        setExpandedLeakId(createdLeak.id)
+        showSuccessToast('Такой сигнал уже есть в активном leak')
+        return
+      }
       setLeaks((current) => [createdLeak, ...current])
       setExpandedLeakId(createdLeak.id)
       showSuccessToast('Сигнал сохранён как leak')
@@ -1784,6 +1798,13 @@ export function LeaksScreen() {
 
       const data = await response.json()
       const createdLeak = normalizeLeak(data.leak as LeakEntity)
+      if (data.deduped) {
+        setActiveTab('inbox')
+        setStatusFilter('all')
+        setExpandedLeakId(createdLeak.id)
+        showSuccessToast('Паттерн уже связан с активным leak')
+        return
+      }
       setLeaks((current) => [createdLeak, ...current])
       setActiveTab('inbox')
       setStatusFilter('all')
