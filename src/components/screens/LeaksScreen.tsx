@@ -3398,42 +3398,82 @@ export function LeaksScreen() {
                             История feedback
                           </div>
                           <div className="space-y-2">
-                            {feedbackTimeline.slice(0, 6).map((item) => (
-                              <div
-                                key={`${item.actionId}-${item.updatedAt}`}
-                                className="rounded-xl border border-white/10 bg-black/10 px-3 py-2"
-                              >
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Badge className={PLAN_MODE_STYLES[item.mode]}>
-                                    {PLAN_MODE_LABELS[item.mode]}
-                                  </Badge>
-                                  <Badge variant="outline" className="border-white/10 text-white/55">
-                                    {PLAN_KIND_LABELS[item.actionKind]}
-                                  </Badge>
-                                  <Badge
-                                    className={
-                                      item.result === 'worked'
-                                        ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
-                                        : item.result === 'partially'
-                                          ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
-                                          : 'bg-rose-500/10 text-rose-200 border-rose-500/20'
-                                    }
-                                  >
-                                    {getFeedbackResultLabel(item.result)}
-                                  </Badge>
-                                  <div className="text-xs text-white/40">{formatDate(item.updatedAt)}</div>
-                                </div>
-                                <div className="mt-1 text-sm text-white">{item.actionTitle}</div>
-                                {item.linkedEntity && (
-                                  <div className="mt-1">
-                                    <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20 whitespace-normal text-left">
-                                      Сущность: {getActionLabel(item.linkedEntity.entityType)} • {item.linkedEntity.label}
+                            {feedbackTimeline.slice(0, 6).map((item) => {
+                              const historyAction = planActionsById.get(item.actionId) || null
+
+                              return (
+                                <div
+                                  key={`${item.actionId}-${item.updatedAt}`}
+                                  className="rounded-xl border border-white/10 bg-black/10 px-3 py-2"
+                                >
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Badge className={PLAN_MODE_STYLES[item.mode]}>
+                                      {PLAN_MODE_LABELS[item.mode]}
                                     </Badge>
+                                    <Badge variant="outline" className="border-white/10 text-white/55">
+                                      {PLAN_KIND_LABELS[item.actionKind]}
+                                    </Badge>
+                                    <Badge
+                                      className={
+                                        item.result === 'worked'
+                                          ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
+                                          : item.result === 'partially'
+                                            ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                                            : 'bg-rose-500/10 text-rose-200 border-rose-500/20'
+                                      }
+                                    >
+                                      {getFeedbackResultLabel(item.result)}
+                                    </Badge>
+                                    <div className="text-xs text-white/40">{formatDate(item.updatedAt)}</div>
                                   </div>
-                                )}
-                                {item.comment && <div className="mt-1 text-xs text-white/60">{item.comment}</div>}
-                              </div>
-                            ))}
+                                  <div className="mt-1 text-sm text-white">{item.actionTitle}</div>
+                                  {item.linkedEntity && (
+                                    <div className="mt-1">
+                                      <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20 whitespace-normal text-left">
+                                        Сущность: {getActionLabel(item.linkedEntity.entityType)} • {item.linkedEntity.label}
+                                      </Badge>
+                                    </div>
+                                  )}
+                                  {item.comment && <div className="mt-1 text-xs text-white/60">{item.comment}</div>}
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => focusPlanAction(leak.id, item.actionId)}
+                                      className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                    >
+                                      К шагу
+                                    </Button>
+                                    {item.linkedEntity && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => setScreen(getActionScreen(item.linkedEntity.entityType))}
+                                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                      >
+                                        Открыть сущность
+                                      </Button>
+                                    )}
+                                    {item.result !== 'worked' && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() =>
+                                          retryLeakPlanning(leak, {
+                                            action: historyAction,
+                                            failureReason: item.comment || null,
+                                          })
+                                        }
+                                        disabled={retryingLeakId === leak.id}
+                                        className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
+                                      >
+                                        {retryingLeakId === leak.id ? 'Обновляю...' : 'Retry этого шага'}
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })}
                           </div>
                         </div>
                       )}
