@@ -2667,6 +2667,21 @@ export function LeaksScreen() {
                             <div className="text-xs text-white/50">
                               Feedback покрытие: {Math.round((guidance.feedbackActions / guidance.totalActions) * 100)}%
                             </div>
+                            {guidance.feedbackActions > 0 && (
+                              <>
+                                <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                                  <div
+                                    className="h-full rounded-full bg-emerald-400/80"
+                                    style={{
+                                      width: `${Math.round((guidance.workedActions / guidance.feedbackActions) * 100)}%`,
+                                    }}
+                                  />
+                                </div>
+                                <div className="text-xs text-white/50">
+                                  Эффективность feedback: {Math.round((guidance.workedActions / guidance.feedbackActions) * 100)}%
+                                </div>
+                              </>
+                            )}
                           </div>
                         )}
                         {guidance.action && (
