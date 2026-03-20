@@ -223,6 +223,17 @@ interface LeakPolicyHint {
       nextPendingOutcomeActionId: string | null
       nextPendingOutcomeActionTitle: string | null
       stage: 'suggested' | 'accepted' | 'awaiting_feedback' | 'learning' | 'completed' | 'rejected'
+      suggestedAgeMinutes: number | null
+      acceptedAgeMinutes: number | null
+      lastOutcomeAgeMinutes: number | null
+      maxPendingOutcomeAgeMinutes: number | null
+      stuckSignals: {
+        noDecision: boolean
+        noEntityAfterAccept: boolean
+        pendingFeedback: boolean
+        noOutcomeAfterCreate: boolean
+      }
+      recommendedNudge: 'accept_or_reject' | 'create_entity' | 'collect_feedback' | 'none'
     } | null
     recentFunnels?: Array<{
       correlationId: string
@@ -241,6 +252,17 @@ interface LeakPolicyHint {
       nextPendingOutcomeActionTitle: string | null
       stage: 'suggested' | 'accepted' | 'awaiting_feedback' | 'learning' | 'completed' | 'rejected'
       isCurrent: boolean
+      suggestedAgeMinutes: number | null
+      acceptedAgeMinutes: number | null
+      lastOutcomeAgeMinutes: number | null
+      maxPendingOutcomeAgeMinutes: number | null
+      stuckSignals: {
+        noDecision: boolean
+        noEntityAfterAccept: boolean
+        pendingFeedback: boolean
+        noOutcomeAfterCreate: boolean
+      }
+      recommendedNudge: 'accept_or_reject' | 'create_entity' | 'collect_feedback' | 'none'
     }>
     learningSignals?: {
       loopHealth: number
@@ -1803,6 +1825,40 @@ function normalizePolicyFunnel(value: unknown) {
       funnel.stage === 'rejected'
         ? funnel.stage
         : 'suggested',
+    suggestedAgeMinutes:
+      typeof funnel.suggestedAgeMinutes === 'number' ? Math.round(funnel.suggestedAgeMinutes) : null,
+    acceptedAgeMinutes:
+      typeof funnel.acceptedAgeMinutes === 'number' ? Math.round(funnel.acceptedAgeMinutes) : null,
+    lastOutcomeAgeMinutes:
+      typeof funnel.lastOutcomeAgeMinutes === 'number' ? Math.round(funnel.lastOutcomeAgeMinutes) : null,
+    maxPendingOutcomeAgeMinutes:
+      typeof funnel.maxPendingOutcomeAgeMinutes === 'number'
+        ? Math.round(funnel.maxPendingOutcomeAgeMinutes)
+        : null,
+    stuckSignals:
+      funnel.stuckSignals && typeof funnel.stuckSignals === 'object' && !Array.isArray(funnel.stuckSignals)
+        ? (() => {
+            const signals = funnel.stuckSignals as Record<string, unknown>
+            return {
+              noDecision: signals.noDecision === true,
+              noEntityAfterAccept: signals.noEntityAfterAccept === true,
+              pendingFeedback: signals.pendingFeedback === true,
+              noOutcomeAfterCreate: signals.noOutcomeAfterCreate === true,
+            }
+          })()
+        : {
+            noDecision: false,
+            noEntityAfterAccept: false,
+            pendingFeedback: false,
+            noOutcomeAfterCreate: false,
+          },
+    recommendedNudge:
+      funnel.recommendedNudge === 'accept_or_reject' ||
+      funnel.recommendedNudge === 'create_entity' ||
+      funnel.recommendedNudge === 'collect_feedback' ||
+      funnel.recommendedNudge === 'none'
+        ? funnel.recommendedNudge
+        : 'none',
     isCurrent: funnel.isCurrent === true,
   }
 }
@@ -4635,6 +4691,11 @@ export function LeaksScreen() {
                                   <Badge className="bg-white/10 text-white/70 border-white/10">
                                     Этап: {currentFunnelStageLabel}
                                   </Badge>
+                                  {currentFunnel.recommendedNudge !== 'none' && (
+                                    <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
+                                      Stuck: {currentFunnel.recommendedNudge}
+                                    </Badge>
+                                  )}
                                   {currentFunnel.pendingOutcomeActionIds.length > 0 && (
                                     <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
                                       Pending outcome: {currentFunnel.pendingOutcomeActionIds.length}
@@ -4676,6 +4737,106 @@ export function LeaksScreen() {
                                     </Button>
                                   )}
                                 </div>
+                                <div className="mt-1 flex flex-wrap gap-2">
+                                  {currentFunnel.suggestedAgeMinutes !== null && (
+                                    <Badge className="bg-white/10 text-white/60 border-white/10">
+                                      Suggested age: {currentFunnel.suggestedAgeMinutes}m
+                                    </Badge>
+                                  )}
+                                  {currentFunnel.acceptedAgeMinutes !== null && (
+                                    <Badge className="bg-white/10 text-white/60 border-white/10">
+                                      Accepted age: {currentFunnel.acceptedAgeMinutes}m
+                                    </Badge>
+                                  )}
+                                  {currentFunnel.maxPendingOutcomeAgeMinutes !== null && (
+                                    <Badge
+                                      className={
+                                        currentFunnel.maxPendingOutcomeAgeMinutes >= 180
+                                          ? 'bg-rose-500/10 text-rose-200 border-rose-500/20'
+                                          : 'bg-white/10 text-white/60 border-white/10'
+                                      }
+                                    >
+                                      Pending age: {currentFunnel.maxPendingOutcomeAgeMinutes}m
+                                    </Badge>
+                                  )}
+                                </div>
+                                {(currentFunnel.stuckSignals.noDecision ||
+                                  currentFunnel.stuckSignals.noEntityAfterAccept ||
+                                  currentFunnel.stuckSignals.pendingFeedback ||
+                                  currentFunnel.stuckSignals.noOutcomeAfterCreate) && (
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {currentFunnel.stuckSignals.noDecision && (
+                                      <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
+                                        Нет решения по совету
+                                      </Badge>
+                                    )}
+                                    {currentFunnel.stuckSignals.noEntityAfterAccept && (
+                                      <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
+                                        После принятия не создано сущностей
+                                      </Badge>
+                                    )}
+                                    {currentFunnel.stuckSignals.pendingFeedback && (
+                                      <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
+                                        Feedback слишком долго не закрыт
+                                      </Badge>
+                                    )}
+                                    {currentFunnel.stuckSignals.noOutcomeAfterCreate && (
+                                      <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
+                                        Создано, но нет outcome
+                                      </Badge>
+                                    )}
+                                  </div>
+                                )}
+                                {currentFunnel.recommendedNudge !== 'none' && (
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {currentFunnel.recommendedNudge === 'collect_feedback' &&
+                                      currentFunnel.nextPendingOutcomeActionId && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() =>
+                                            sendPlanActionFeedback(
+                                              leak.id,
+                                              currentFunnel.nextPendingOutcomeActionId || '',
+                                              'partially',
+                                              getFeedbackCommentDraft(
+                                                planActionsById.get(currentFunnel.nextPendingOutcomeActionId || '') || null,
+                                              ),
+                                            )
+                                          }
+                                          disabled={savingFeedbackActionId === currentFunnel.nextPendingOutcomeActionId}
+                                          className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
+                                        >
+                                          Быстрый outcome
+                                        </Button>
+                                      )}
+                                    {currentFunnel.recommendedNudge === 'create_entity' &&
+                                      nextBestActionHint &&
+                                      nextBestActionHint.type === 'create_entity' &&
+                                      selectedPlan &&
+                                      nextBestActionHint.actionId && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan, planActionsById)}
+                                          disabled={policyActionBusy}
+                                          className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
+                                        >
+                                          Создать следующий шаг
+                                        </Button>
+                                      )}
+                                    {currentFunnel.recommendedNudge === 'accept_or_reject' && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => loadPolicyForLeak(leak.id)}
+                                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                      >
+                                        Освежить совет
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
                                 <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
                                   <div
                                     className="h-full rounded-full bg-indigo-400/80"
@@ -4743,6 +4904,16 @@ export function LeaksScreen() {
                                         {funnel.pendingOutcomeActionIds.length > 0 && (
                                           <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
                                             pending {funnel.pendingOutcomeActionIds.length}
+                                          </Badge>
+                                        )}
+                                        {funnel.maxPendingOutcomeAgeMinutes !== null && (
+                                          <Badge className="bg-white/10 text-white/60 border-white/10">
+                                            age {funnel.maxPendingOutcomeAgeMinutes}m
+                                          </Badge>
+                                        )}
+                                        {funnel.recommendedNudge !== 'none' && (
+                                          <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
+                                            {funnel.recommendedNudge}
                                           </Badge>
                                         )}
                                         {funnel.nextPendingOutcomeActionId && (

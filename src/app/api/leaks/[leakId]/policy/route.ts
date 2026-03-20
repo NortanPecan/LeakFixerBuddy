@@ -120,6 +120,7 @@ function summarizeCurrentFunnel(
   let lastOutcomeAt: string | null = null
   const createdActionIds: string[] = []
   const createdActionTitleById = new Map<string, string>()
+  const createdActionAtById = new Map<string, string>()
   const outcomeActionIds = new Set<string>()
 
   journal.forEach((item) => {
@@ -134,6 +135,9 @@ function summarizeCurrentFunnel(
       entityCreatedCount += 1
       if (typeof event.actionId === 'string' && event.actionId) {
         createdActionIds.push(event.actionId)
+        if (at) {
+          createdActionAtById.set(event.actionId, at)
+        }
         if (typeof event.actionTitle === 'string' && event.actionTitle) {
           createdActionTitleById.set(event.actionId, event.actionTitle)
         }
@@ -177,6 +181,47 @@ function summarizeCurrentFunnel(
   } else {
     stage = 'learning'
   }
+  const now = Date.now()
+  const toAgeMinutes = (value: string | null) =>
+    value ? Math.max(0, Math.round((now - new Date(value).getTime()) / 60000)) : null
+  const pendingOutcomeActionAgesMinutes = pendingOutcomeActionIds
+    .map((id) => toAgeMinutes(createdActionAtById.get(id) || null))
+    .filter((item): item is number => typeof item === 'number')
+  const maxPendingOutcomeAgeMinutes =
+    pendingOutcomeActionAgesMinutes.length > 0
+      ? Math.max(...pendingOutcomeActionAgesMinutes)
+      : null
+  const suggestedAgeMinutes = toAgeMinutes(suggestedAt)
+  const acceptedAgeMinutes = toAgeMinutes(acceptedAt)
+  const lastOutcomeAgeMinutes = toAgeMinutes(lastOutcomeAt)
+
+  const stuckSignals = {
+    noDecision:
+      Boolean(suggestedAt && !acceptedAt && !rejectedAt && (suggestedAgeMinutes || 0) >= 120),
+    noEntityAfterAccept:
+      Boolean(acceptedAt && entityCreatedCount === 0 && (acceptedAgeMinutes || 0) >= 90),
+    pendingFeedback:
+      Boolean(
+        pendingOutcomeActionIds.length > 0 &&
+        maxPendingOutcomeAgeMinutes !== null &&
+        maxPendingOutcomeAgeMinutes >= 180,
+      ),
+    noOutcomeAfterCreate:
+      Boolean(
+        entityCreatedCount > 0 &&
+        outcomeCount === 0 &&
+        maxPendingOutcomeAgeMinutes !== null &&
+        maxPendingOutcomeAgeMinutes >= 180,
+      ),
+  }
+  const recommendedNudge =
+    stuckSignals.noDecision
+      ? 'accept_or_reject'
+      : stuckSignals.noEntityAfterAccept
+        ? 'create_entity'
+        : stuckSignals.pendingFeedback || stuckSignals.noOutcomeAfterCreate
+          ? 'collect_feedback'
+          : 'none'
 
   return {
     correlationId,
@@ -194,6 +239,12 @@ function summarizeCurrentFunnel(
     nextPendingOutcomeActionId: pendingOutcomeActionIds[0] || null,
     nextPendingOutcomeActionTitle: pendingOutcomeActionTitles[0] || null,
     stage,
+    suggestedAgeMinutes,
+    acceptedAgeMinutes,
+    lastOutcomeAgeMinutes,
+    maxPendingOutcomeAgeMinutes,
+    stuckSignals,
+    recommendedNudge,
   }
 }
 
