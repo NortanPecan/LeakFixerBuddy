@@ -630,6 +630,8 @@ function getContextSnapshotItems(contextSnapshot?: Record<string, unknown> | nul
     latestFeedbackResult: 'Последний feedback',
     latestFeedbackAt: 'Последний feedback (дата)',
     latestFeedbackActionTitle: 'Последний feedback (шаг)',
+    recentFeedbackWindowSize: 'Свежих feedback',
+    recentFeedbackNegativeShare: 'Негативный feedback (%)',
     retryResolvedAt: 'Retry закрыт',
   }
 
@@ -1064,6 +1066,8 @@ function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null
   const feedbackFailedCount = toNum('feedbackFailedCount')
   const latestFeedbackResult =
     typeof metrics.latestFeedbackResult === 'string' ? metrics.latestFeedbackResult : null
+  const recentFeedbackWindowSize = toNum('recentFeedbackWindowSize')
+  const recentFeedbackNegativeShare = toNum('recentFeedbackNegativeShare')
 
   if (sleepHoursAvg !== null && sleepHoursAvg < 6.5) {
     hypotheses.push('Наблюдение: недосып может усиливать leak. Стоит проверить связь сна и срывов.')
@@ -1117,6 +1121,14 @@ function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null
   }
   if (latestFeedbackResult === 'not_worked') {
     hypotheses.push('Наблюдение: последний feedback отрицательный. Лучше быстро сделать retry с фокусом на этот шаг, пока контекст свежий.')
+  }
+  if (
+    recentFeedbackWindowSize !== null &&
+    recentFeedbackWindowSize >= 3 &&
+    recentFeedbackNegativeShare !== null &&
+    recentFeedbackNegativeShare >= 67
+  ) {
+    hypotheses.push('Наблюдение: последние шаги часто не срабатывают. Стоит временно упростить режим до minimum и проверить базовые триггеры.')
   }
 
   return hypotheses.slice(0, 3)
