@@ -108,6 +108,7 @@ type LeakSourceFilter = 'all' | 'manual' | 'signal' | 'imported' | 'ai_suggested
 type LeakSortOption = 'updated_desc' | 'created_desc' | 'severity_desc'
 type LeakFocusFilter = 'all' | 'focus'
 type LeakGroupOption = 'none' | 'sphere' | 'source'
+type PatternFilter = 'all' | 'linked'
 
 const SEVERITY_OPTIONS: Array<{
   id: 'info' | 'warning' | 'critical'
@@ -812,6 +813,7 @@ export function LeaksScreen() {
   const [sortOption, setSortOption] = useState<LeakSortOption>('updated_desc')
   const [focusFilter, setFocusFilter] = useState<LeakFocusFilter>('all')
   const [groupBy, setGroupBy] = useState<LeakGroupOption>('none')
+  const [patternFilter, setPatternFilter] = useState<PatternFilter>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [title, setTitle] = useState('')
   const [details, setDetails] = useState('')
@@ -941,6 +943,21 @@ export function LeaksScreen() {
       return acc
     }, {})
   }, [filteredLeaks, groupBy])
+
+  const visiblePatterns = useMemo(() => {
+    const sorted = [...patterns].sort((a, b) => {
+      const activeA = typeof a.activeLeakCount === 'number' ? a.activeLeakCount : 0
+      const activeB = typeof b.activeLeakCount === 'number' ? b.activeLeakCount : 0
+      if (activeB !== activeA) return activeB - activeA
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    })
+
+    if (patternFilter === 'linked') {
+      return sorted.filter((pattern) => (pattern.activeLeakCount || 0) > 0)
+    }
+
+    return sorted
+  }, [patterns, patternFilter])
 
   const priorityLeaks = useMemo(() => {
     const severityRank: Record<LeakEntity['severity'], number> = {
@@ -3228,16 +3245,43 @@ export function LeaksScreen() {
             Здесь накапливается история AI-разборов и то, что уже реально помогало.
           </p>
 
-          {patterns.length === 0 ? (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setPatternFilter('all')}
+              className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                patternFilter === 'all'
+                  ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
+                  : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+              }`}
+            >
+              Все ({patterns.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setPatternFilter('linked')}
+              className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                patternFilter === 'linked'
+                  ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
+                  : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+              }`}
+            >
+              С активными leaks ({patterns.filter((item) => (item.activeLeakCount || 0) > 0).length})
+            </button>
+          </div>
+
+          {visiblePatterns.length === 0 ? (
             <Card style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
               <CardContent className="pt-6">
                 <p className="text-sm text-white/60">
-                  AI-паттерны появятся после первых разборов сигналов или ручных ликов.
+                  {patternFilter === 'linked'
+                    ? 'Пока нет паттернов, у которых есть активные leaks в работе.'
+                    : 'AI-паттерны появятся после первых разборов сигналов или ручных ликов.'}
                 </p>
               </CardContent>
             </Card>
           ) : (
-            patterns.map((pattern) => (
+            visiblePatterns.map((pattern) => (
               (() => {
                 const activeLinkedLeaks =
                   Array.isArray(pattern.activeLeaks) && pattern.activeLeaks.length > 0
