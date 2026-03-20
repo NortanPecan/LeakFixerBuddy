@@ -1186,6 +1186,18 @@ export function LeaksScreen() {
     return () => window.clearTimeout(timer)
   }, [focusedPlanActionId])
 
+  useEffect(() => {
+    if (!expandedLeakId) return
+    const leakPlans = plansByLeak[expandedLeakId] || []
+    const expandedLeak = leaks.find((item) => item.id === expandedLeakId)
+    if (!expandedLeak) return
+    const guidance = buildLeakGuidance(expandedLeak, leakPlans)
+
+    if (guidance?.failedActions && guidance.failedActions > 0 && feedbackHistoryFilter !== 'problem') {
+      setFeedbackHistoryFilter('problem')
+    }
+  }, [expandedLeakId, plansByLeak, leaks, feedbackHistoryFilter])
+
   const hasDraft = title.trim().length > 0 || details.trim().length > 0
 
   const loadData = async (showSkeleton = false) => {
