@@ -41,6 +41,33 @@ function clusterMatchConfidence(a: string, b: string) {
   return tokenOverlapScore(patternTokens(a), patternTokens(b))
 }
 
+function resolveClusterConflictLabel(workedCount: number, failedCount: number) {
+  if (workedCount <= 0 || failedCount <= 0) {
+    return { label: 'none' as const, ratio: 0 }
+  }
+  const ratio = Math.min(workedCount, failedCount) / Math.max(workedCount, failedCount)
+  if (ratio >= 0.7) {
+    return { label: 'high' as const, ratio: Number(ratio.toFixed(2)) }
+  }
+  return { label: 'mixed' as const, ratio: Number(ratio.toFixed(2)) }
+}
+
+function resolveClusterConfidence(params: {
+  baseConfidence: number
+  size: number
+  analysisCount: number
+  workedCount: number
+  failedCount: number
+}) {
+  const { baseConfidence, size, analysisCount, workedCount, failedCount } = params
+  const evidenceBoost = Math.min(0.18, Math.log2(Math.max(analysisCount, 1) + 1) * 0.06)
+  const sizeBoost = Math.min(0.1, Math.max(0, size - 1) * 0.03)
+  const { ratio } = resolveClusterConflictLabel(workedCount, failedCount)
+  const conflictPenalty = ratio > 0 ? Math.min(0.28, ratio * 0.32) : 0
+  const value = Math.max(0.05, Math.min(1, baseConfidence + evidenceBoost + sizeBoost - conflictPenalty))
+  return Number(value.toFixed(2))
+}
+
 function normalizeTriedSolution(item: unknown) {
   if (!item || typeof item !== 'object') return null
   const candidate = item as Record<string, unknown>
@@ -210,11 +237,22 @@ export async function GET(request: NextRequest) {
           .map((item) => item.text)
           .filter(Boolean)
           .slice(0, 6)
+        const conflict = resolveClusterConflictLabel(workedCount, failedCount)
+        const confidence = resolveClusterConfidence({
+          baseConfidence: cluster.confidence,
+          size: members.length,
+          analysisCount,
+          workedCount,
+          failedCount,
+        })
         return {
           key: cluster.key,
           label: cluster.label,
           size: members.length,
-          confidence: Number(cluster.confidence.toFixed(2)),
+          confidence,
+          rawConfidence: Number(cluster.confidence.toFixed(2)),
+          conflict: conflict.label,
+          conflictRatio: conflict.ratio,
           workedCount,
           partialCount,
           failedCount,
@@ -235,6 +273,9 @@ export async function GET(request: NextRequest) {
         clusterLabel: cluster?.label || pattern.leakType,
         clusterSize: cluster?.size || 1,
         clusterConfidence: cluster?.confidence || 1,
+        clusterRawConfidence: cluster?.rawConfidence || 1,
+        clusterConflict: cluster?.conflict || 'none',
+        clusterConflictRatio: cluster?.conflictRatio || 0,
         clusterWorkedCount: cluster?.workedCount || pattern.workedCount || 0,
         clusterPartialCount: cluster?.partialCount || pattern.partialCount || 0,
         clusterFailedCount: cluster?.failedCount || pattern.failedCount || 0,
@@ -248,6 +289,9 @@ export async function GET(request: NextRequest) {
       label: cluster.label,
       size: cluster.size,
       confidence: cluster.confidence,
+      rawConfidence: cluster.rawConfidence,
+      conflict: cluster.conflict,
+      conflictRatio: cluster.conflictRatio,
       workedCount: cluster.workedCount,
       partialCount: cluster.partialCount,
       failedCount: cluster.failedCount,

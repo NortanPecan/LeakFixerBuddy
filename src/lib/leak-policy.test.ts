@@ -50,6 +50,8 @@ describe('leak-policy', () => {
     expect(policy.adaptiveModeSuggestion?.targetMode).toBe('minimum')
     expect(policy.nextBestAction?.type).toBe('switch_mode')
     expect(policy.nextBestAction?.targetMode).toBe('minimum')
+    expect(policy.nextBestAction?.correlationId).toContain('policy_')
+    expect((policy.nextBestAction?.factors || []).length).toBeGreaterThan(0)
   })
 
   it('suggests base mode when minimum is stable', () => {
@@ -98,6 +100,15 @@ describe('leak-policy', () => {
 
     expect(policy.contextDrift.isStale).toBe(true)
     expect(policy.nextBestAction?.type).toBe('regenerate_context')
+    expect(policy.nextBestAction?.correlationId).toContain('policy_')
+    expect(policy.nextBestAction?.factors?.[0]?.key).toBe('high_drift')
+  })
+
+  it('returns policy version metadata', () => {
+    const plan = buildPlan('base', true)
+    const policy = buildLeakPolicy([plan], { selectedPlanMode: 'base' }, { metrics: {} })
+    expect(policy.policyVersion).toBeGreaterThan(0)
+    expect(typeof policy.computedAt).toBe('string')
   })
 
   it('keeps snapshot journal compact', () => {

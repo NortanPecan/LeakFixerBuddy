@@ -8,6 +8,10 @@ export type RunJournalEventType =
   | 'feedback_saved'
   | 'retry_started'
   | 'retry_resolved'
+  | 'policy_suggested'
+  | 'policy_accepted'
+  | 'policy_rejected'
+  | 'policy_outcome'
 
 export interface RunJournalEvent {
   type: RunJournalEventType
@@ -17,6 +21,9 @@ export interface RunJournalEvent {
   actionTitle?: string | null
   result?: LeakFeedbackResult | null
   note?: string | null
+  policyCorrelationId?: string | null
+  policyActionType?: NextBestAction['type'] | null
+  factors?: Array<{ key: string; weight: number; detail?: string }>
 }
 
 export interface PolicyPlanAction {
@@ -77,6 +84,8 @@ export interface NextBestAction {
   actionId?: string | null
   targetMode?: LeakPlanMode | null
   confidence: 'low' | 'medium' | 'high'
+  factors: Array<{ key: string; weight: number; detail?: string }>
+  correlationId: string
 }
 
 export interface ExecutionScore {
@@ -96,6 +105,8 @@ export interface AdaptiveModeSuggestion {
 }
 
 export interface LeakPolicyPayload {
+  policyVersion: number
+  computedAt: string
   selectedMode: LeakPlanMode | null
   nextBestAction: NextBestAction | null
   contextDrift: ContextDrift
@@ -103,8 +114,14 @@ export interface LeakPolicyPayload {
   adaptiveModeSuggestion: AdaptiveModeSuggestion | null
 }
 
+export const LEAK_POLICY_VERSION = 2
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
+}
+
+function makeCorrelationId() {
+  return `policy_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -271,19 +288,19 @@ export function computeAdaptiveModeSuggestion(
   if (failed >= 2 && selectedPlan.mode !== 'minimum') {
     return {
       targetMode: 'minimum',
-      reason: 'Слишком много свежих неудач, лучше временно упростить режим.',
+      reason: 'Too many recent failures. Temporarily simplify the mode.',
     }
   }
   if (worked >= 3 && selectedPlan.mode === 'minimum') {
     return {
       targetMode: 'base',
-      reason: 'Последние шаги стабильно работают, можно расширить режим.',
+      reason: 'Recent steps are stable. You can expand to base mode.',
     }
   }
   if (worked >= 3 && selectedPlan.mode === 'base') {
     return {
       targetMode: 'maximum',
-      reason: 'Серия успехов позволяет усилить режим до maximum.',
+      reason: 'Consistent wins allow scaling up to maximum mode.',
     }
   }
 
@@ -298,16 +315,20 @@ export function computeNextBestAction(
   if (!plans.length) {
     return {
       type: 'generate',
-      reason: 'Для лика еще нет режимов. Сначала сгенерируй 3 плана.',
+      reason: 'No plans yet. Generate three modes first.',
       confidence: 'high',
+      factors: [{ key: 'no_plans', weight: 1 }],
+      correlationId: makeCorrelationId(),
     }
   }
 
   if (drift.isStale) {
     return {
       type: 'regenerate_context',
-      reason: `Контекст заметно изменился (drift ${drift.score}%). Лучше пересобрать планы.`,
+      reason: `Context drift is high (${drift.score}%). Regenerate plans with fresh context.`,
       confidence: 'high',
+      factors: [{ key: 'high_drift', weight: Math.max(0.7, drift.score / 100), detail: String(drift.score) }],
+      correlationId: makeCorrelationId(),
     }
   }
 
@@ -319,8 +340,10 @@ export function computeNextBestAction(
     return {
       type: 'create_entity',
       actionId: firstNoEntity.id,
-      reason: `Сначала создай сущность для шага "${firstNoEntity.title}", чтобы запустить цикл выполнения.`,
+      reason: `Create an entity for "${firstNoEntity.title}" to start execution.`,
       confidence: 'high',
+      factors: [{ key: 'pending_entity', weight: 1, detail: firstNoEntity.title }],
+      correlationId: makeCorrelationId(),
     }
   }
 
@@ -329,8 +352,10 @@ export function computeNextBestAction(
     return {
       type: 'give_feedback',
       actionId: firstNoFeedback.id,
-      reason: `По шагу "${firstNoFeedback.title}" нет feedback. Закрой обратную связь.`,
+      reason: `No feedback yet for "${firstNoFeedback.title}". Close the feedback loop.`,
       confidence: 'high',
+      factors: [{ key: 'missing_feedback', weight: 1, detail: firstNoFeedback.title }],
+      correlationId: makeCorrelationId(),
     }
   }
 
@@ -346,16 +371,26 @@ export function computeNextBestAction(
     return {
       type: 'switch_mode',
       targetMode: 'minimum',
-      reason: 'В свежих feedback много сбоев. Временно упрости режим до minimum.',
+      reason: 'Recent feedback is mostly failing. Switch to minimum mode temporarily.',
       confidence: 'medium',
+      factors: [
+        { key: 'failed_recent', weight: 0.8, detail: String(failedRecent) },
+        { key: 'mode_pressure', weight: 0.5, detail: selectedPlan.mode },
+      ],
+      correlationId: makeCorrelationId(),
     }
   }
   if (workedRecent >= 3 && selectedPlan.mode === 'minimum') {
     return {
       type: 'switch_mode',
       targetMode: 'base',
-      reason: 'Последние шаги стабильно срабатывают. Можно расширить до base.',
+      reason: 'Recent steps are stable. Move from minimum to base mode.',
       confidence: 'medium',
+      factors: [
+        { key: 'worked_recent', weight: 0.8, detail: String(workedRecent) },
+        { key: 'mode_floor', weight: 0.4, detail: 'minimum' },
+      ],
+      correlationId: makeCorrelationId(),
     }
   }
 
@@ -364,16 +399,20 @@ export function computeNextBestAction(
     return {
       type: 'retry',
       actionId: failedAction.action.id,
-      reason: `Последний проблемный шаг — "${failedAction.action.title}". Запусти retry.`,
+      reason: `Most recent failed action is "${failedAction.action.title}". Start retry flow.`,
       confidence: 'medium',
+      factors: [{ key: 'last_failed_action', weight: 0.7, detail: failedAction.action.title }],
+      correlationId: makeCorrelationId(),
     }
   }
 
   return {
     type: 'give_feedback',
     actionId: selectedPlan.actions[0]?.id || null,
-    reason: 'Поддерживай цикл: по новым шагам сразу фиксируй результат.',
+    reason: 'Keep the loop running: record feedback for each new action.',
     confidence: 'low',
+    factors: [{ key: 'default_loop', weight: 0.3 }],
+    correlationId: makeCorrelationId(),
   }
 }
 
@@ -384,6 +423,8 @@ export function buildLeakPolicy(
 ): LeakPolicyPayload {
   const contextDrift = buildContextDrift(snapshot, liveContext)
   return {
+    policyVersion: LEAK_POLICY_VERSION,
+    computedAt: new Date().toISOString(),
     selectedMode: getSelectedPlan(plans, snapshot)?.mode || getSnapshotMode(snapshot, 'selectedPlanMode') || null,
     nextBestAction: computeNextBestAction(plans, snapshot, contextDrift),
     contextDrift,

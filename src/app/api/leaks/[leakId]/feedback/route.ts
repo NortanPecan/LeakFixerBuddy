@@ -8,6 +8,7 @@ const LeakFeedbackSchema = z.object({
   userId: z.string().min(1),
   solutionActionId: z.string().min(1).optional(),
   solutionActionIds: z.array(z.string().min(1)).max(50).optional(),
+  policyCorrelationId: z.string().min(1).optional(),
   result: z.enum(['worked', 'partially', 'not_worked']),
   comment: z.string().max(1000).optional().nullable(),
 })
@@ -178,7 +179,7 @@ export async function POST(
       )
     }
 
-    const { userId, solutionActionId, solutionActionIds, result, comment } = parsed.data
+    const { userId, solutionActionId, solutionActionIds, policyCorrelationId, result, comment } = parsed.data
     const normalizedComment = comment?.trim() || null
     if (result === 'not_worked' && (!normalizedComment || normalizedComment.length < 5)) {
       return NextResponse.json(
@@ -426,8 +427,22 @@ export async function POST(
           actionTitle: action.title,
           result,
           note: normalizedComment,
+          policyCorrelationId: policyCorrelationId || null,
         })
         Object.assign(snapshot, withFeedback)
+        if (policyCorrelationId) {
+          const withOutcome = appendRunJournal(snapshot, {
+            type: 'policy_outcome',
+            at: updatedAt,
+            mode: action.plan.mode as 'minimum' | 'base' | 'maximum',
+            actionId: action.id,
+            actionTitle: action.title,
+            result,
+            policyCorrelationId,
+            note: normalizedComment,
+          })
+          Object.assign(snapshot, withOutcome)
+        }
       }
 
       snapshot.feedbackLog = feedbackLog

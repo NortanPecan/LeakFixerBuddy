@@ -91,6 +91,9 @@ interface LeakPattern {
   clusterLabel?: string
   clusterSize?: number
   clusterConfidence?: number
+  clusterRawConfidence?: number
+  clusterConflict?: 'none' | 'mixed' | 'high'
+  clusterConflictRatio?: number
   clusterWorkedCount?: number
   clusterPartialCount?: number
   clusterFailedCount?: number
@@ -140,6 +143,8 @@ interface NextBestActionHint {
   actionId?: string | null
   targetMode?: LeakSolutionPlan['mode'] | null
   confidence: 'low' | 'medium' | 'high'
+  correlationId?: string | null
+  factors?: Array<{ key: string; weight: number; detail?: string }>
 }
 
 interface ContextDriftHint {
@@ -172,11 +177,22 @@ interface AdaptiveModeHint {
 }
 
 interface LeakPolicyHint {
+  policyVersion?: number
+  computedAt?: string
   selectedMode: LeakSolutionPlan['mode'] | null
   nextBestAction: NextBestActionHint | null
   contextDrift: ContextDriftHint | null
   executionScore: ExecutionScoreHint | null
   adaptiveModeSuggestion: AdaptiveModeHint | null
+  runJournal?: Array<{
+    type: string
+    at: string
+    note?: string | null
+    policyCorrelationId?: string | null
+    policyActionType?: string | null
+    actionTitle?: string | null
+    result?: string | null
+  }>
 }
 
 interface LeakDraft {
@@ -1410,12 +1426,44 @@ function normalizeNextBestAction(value: unknown): NextBestActionHint | null {
     candidate.targetMode === 'minimum' || candidate.targetMode === 'base' || candidate.targetMode === 'maximum'
       ? candidate.targetMode
       : null
+  const factors = Array.isArray(candidate.factors)
+    ? candidate.factors
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null
+          const factor = item as Record<string, unknown>
+          if (typeof factor.key !== 'string' || typeof factor.weight !== 'number') return null
+          return {
+            key: factor.key,
+            weight: factor.weight,
+            detail: typeof factor.detail === 'string' ? factor.detail : undefined,
+          }
+        })
+        .filter((item): item is NonNullable<NextBestActionHint['factors']>[number] => Boolean(item))
+        .slice(0, 5)
+    : []
   return {
     type,
     reason: candidate.reason.trim(),
     confidence,
     actionId: typeof candidate.actionId === 'string' ? candidate.actionId : null,
     targetMode,
+    correlationId: typeof candidate.correlationId === 'string' ? candidate.correlationId : null,
+    factors,
+  }
+}
+
+function getPolicyEventLabel(type: string) {
+  switch (type) {
+    case 'policy_suggested':
+      return 'Совет предложен'
+    case 'policy_accepted':
+      return 'Совет принят'
+    case 'policy_rejected':
+      return 'Совет отклонён'
+    case 'policy_outcome':
+      return 'Результат совета'
+    default:
+      return type
   }
 }
 
@@ -1501,11 +1549,33 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
       ? candidate.selectedMode
       : null
   return {
+    policyVersion: typeof candidate.policyVersion === 'number' ? candidate.policyVersion : undefined,
+    computedAt: typeof candidate.computedAt === 'string' ? candidate.computedAt : undefined,
     selectedMode,
     nextBestAction: normalizeNextBestAction(candidate.nextBestAction),
     contextDrift: normalizeContextDrift(candidate.contextDrift),
     executionScore: normalizeExecutionScore(candidate.executionScore),
     adaptiveModeSuggestion: normalizeAdaptiveMode(candidate.adaptiveModeSuggestion),
+    runJournal: Array.isArray(candidate.runJournal)
+      ? candidate.runJournal
+          .map((item) => {
+            if (!item || typeof item !== 'object') return null
+            const event = item as Record<string, unknown>
+            if (typeof event.type !== 'string' || typeof event.at !== 'string') return null
+            return {
+              type: event.type,
+              at: event.at,
+              note: typeof event.note === 'string' ? event.note : null,
+              policyCorrelationId:
+                typeof event.policyCorrelationId === 'string' ? event.policyCorrelationId : null,
+              policyActionType:
+                typeof event.policyActionType === 'string' ? event.policyActionType : null,
+              actionTitle: typeof event.actionTitle === 'string' ? event.actionTitle : null,
+              result: typeof event.result === 'string' ? event.result : null,
+            }
+          })
+          .filter((item): item is NonNullable<LeakPolicyHint['runJournal']>[number] => Boolean(item))
+      : undefined,
   }
 }
 
@@ -2027,10 +2097,12 @@ export function LeaksScreen() {
         ...current,
         [leakId]: normalizePlans(data.plans || []),
       }))
-      setPolicyByLeak((current) => ({
-        ...current,
-        [leakId]: normalizeLeakPolicy(data.policy),
-      }))
+      if (data.policy) {
+        setPolicyByLeak((current) => ({
+          ...current,
+          [leakId]: normalizeLeakPolicy(data.policy),
+        }))
+      }
     } catch (error) {
       showErrorToast(error, 'load leak plans')
     } finally {
@@ -2075,10 +2147,12 @@ export function LeaksScreen() {
         ...current,
         [leakId]: normalizePlans(data.plans || []),
       }))
-      setPolicyByLeak((current) => ({
-        ...current,
-        [leakId]: normalizeLeakPolicy(data.policy),
-      }))
+      if (data.policy) {
+        setPolicyByLeak((current) => ({
+          ...current,
+          [leakId]: normalizeLeakPolicy(data.policy),
+        }))
+      }
       if (!options?.silent) {
         showSuccessToast(regenerate ? 'Планы пересобраны' : 'Планы для лика готовы')
       }
@@ -2112,10 +2186,12 @@ export function LeaksScreen() {
         ...current,
         [leakId]: normalizePlans(data.plans || []),
       }))
-      setPolicyByLeak((current) => ({
-        ...current,
-        [leakId]: normalizeLeakPolicy(data.policy),
-      }))
+      if (data.policy) {
+        setPolicyByLeak((current) => ({
+          ...current,
+          [leakId]: normalizeLeakPolicy(data.policy),
+        }))
+      }
       setLeaks((current) =>
         current.map((leak) => {
           if (leak.id !== leakId) return leak
@@ -2145,6 +2221,71 @@ export function LeaksScreen() {
 
     if (willOpen && !plansByLeak[leakId] && loadingPlansLeakId !== leakId) {
       await loadPlansForLeak(leakId)
+      await loadPolicyForLeak(leakId)
+    }
+  }
+
+  const loadPolicyForLeak = async (leakId: string) => {
+    if (!user?.id) return
+    try {
+      const response = await fetch(`/api/leaks/${leakId}/policy?userId=${user.id}`, {
+        cache: 'no-store',
+      })
+      if (!response.ok) throw response
+      const data = await response.json()
+      setPolicyByLeak((current) => ({
+        ...current,
+        [leakId]: normalizeLeakPolicy({
+          ...(data.policy || {}),
+          runJournal: data.runJournal || undefined,
+        }),
+      }))
+    } catch (error) {
+      showErrorToast(error, 'load leak policy')
+    }
+  }
+
+  const executePolicyAction = async (
+    leak: LeakEntity,
+    payload: {
+      actionType: 'switch_mode' | 'retry' | 'regenerate_context' | 'focus_action'
+      decision?: 'accepted' | 'rejected'
+      reason?: string | null
+      correlationId?: string | null
+      targetMode?: LeakSolutionPlan['mode']
+      actionId?: string | null
+      actionTitle?: string | null
+      actionKind?: string | null
+    },
+  ) => {
+    if (!user?.id) return false
+    try {
+      const response = await fetch(`/api/leaks/${leak.id}/policy/act`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          actionType: payload.actionType,
+          decision: payload.decision || 'accepted',
+          reason: payload.reason || null,
+          correlationId: payload.correlationId || undefined,
+          targetMode: payload.targetMode || undefined,
+          actionId: payload.actionId || undefined,
+          actionTitle: payload.actionTitle || undefined,
+          actionKind: payload.actionKind || undefined,
+        }),
+      })
+      if (!response.ok) throw response
+      const data = await response.json()
+      if (data.requiresRegenerate) {
+        await generatePlansForLeak(leak.id, true, { silent: true })
+      }
+      await loadPlansForLeak(leak.id)
+      await loadPolicyForLeak(leak.id)
+      return true
+    } catch (error) {
+      showErrorToast(error, 'execute leak policy action')
+      return false
     }
   }
 
@@ -3509,12 +3650,30 @@ export function LeaksScreen() {
                               Next Best Action ({nextBestActionHint.confidence})
                             </div>
                             <div className="mt-1 text-sm text-indigo-100">{nextBestActionHint.reason}</div>
+                            {nextBestActionHint.factors && nextBestActionHint.factors.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {nextBestActionHint.factors.slice(0, 3).map((factor) => (
+                                  <Badge
+                                    key={`${factor.key}-${factor.weight}`}
+                                    className="border-white/15 bg-black/15 text-indigo-100/90"
+                                  >
+                                    {factor.key}: {Math.round(factor.weight * 100)}%
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
                             <div className="mt-2 flex flex-wrap gap-2">
                               {nextBestActionHint.type === 'switch_mode' && nextBestActionHint.targetMode && (
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => selectPlanMode(leak.id, nextBestActionHint.targetMode)}
+                                  onClick={() =>
+                                    executePolicyAction(leak, {
+                                      actionType: 'switch_mode',
+                                      correlationId: nextBestActionHint.correlationId || null,
+                                      targetMode: nextBestActionHint.targetMode,
+                                    })
+                                  }
                                   disabled={selectingPlanLeakId === leak.id}
                                   className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
                                 >
@@ -3527,9 +3686,16 @@ export function LeaksScreen() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => {
+                                  onClick={async () => {
                                     const action = selectedPlan.actions.find((item) => item.id === nextBestActionHint.actionId)
                                     if (action) {
+                                      await executePolicyAction(leak, {
+                                        actionType: 'focus_action',
+                                        correlationId: nextBestActionHint.correlationId || null,
+                                        actionId: action.id,
+                                        actionTitle: action.title,
+                                        actionKind: action.kind,
+                                      })
                                       applySinglePlanAction(leak, selectedPlan.mode, action)
                                     }
                                   }}
@@ -3542,7 +3708,17 @@ export function LeaksScreen() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => focusPlanAction(leak.id, nextBestActionHint.actionId)}
+                                  onClick={async () => {
+                                    const action = planActionsById.get(nextBestActionHint.actionId || '')
+                                    await executePolicyAction(leak, {
+                                      actionType: 'focus_action',
+                                      correlationId: nextBestActionHint.correlationId || null,
+                                      actionId: nextBestActionHint.actionId || null,
+                                      actionTitle: action?.title || null,
+                                      actionKind: action?.kind || null,
+                                    })
+                                    focusPlanAction(leak.id, nextBestActionHint.actionId || '')
+                                  }}
                                   className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
                                 >
                                   Перейти к feedback
@@ -3552,12 +3728,20 @@ export function LeaksScreen() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() =>
-                                    retryLeakPlanning(leak, {
+                                  onClick={async () => {
+                                    const action = planActionsById.get(nextBestActionHint.actionId || '') || null
+                                    await executePolicyAction(leak, {
+                                      actionType: 'retry',
+                                      correlationId: nextBestActionHint.correlationId || null,
+                                      actionId: action?.id || nextBestActionHint.actionId || null,
+                                      actionTitle: action?.title || null,
+                                      actionKind: action?.kind || null,
+                                    })
+                                    await retryLeakPlanning(leak, {
                                       action: planActionsById.get(nextBestActionHint.actionId || '') || null,
                                       failureReason: null,
                                     })
-                                  }
+                                  }}
                                   disabled={retryingLeakId === leak.id}
                                   className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
                                 >
@@ -3568,7 +3752,16 @@ export function LeaksScreen() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => generatePlansForLeak(leak.id, true)}
+                                  onClick={async () => {
+                                    if (nextBestActionHint.type === 'regenerate_context') {
+                                      await executePolicyAction(leak, {
+                                        actionType: 'regenerate_context',
+                                        correlationId: nextBestActionHint.correlationId || null,
+                                      })
+                                      return
+                                    }
+                                    await generatePlansForLeak(leak.id, true)
+                                  }}
                                   disabled={generatingPlansLeakId === leak.id}
                                   className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
                                 >
@@ -3576,6 +3769,32 @@ export function LeaksScreen() {
                                 </Button>
                               )}
                             </div>
+                          </div>
+                        )}
+                        {policy && (
+                          <div className="mt-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2">
+                            <div className="text-xs uppercase tracking-wide text-white/55">Policy inspector</div>
+                            <div className="mt-1 text-xs text-white/70">
+                              v{policy.policyVersion || 1}
+                              {policy.computedAt ? ` • ${formatDate(policy.computedAt)}` : ''}
+                            </div>
+                            {policy.runJournal && policy.runJournal.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                {policy.runJournal
+                                  .filter((event) => event.type.startsWith('policy_'))
+                                  .slice(0, 4)
+                                  .map((event) => (
+                                    <div
+                                      key={`${event.type}-${event.at}-${event.policyCorrelationId || ''}`}
+                                      className="text-xs text-white/65"
+                                    >
+                                      {getPolicyEventLabel(event.type)} • {formatDate(event.at)}
+                                      {event.result ? ` • ${event.result}` : ''}
+                                      {event.actionTitle ? ` • ${event.actionTitle}` : ''}
+                                    </div>
+                                  ))}
+                              </div>
+                            )}
                           </div>
                         )}
                         {guidance.action && (
@@ -5011,6 +5230,19 @@ export function LeaksScreen() {
                               : `Низкая уверенность: ${Math.round(pattern.clusterConfidence * 100)}%`}
                           </Badge>
                         )}
+                        {pattern.clusterConflict && pattern.clusterConflict !== 'none' && (
+                          <Badge
+                            className={
+                              pattern.clusterConflict === 'high'
+                                ? 'bg-rose-500/10 text-rose-200 border-rose-500/20'
+                                : 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                            }
+                          >
+                            {pattern.clusterConflict === 'high'
+                              ? `Сильный конфликт: ${Math.round((pattern.clusterConflictRatio || 0) * 100)}%`
+                              : `Смешанный конфликт: ${Math.round((pattern.clusterConflictRatio || 0) * 100)}%`}
+                          </Badge>
+                        )}
                         {typeof pattern.clusterWorkedCount === 'number' && pattern.clusterWorkedCount > 0 && (
                           <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
                             Кластер worked: {pattern.clusterWorkedCount}
@@ -5067,6 +5299,11 @@ export function LeaksScreen() {
                           {pattern.clusterFailedExamples && pattern.clusterFailedExamples.length > 0 && (
                             <div className="mt-1 text-xs text-rose-100/90">
                               Failed в кластере: {pattern.clusterFailedExamples.slice(0, 3).join(' • ')}
+                            </div>
+                          )}
+                          {pattern.clusterConflict && pattern.clusterConflict !== 'none' && (
+                            <div className="mt-1 text-xs text-amber-100/90">
+                              Кластер даёт конфликтные сигналы: есть и worked, и failed. Подбирай режим аккуратно.
                             </div>
                           )}
                         </div>
