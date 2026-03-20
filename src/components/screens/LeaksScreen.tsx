@@ -545,6 +545,9 @@ function getContextSnapshotItems(contextSnapshot?: Record<string, unknown> | nul
     netCashflow7d: 'Net cashflow за 7 дней',
     expenseDays7d: 'Дней с расходами (7д)',
     openTasks: 'Открытых задач',
+    activeSupplements: 'Активных добавок',
+    supplementIntakeChecked7d: 'Приёмов добавок (7д)',
+    supplementAdherenceRate: 'Дисциплина добавок (%)',
     morningCheckins: 'Утренних check-in',
     eveningCheckins: 'Вечерних check-in',
     dayRatingAvg: 'Средняя оценка дня',
@@ -746,6 +749,8 @@ function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null
   const netCashflow7d = toNum('netCashflow7d')
   const expenseDays7d = toNum('expenseDays7d')
   const openTasks = toNum('openTasks')
+  const activeSupplements = toNum('activeSupplements')
+  const supplementAdherenceRate = toNum('supplementAdherenceRate')
 
   if (sleepHoursAvg !== null && sleepHoursAvg < 6.5) {
     hypotheses.push('Наблюдение: недосып может усиливать leak. Стоит проверить связь сна и срывов.')
@@ -779,6 +784,9 @@ function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null
   }
   if (openTasks !== null && openTasks >= 18) {
     hypotheses.push('Наблюдение: накопилось много открытых задач. Leak может усиливаться из-за перегруза и распыления.')
+  }
+  if (activeSupplements !== null && activeSupplements > 0 && supplementAdherenceRate !== null && supplementAdherenceRate < 50) {
+    hypotheses.push('Наблюдение: низкая дисциплина по добавкам. Это может усиливать просадки в энергии и устойчивости.')
   }
 
   return hypotheses.slice(0, 3)

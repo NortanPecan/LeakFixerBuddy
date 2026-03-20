@@ -34,7 +34,7 @@ function startOfLookbackWindow(days: number) {
 async function buildLiveLeakContext(userId: string, leakId: string) {
   const since = startOfLookbackWindow(CONTEXT_LOOKBACK_DAYS)
 
-  const [dailyStates, foodEntries, fitnessDays, transactions, workoutCount, ritualCount, checkins, doneTasksCount, openTasksCount, linkedEntities, feedbackRows] =
+  const [dailyStates, foodEntries, fitnessDays, transactions, activeSupplementsCount, supplementIntakeCheckedCount, workoutCount, ritualCount, checkins, doneTasksCount, openTasksCount, linkedEntities, feedbackRows] =
     await Promise.all([
       db.dailyState.findMany({
         where: { userId, date: { gte: since } },
@@ -73,6 +73,19 @@ async function buildLiveLeakContext(userId: string, leakId: string) {
         select: {
           amount: true,
           date: true,
+        },
+      }),
+      db.supplement.count({
+        where: {
+          userId,
+          isActive: true,
+        },
+      }),
+      db.supplementIntake.count({
+        where: {
+          userId,
+          checked: true,
+          date: { gte: since },
         },
       }),
       db.gymWorkout.count({
@@ -166,6 +179,15 @@ async function buildLiveLeakContext(userId: string, leakId: string) {
       .filter((item) => item.amount < 0)
       .map((item) => item.date.toISOString().slice(0, 10)),
   ).size
+  const supplementAdherenceRate =
+    activeSupplementsCount > 0
+      ? Number(
+          Math.min(
+            100,
+            ((supplementIntakeCheckedCount / (activeSupplementsCount * CONTEXT_LOOKBACK_DAYS)) * 100),
+          ).toFixed(0),
+        )
+      : null
 
   return {
     generatedAt: new Date().toISOString(),
@@ -188,6 +210,9 @@ async function buildLiveLeakContext(userId: string, leakId: string) {
       incomeSum7d: incomeSum,
       netCashflow7d: netCashflow,
       expenseDays7d: expenseDays,
+      activeSupplements: activeSupplementsCount,
+      supplementIntakeChecked7d: supplementIntakeCheckedCount,
+      supplementAdherenceRate,
       morningCheckins: morningCheckins.length,
       eveningCheckins: eveningCheckins.length,
       dayRatingAvg: avg(eveningCheckins.map((item) => toNumber(item.dayRating))),
