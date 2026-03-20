@@ -158,7 +158,7 @@ function normalizePlan(rawPlan: unknown, fallbackMode: LeakPlanMode): LeakPlanDr
     confidenceReason:
       typeof candidate.confidenceReason === 'string' && candidate.confidenceReason.trim().length > 0
         ? candidate.confidenceReason.trim()
-        : 'Оценка основана на общем паттерне и текущем контексте пользователя.',
+        : 'Гипотеза: оценка основана на текущем контексте пользователя и типичных триггерах этого leak.',
     actions,
   }
 }
@@ -464,6 +464,7 @@ export async function generateLeakPlans(input: LeakPlanInput): Promise<{
     triedSolutions.length > 0 ? `Что уже пробовали: ${triedSolutions.join('; ')}` : null,
     entitySummary ? `Что уже создавали из этого leak: ${entitySummary}` : null,
     feedbackSummary ? `Фидбек по действиям: ${feedbackSummary}` : null,
+    'Требование к confidenceReason: укажи конкретный фактор из контекста и формулируй это как гипотезу, не как доказанный факт.',
   ]
     .filter(Boolean)
     .join('\n')
