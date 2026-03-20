@@ -233,6 +233,8 @@ interface LeakPolicyHint {
         pendingFeedback: boolean
         noOutcomeAfterCreate: boolean
       }
+      stuckScore: number
+      urgency: 'low' | 'medium' | 'high'
       recommendedNudge: 'accept_or_reject' | 'create_entity' | 'collect_feedback' | 'none'
     } | null
     recentFunnels?: Array<{
@@ -262,6 +264,8 @@ interface LeakPolicyHint {
         pendingFeedback: boolean
         noOutcomeAfterCreate: boolean
       }
+      stuckScore: number
+      urgency: 'low' | 'medium' | 'high'
       recommendedNudge: 'accept_or_reject' | 'create_entity' | 'collect_feedback' | 'none'
     }>
     learningSignals?: {
@@ -1849,9 +1853,14 @@ function normalizePolicyFunnel(value: unknown) {
         : {
             noDecision: false,
             noEntityAfterAccept: false,
-            pendingFeedback: false,
-            noOutcomeAfterCreate: false,
-          },
+          pendingFeedback: false,
+          noOutcomeAfterCreate: false,
+        },
+    stuckScore: typeof funnel.stuckScore === 'number' ? Math.round(funnel.stuckScore) : 0,
+    urgency:
+      funnel.urgency === 'low' || funnel.urgency === 'medium' || funnel.urgency === 'high'
+        ? funnel.urgency
+        : 'low',
     recommendedNudge:
       funnel.recommendedNudge === 'accept_or_reject' ||
       funnel.recommendedNudge === 'create_entity' ||
@@ -4036,6 +4045,13 @@ export function LeaksScreen() {
                 null
               const recentFunnels = (policy?.summary?.recentFunnels || [])
                 .filter((item) => item.correlationId !== currentFunnel?.correlationId)
+                .sort((a, b) => {
+                  const urgencyRank = (value: 'low' | 'medium' | 'high') =>
+                    value === 'high' ? 3 : value === 'medium' ? 2 : 1
+                  const rankDiff = urgencyRank(b.urgency) - urgencyRank(a.urgency)
+                  if (rankDiff !== 0) return rankDiff
+                  return (b.stuckScore || 0) - (a.stuckScore || 0)
+                })
                 .slice(0, 3)
               const contextPulse = {
                 energyAvg: getContextMetricNumber(leak.contextSnapshot, 'energyAvg'),
@@ -4691,6 +4707,20 @@ export function LeaksScreen() {
                                   <Badge className="bg-white/10 text-white/70 border-white/10">
                                     Этап: {currentFunnelStageLabel}
                                   </Badge>
+                                  <Badge
+                                    className={
+                                      currentFunnel.urgency === 'high'
+                                        ? 'bg-rose-500/10 text-rose-200 border-rose-500/20'
+                                        : currentFunnel.urgency === 'medium'
+                                          ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                                          : 'bg-white/10 text-white/65 border-white/10'
+                                    }
+                                  >
+                                    Urgency: {currentFunnel.urgency}
+                                  </Badge>
+                                  <Badge className="bg-white/10 text-white/65 border-white/10">
+                                    Stuck score: {currentFunnel.stuckScore}
+                                  </Badge>
                                   {currentFunnel.recommendedNudge !== 'none' && (
                                     <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
                                       Stuck: {currentFunnel.recommendedNudge}
@@ -4895,6 +4925,20 @@ export function LeaksScreen() {
                                         <Badge className="bg-white/10 text-white/65 border-white/10">
                                           Этап: {stageLabel}
                                         </Badge>
+                                        <Badge
+                                          className={
+                                            funnel.urgency === 'high'
+                                              ? 'bg-rose-500/10 text-rose-200 border-rose-500/20'
+                                              : funnel.urgency === 'medium'
+                                                ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                                                : 'bg-white/10 text-white/60 border-white/10'
+                                          }
+                                        >
+                                          {funnel.urgency}
+                                        </Badge>
+                                        <Badge className="bg-white/10 text-white/60 border-white/10">
+                                          score {funnel.stuckScore}
+                                        </Badge>
                                         <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
                                           E:{funnel.entityCreatedCount}
                                         </Badge>
@@ -4926,6 +4970,27 @@ export function LeaksScreen() {
                                             К pending
                                           </Button>
                                         )}
+                                        {funnel.recommendedNudge === 'collect_feedback' &&
+                                          funnel.nextPendingOutcomeActionId && (
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              onClick={() =>
+                                                sendPlanActionFeedback(
+                                                  leak.id,
+                                                  funnel.nextPendingOutcomeActionId || '',
+                                                  'partially',
+                                                  getFeedbackCommentDraft(
+                                                    planActionsById.get(funnel.nextPendingOutcomeActionId || '') || null,
+                                                  ),
+                                                )
+                                              }
+                                              disabled={savingFeedbackActionId === funnel.nextPendingOutcomeActionId}
+                                              className="h-6 border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 px-2 text-[11px] text-indigo-200"
+                                            >
+                                              Quick outcome
+                                            </Button>
+                                          )}
                                       </div>
                                     </div>
                                   )

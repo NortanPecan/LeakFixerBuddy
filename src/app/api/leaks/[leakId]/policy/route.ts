@@ -214,6 +214,20 @@ function summarizeCurrentFunnel(
         maxPendingOutcomeAgeMinutes >= 180,
       ),
   }
+  const stuckScore = Math.min(
+    100,
+    (stuckSignals.noDecision ? 20 : 0) +
+      (stuckSignals.noEntityAfterAccept ? 25 : 0) +
+      (stuckSignals.pendingFeedback ? 30 : 0) +
+      (stuckSignals.noOutcomeAfterCreate ? 25 : 0) +
+      (maxPendingOutcomeAgeMinutes && maxPendingOutcomeAgeMinutes >= 360 ? 10 : 0),
+  )
+  const urgency =
+    stuckScore >= 60
+      ? 'high'
+      : stuckScore >= 30
+        ? 'medium'
+        : 'low'
   const recommendedNudge =
     stuckSignals.noDecision
       ? 'accept_or_reject'
@@ -244,6 +258,8 @@ function summarizeCurrentFunnel(
     lastOutcomeAgeMinutes,
     maxPendingOutcomeAgeMinutes,
     stuckSignals,
+    stuckScore,
+    urgency,
     recommendedNudge,
   }
 }
