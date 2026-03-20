@@ -893,6 +893,10 @@ function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null
   const activeSupplements = toNum('activeSupplements')
   const supplementAdherenceRate = toNum('supplementAdherenceRate')
   const negativeEmotionShare = toNum('negativeEmotionShare')
+  const planActionsTotal = toNum('planActionsTotal')
+  const feedbackCoverageRate = toNum('feedbackCoverageRate')
+  const feedbackWorkedCount = toNum('feedbackWorkedCount')
+  const feedbackFailedCount = toNum('feedbackFailedCount')
 
   if (sleepHoursAvg !== null && sleepHoursAvg < 6.5) {
     hypotheses.push('Наблюдение: недосып может усиливать leak. Стоит проверить связь сна и срывов.')
@@ -932,6 +936,17 @@ function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null
   }
   if (negativeEmotionShare !== null && negativeEmotionShare >= 60) {
     hypotheses.push('Наблюдение: преобладают негативные эмоции. Для leak полезно добавить шаг на стабилизацию состояния.')
+  }
+  if (planActionsTotal !== null && planActionsTotal > 0 && feedbackCoverageRate !== null && feedbackCoverageRate < 50) {
+    hypotheses.push('Наблюдение: по части шагов нет feedback. Закрой цикл обратной связи, чтобы learning работал точнее.')
+  }
+  if (
+    feedbackWorkedCount !== null &&
+    feedbackFailedCount !== null &&
+    feedbackFailedCount > feedbackWorkedCount &&
+    feedbackFailedCount >= 2
+  ) {
+    hypotheses.push('Наблюдение: нерабочих шагов больше, чем сработавших. Имеет смысл перейти на другой режим и пересобрать план.')
   }
 
   return hypotheses.slice(0, 3)
