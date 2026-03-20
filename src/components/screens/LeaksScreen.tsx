@@ -590,6 +590,7 @@ function getContextSnapshotItems(contextSnapshot?: Record<string, unknown> | nul
     feedbackWorkedCount: 'Сработало (count)',
     feedbackPartiallyCount: 'Частично (count)',
     feedbackFailedCount: 'Не помогло (count)',
+    retryResolvedAt: 'Retry закрыт',
   }
 
   const lines: string[] = []
@@ -644,6 +645,12 @@ function getContextSnapshotItems(contextSnapshot?: Record<string, unknown> | nul
       }
       if (typeof retry.requestedAt === 'string') {
         lines.push(`Retry запрошен: ${formatDate(retry.requestedAt)}`)
+      }
+      return
+    }
+    if (key === 'retryResolvedAt') {
+      if (typeof value === 'string') {
+        lines.push(`Retry закрыт: ${formatDate(value)}`)
       }
       return
     }
