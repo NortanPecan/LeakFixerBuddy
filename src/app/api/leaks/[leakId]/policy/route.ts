@@ -185,12 +185,18 @@ function summarizeCurrentFunnel(
   const toAgeMinutes = (value: string | null) =>
     value ? Math.max(0, Math.round((now - new Date(value).getTime()) / 60000)) : null
   const pendingOutcomeActionAgesMinutes = pendingOutcomeActionIds
-    .map((id) => toAgeMinutes(createdActionAtById.get(id) || null))
-    .filter((item): item is number => typeof item === 'number')
+    .map((id) => ({
+      actionId: id,
+      age: toAgeMinutes(createdActionAtById.get(id) || null),
+      title: createdActionTitleById.get(id) || null,
+    }))
+    .filter((item): item is { actionId: string; age: number; title: string | null } => typeof item.age === 'number')
   const maxPendingOutcomeAgeMinutes =
     pendingOutcomeActionAgesMinutes.length > 0
-      ? Math.max(...pendingOutcomeActionAgesMinutes)
+      ? Math.max(...pendingOutcomeActionAgesMinutes.map((item) => item.age))
       : null
+  const oldestPendingOutcome = pendingOutcomeActionAgesMinutes
+    .sort((a, b) => b.age - a.age)[0] || null
   const suggestedAgeMinutes = toAgeMinutes(suggestedAt)
   const acceptedAgeMinutes = toAgeMinutes(acceptedAt)
   const lastOutcomeAgeMinutes = toAgeMinutes(lastOutcomeAt)
@@ -214,6 +220,14 @@ function summarizeCurrentFunnel(
         maxPendingOutcomeAgeMinutes >= 180,
       ),
   }
+  const primaryStuckSignal =
+    stuckSignals.pendingFeedback || stuckSignals.noOutcomeAfterCreate
+      ? 'pending_feedback'
+      : stuckSignals.noEntityAfterAccept
+        ? 'no_entity_after_accept'
+        : stuckSignals.noDecision
+          ? 'no_decision'
+          : 'none'
   const stuckScore = Math.min(
     100,
     (stuckSignals.noDecision ? 20 : 0) +
@@ -228,6 +242,12 @@ function summarizeCurrentFunnel(
       : stuckScore >= 30
         ? 'medium'
         : 'low'
+  const urgencyReason =
+    urgency === 'high'
+      ? 'Высокий риск зависания execution loop'
+      : urgency === 'medium'
+        ? 'Есть признаки торможения цикла'
+        : 'Контур движется штатно'
   const recommendedNudge =
     stuckSignals.noDecision
       ? 'accept_or_reject'
@@ -236,6 +256,14 @@ function summarizeCurrentFunnel(
         : stuckSignals.pendingFeedback || stuckSignals.noOutcomeAfterCreate
           ? 'collect_feedback'
           : 'none'
+  const recommendedNudgeReason =
+    recommendedNudge === 'accept_or_reject'
+      ? 'Совет долго без решения'
+      : recommendedNudge === 'create_entity'
+        ? 'Совет принят, но выполнение не началось'
+        : recommendedNudge === 'collect_feedback'
+          ? 'Есть созданные шаги без outcome'
+          : 'Немедленных действий не требуется'
 
   return {
     correlationId,
@@ -257,10 +285,16 @@ function summarizeCurrentFunnel(
     acceptedAgeMinutes,
     lastOutcomeAgeMinutes,
     maxPendingOutcomeAgeMinutes,
+    oldestPendingOutcomeActionId: oldestPendingOutcome?.actionId || null,
+    oldestPendingOutcomeActionTitle: oldestPendingOutcome?.title || null,
+    oldestPendingOutcomeAgeMinutes: oldestPendingOutcome?.age || null,
     stuckSignals,
+    primaryStuckSignal,
     stuckScore,
     urgency,
+    urgencyReason,
     recommendedNudge,
+    recommendedNudgeReason,
   }
 }
 

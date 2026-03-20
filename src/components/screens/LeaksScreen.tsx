@@ -227,15 +227,21 @@ interface LeakPolicyHint {
       acceptedAgeMinutes: number | null
       lastOutcomeAgeMinutes: number | null
       maxPendingOutcomeAgeMinutes: number | null
+      oldestPendingOutcomeActionId: string | null
+      oldestPendingOutcomeActionTitle: string | null
+      oldestPendingOutcomeAgeMinutes: number | null
       stuckSignals: {
         noDecision: boolean
         noEntityAfterAccept: boolean
         pendingFeedback: boolean
         noOutcomeAfterCreate: boolean
       }
+      primaryStuckSignal: 'pending_feedback' | 'no_entity_after_accept' | 'no_decision' | 'none'
       stuckScore: number
       urgency: 'low' | 'medium' | 'high'
+      urgencyReason: string
       recommendedNudge: 'accept_or_reject' | 'create_entity' | 'collect_feedback' | 'none'
+      recommendedNudgeReason: string
     } | null
     recentFunnels?: Array<{
       correlationId: string
@@ -258,15 +264,21 @@ interface LeakPolicyHint {
       acceptedAgeMinutes: number | null
       lastOutcomeAgeMinutes: number | null
       maxPendingOutcomeAgeMinutes: number | null
+      oldestPendingOutcomeActionId: string | null
+      oldestPendingOutcomeActionTitle: string | null
+      oldestPendingOutcomeAgeMinutes: number | null
       stuckSignals: {
         noDecision: boolean
         noEntityAfterAccept: boolean
         pendingFeedback: boolean
         noOutcomeAfterCreate: boolean
       }
+      primaryStuckSignal: 'pending_feedback' | 'no_entity_after_accept' | 'no_decision' | 'none'
       stuckScore: number
       urgency: 'low' | 'medium' | 'high'
+      urgencyReason: string
       recommendedNudge: 'accept_or_reject' | 'create_entity' | 'collect_feedback' | 'none'
+      recommendedNudgeReason: string
     }>
     learningSignals?: {
       loopHealth: number
@@ -1847,6 +1859,18 @@ function normalizePolicyFunnel(value: unknown) {
       typeof funnel.maxPendingOutcomeAgeMinutes === 'number'
         ? Math.round(funnel.maxPendingOutcomeAgeMinutes)
         : null,
+    oldestPendingOutcomeActionId:
+      typeof funnel.oldestPendingOutcomeActionId === 'string'
+        ? funnel.oldestPendingOutcomeActionId
+        : null,
+    oldestPendingOutcomeActionTitle:
+      typeof funnel.oldestPendingOutcomeActionTitle === 'string'
+        ? funnel.oldestPendingOutcomeActionTitle
+        : null,
+    oldestPendingOutcomeAgeMinutes:
+      typeof funnel.oldestPendingOutcomeAgeMinutes === 'number'
+        ? Math.round(funnel.oldestPendingOutcomeAgeMinutes)
+        : null,
     stuckSignals:
       funnel.stuckSignals && typeof funnel.stuckSignals === 'object' && !Array.isArray(funnel.stuckSignals)
         ? (() => {
@@ -1864,11 +1888,19 @@ function normalizePolicyFunnel(value: unknown) {
           pendingFeedback: false,
           noOutcomeAfterCreate: false,
         },
+    primaryStuckSignal:
+      funnel.primaryStuckSignal === 'pending_feedback' ||
+      funnel.primaryStuckSignal === 'no_entity_after_accept' ||
+      funnel.primaryStuckSignal === 'no_decision' ||
+      funnel.primaryStuckSignal === 'none'
+        ? funnel.primaryStuckSignal
+        : 'none',
     stuckScore: typeof funnel.stuckScore === 'number' ? Math.round(funnel.stuckScore) : 0,
     urgency:
       funnel.urgency === 'low' || funnel.urgency === 'medium' || funnel.urgency === 'high'
         ? funnel.urgency
         : 'low',
+    urgencyReason: typeof funnel.urgencyReason === 'string' ? funnel.urgencyReason : 'Нет данных',
     recommendedNudge:
       funnel.recommendedNudge === 'accept_or_reject' ||
       funnel.recommendedNudge === 'create_entity' ||
@@ -1876,6 +1908,10 @@ function normalizePolicyFunnel(value: unknown) {
       funnel.recommendedNudge === 'none'
         ? funnel.recommendedNudge
         : 'none',
+    recommendedNudgeReason:
+      typeof funnel.recommendedNudgeReason === 'string'
+        ? funnel.recommendedNudgeReason
+        : 'Нет подсказки',
     isCurrent: funnel.isCurrent === true,
   }
 }
@@ -4777,6 +4813,9 @@ export function LeaksScreen() {
                                   <Badge className="bg-white/10 text-white/65 border-white/10">
                                     Stuck score: {currentFunnel.stuckScore}
                                   </Badge>
+                                  <Badge className="bg-white/10 text-white/60 border-white/10">
+                                    Signal: {currentFunnel.primaryStuckSignal}
+                                  </Badge>
                                   {currentFunnel.recommendedNudge !== 'none' && (
                                     <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
                                       Stuck: {currentFunnel.recommendedNudge}
@@ -4823,6 +4862,9 @@ export function LeaksScreen() {
                                     </Button>
                                   )}
                                 </div>
+                                <div className="mt-1 text-[11px] text-white/60">
+                                  {currentFunnel.urgencyReason}. {currentFunnel.recommendedNudgeReason}.
+                                </div>
                                 <div className="mt-1 flex flex-wrap gap-2">
                                   {currentFunnel.suggestedAgeMinutes !== null && (
                                     <Badge className="bg-white/10 text-white/60 border-white/10">
@@ -4844,6 +4886,18 @@ export function LeaksScreen() {
                                     >
                                       Pending age: {currentFunnel.maxPendingOutcomeAgeMinutes}m
                                     </Badge>
+                                  )}
+                                  {currentFunnel.oldestPendingOutcomeActionId && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => focusPlanAction(leak.id, currentFunnel.oldestPendingOutcomeActionId || '')}
+                                      className="h-6 border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/15 px-2 text-[11px] text-rose-200"
+                                    >
+                                      {currentFunnel.oldestPendingOutcomeActionTitle
+                                        ? `Самый старый: ${currentFunnel.oldestPendingOutcomeActionTitle}`
+                                        : 'К самому старому pending'}
+                                    </Button>
                                   )}
                                 </div>
                                 {(currentFunnel.stuckSignals.noDecision ||
@@ -5016,6 +5070,9 @@ export function LeaksScreen() {
                                             {funnel.recommendedNudge}
                                           </Badge>
                                         )}
+                                        <Badge className="bg-white/10 text-white/60 border-white/10">
+                                          {funnel.primaryStuckSignal}
+                                        </Badge>
                                         {funnel.nextPendingOutcomeActionId && (
                                           <Button
                                             size="sm"
@@ -5047,6 +5104,9 @@ export function LeaksScreen() {
                                               Quick outcome
                                             </Button>
                                           )}
+                                      </div>
+                                      <div className="mt-1 text-[11px] text-white/55">
+                                        {funnel.urgencyReason}. {funnel.recommendedNudgeReason}.
                                       </div>
                                     </div>
                                   )
@@ -5103,10 +5163,18 @@ export function LeaksScreen() {
                                           {item.maxPendingOutcomeAgeMinutes}m
                                         </Badge>
                                       )}
+                                      <Badge className="bg-white/10 text-white/60 border-white/10">
+                                        {item.primaryStuckSignal}
+                                      </Badge>
                                       <Button
                                         size="sm"
                                         variant="outline"
-                                        onClick={() => focusPlanAction(leak.id, item.nextPendingOutcomeActionId || '')}
+                                        onClick={() =>
+                                          focusPlanAction(
+                                            leak.id,
+                                            item.oldestPendingOutcomeActionId || item.nextPendingOutcomeActionId || '',
+                                          )
+                                        }
                                         className="h-6 border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 px-2 text-[11px] text-amber-200"
                                       >
                                         Фокус
@@ -5129,6 +5197,9 @@ export function LeaksScreen() {
                                       >
                                         Outcome
                                       </Button>
+                                    </div>
+                                    <div className="mt-1 text-[11px] text-white/55">
+                                      {item.urgencyReason}. {item.recommendedNudgeReason}.
                                     </div>
                                   </div>
                                 ))}
