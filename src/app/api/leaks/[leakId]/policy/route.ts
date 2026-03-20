@@ -38,6 +38,29 @@ function pickLiveContext(snapshot: Record<string, unknown>) {
   return { metrics }
 }
 
+function shouldAppendSuggestedEvent(snapshot: Record<string, unknown>, correlationId: string | null) {
+  const journal = Array.isArray(snapshot.runJournal) ? snapshot.runJournal : []
+  const latestSuggested = journal.find((item) => {
+    if (!item || typeof item !== 'object') return false
+    const event = item as Record<string, unknown>
+    return event.type === 'policy_suggested'
+  }) as Record<string, unknown> | undefined
+  if (!latestSuggested) return true
+
+  const latestAt = typeof latestSuggested.at === 'string' ? new Date(latestSuggested.at).getTime() : 0
+  const now = Date.now()
+  const isFresh = now - latestAt < 60_000
+  const latestCorrelationId =
+    typeof latestSuggested.policyCorrelationId === 'string' ? latestSuggested.policyCorrelationId : null
+
+  // Throttle noisy repeats from frequent card opens when suggestion is unchanged.
+  if (isFresh && latestCorrelationId && correlationId && latestCorrelationId === correlationId) {
+    return false
+  }
+
+  return true
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ leakId: string }> },
@@ -72,23 +95,26 @@ export async function GET(
     const snapshot = normalizeSnapshot(leak.contextSnapshot)
     const policy = buildLeakPolicy(plans, snapshot, pickLiveContext(snapshot))
 
-    const nextSnapshot = compactSnapshot(
-      appendRunJournal(snapshot, {
-        type: 'policy_suggested',
-        at: new Date().toISOString(),
-        mode: policy.selectedMode as LeakPlanMode | null,
-        policyCorrelationId: policy.nextBestAction?.correlationId || null,
-        policyActionType: policy.nextBestAction?.type || null,
-        factors: policy.nextBestAction?.factors || [],
-        note: policy.nextBestAction?.reason || null,
-      }),
-    )
-    await db.leak.update({
-      where: { id: leakId },
-      data: {
-        contextSnapshot: nextSnapshot,
-      },
-    })
+    let nextSnapshot = snapshot
+    if (shouldAppendSuggestedEvent(snapshot, policy.nextBestAction?.correlationId || null)) {
+      nextSnapshot = compactSnapshot(
+        appendRunJournal(snapshot, {
+          type: 'policy_suggested',
+          at: new Date().toISOString(),
+          mode: policy.selectedMode as LeakPlanMode | null,
+          policyCorrelationId: policy.nextBestAction?.correlationId || null,
+          policyActionType: policy.nextBestAction?.type || null,
+          factors: policy.nextBestAction?.factors || [],
+          note: policy.nextBestAction?.reason || null,
+        }),
+      )
+      await db.leak.update({
+        where: { id: leakId },
+        data: {
+          contextSnapshot: nextSnapshot,
+        },
+      })
+    }
 
     return NextResponse.json({
       success: true,

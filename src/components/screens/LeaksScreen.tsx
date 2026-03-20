@@ -192,6 +192,7 @@ interface LeakPolicyHint {
     policyActionType?: string | null
     actionTitle?: string | null
     result?: string | null
+    factors?: Array<{ key: string; weight: number; detail?: string }>
   }>
 }
 
@@ -662,6 +663,17 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
     bottleneckText: 'Критичных блокеров нет: можно тестировать следующий шаг или уточнять контекст.',
     bottleneckActionId: null,
   }
+}
+
+function isLeakEntityType(value: string): value is LeakActionLink['entityType'] {
+  return (
+    value === 'task' ||
+    value === 'ritual' ||
+    value === 'challenge' ||
+    value === 'content' ||
+    value === 'skill' ||
+    value === 'trait'
+  )
 }
 
 function getContextSnapshotItems(contextSnapshot?: Record<string, unknown> | null) {
@@ -1539,6 +1551,36 @@ function getPolicyEventLabel(type: string) {
   }
 }
 
+function getPolicyActionLabel(type: string | null | undefined) {
+  if (!type) return 'n/a'
+  switch (type) {
+    case 'switch_mode':
+      return 'Смена режима'
+    case 'retry':
+      return 'Retry'
+    case 'regenerate_context':
+      return 'Пересбор контекста'
+    case 'focus_action':
+      return 'Фокус на шаг'
+    case 'generate':
+      return 'Генерация'
+    case 'create_entity':
+      return 'Создать сущность'
+    case 'give_feedback':
+      return 'Дать feedback'
+    default:
+      return type
+  }
+}
+
+function getPolicyResultLabel(result: string | null | undefined) {
+  if (!result) return null
+  if (result === 'worked') return 'Сработало'
+  if (result === 'partially') return 'Частично'
+  if (result === 'not_worked') return 'Не помогло'
+  return result
+}
+
 function normalizeContextDrift(value: unknown): ContextDriftHint | null {
   if (!value || typeof value !== 'object') return null
   const candidate = value as Record<string, unknown>
@@ -1644,6 +1686,20 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
                 typeof event.policyActionType === 'string' ? event.policyActionType : null,
               actionTitle: typeof event.actionTitle === 'string' ? event.actionTitle : null,
               result: typeof event.result === 'string' ? event.result : null,
+              factors: Array.isArray(event.factors)
+                ? event.factors
+                    .map((factor) => {
+                      if (!factor || typeof factor !== 'object') return null
+                      const item = factor as Record<string, unknown>
+                      if (typeof item.key !== 'string' || typeof item.weight !== 'number') return null
+                      return {
+                        key: item.key,
+                        weight: item.weight,
+                        detail: typeof item.detail === 'string' ? item.detail : undefined,
+                      }
+                    })
+                    .filter((factor): factor is { key: string; weight: number; detail?: string } => Boolean(factor))
+                : [],
             }
           })
           .filter((item): item is NonNullable<LeakPolicyHint['runJournal']>[number] => Boolean(item))
@@ -3358,6 +3414,10 @@ export function LeaksScreen() {
               const lastStableMode = getSnapshotMode(leak.contextSnapshot, 'lastStableMode')
               const policy = policyByLeak[leak.id] || null
               const nextBestActionHint = policy?.nextBestAction || null
+              const policyEvents = (policy?.runJournal || []).filter((event) => event.type.startsWith('policy_'))
+              const policyAcceptedCount = policyEvents.filter((event) => event.type === 'policy_accepted').length
+              const policyRejectedCount = policyEvents.filter((event) => event.type === 'policy_rejected').length
+              const policyOutcomeCount = policyEvents.filter((event) => event.type === 'policy_outcome').length
               const contextDriftHint = policy?.contextDrift || null
               const executionScore = policy?.executionScore || {
                 value: 0,
@@ -3381,6 +3441,13 @@ export function LeaksScreen() {
                 sleepHoursAvg: getContextMetricNumber(leak.contextSnapshot, 'sleepHoursAvg'),
                 openTasks: getContextMetricNumber(leak.contextSnapshot, 'openTasks'),
               }
+              const contextPulseRisk =
+                (contextPulse.stressAvg !== null && contextPulse.stressAvg >= 7) ||
+                (contextPulse.energyAvg !== null && contextPulse.energyAvg <= 5) ||
+                (contextPulse.sleepHoursAvg !== null && contextPulse.sleepHoursAvg < 6.5) ||
+                (contextPulse.openTasks !== null && contextPulse.openTasks >= 18)
+                  ? 'high'
+                  : 'normal'
               const snapshotHistory = getSnapshotHistory(leak.contextSnapshot)
               const matchedPattern = getBestPatternForLeak(patterns, leak)
               const matchedPatternLinkType = matchedPattern ? getPatternLinkTypeForLeak(matchedPattern, leak) : 'none'
@@ -3875,30 +3942,37 @@ export function LeaksScreen() {
                                   {generatingPlansLeakId === leak.id ? 'Собираю...' : 'Пересобрать планы'}
                                 </Button>
                               )}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  executePolicyAction(leak, {
-                                    actionType: nextBestActionHint.type === 'switch_mode'
-                                      ? 'switch_mode'
-                                      : nextBestActionHint.type === 'retry'
-                                        ? 'retry'
-                                        : nextBestActionHint.type === 'regenerate_context'
-                                          ? 'regenerate_context'
-                                          : 'focus_action',
-                                    decision: 'rejected',
-                                    reason: 'not_now',
-                                    correlationId: nextBestActionHint.correlationId || null,
-                                    targetMode: nextBestActionHint.targetMode || undefined,
-                                    actionId: nextBestActionHint.actionId || undefined,
-                                    factors: nextBestActionHint.factors || [],
-                                  })
-                                }
-                                className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                              >
-                                Не сейчас
-                              </Button>
+                              {[
+                                { key: 'not_now', label: 'Не сейчас' },
+                                { key: 'too_hard', label: 'Сложно сейчас' },
+                                { key: 'not_relevant', label: 'Не по контексту' },
+                              ].map((reject) => (
+                                <Button
+                                  key={`reject-${reject.key}`}
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    executePolicyAction(leak, {
+                                      actionType: nextBestActionHint.type === 'switch_mode'
+                                        ? 'switch_mode'
+                                        : nextBestActionHint.type === 'retry'
+                                          ? 'retry'
+                                          : nextBestActionHint.type === 'regenerate_context'
+                                            ? 'regenerate_context'
+                                            : 'focus_action',
+                                      decision: 'rejected',
+                                      reason: reject.key,
+                                      correlationId: nextBestActionHint.correlationId || null,
+                                      targetMode: nextBestActionHint.targetMode || undefined,
+                                      actionId: nextBestActionHint.actionId || undefined,
+                                      factors: nextBestActionHint.factors || [],
+                                    })
+                                  }
+                                  className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                >
+                                  {reject.label}
+                                </Button>
+                              ))}
                             </div>
                           </div>
                         )}
@@ -3909,10 +3983,20 @@ export function LeaksScreen() {
                               v{policy.policyVersion || 1}
                               {policy.computedAt ? ` • ${formatDate(policy.computedAt)}` : ''}
                             </div>
-                            {policy.runJournal && policy.runJournal.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
+                                Принято: {policyAcceptedCount}
+                              </Badge>
+                              <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
+                                Отклонено: {policyRejectedCount}
+                              </Badge>
+                              <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                                Outcome: {policyOutcomeCount}
+                              </Badge>
+                            </div>
+                            {policyEvents.length > 0 && (
                               <div className="mt-2 space-y-1">
-                                {policy.runJournal
-                                  .filter((event) => event.type.startsWith('policy_'))
+                                {policyEvents
                                   .slice(0, 4)
                                   .map((event) => (
                                     <div
@@ -3920,8 +4004,13 @@ export function LeaksScreen() {
                                       className="text-xs text-white/65"
                                     >
                                       {getPolicyEventLabel(event.type)} • {formatDate(event.at)}
-                                      {event.result ? ` • ${event.result}` : ''}
+                                      {event.policyActionType ? ` • ${getPolicyActionLabel(event.policyActionType)}` : ''}
+                                      {event.result ? ` • ${getPolicyResultLabel(event.result)}` : ''}
+                                      {event.note ? ` • ${event.note}` : ''}
                                       {event.actionTitle ? ` • ${event.actionTitle}` : ''}
+                                      {event.factors && event.factors.length > 0
+                                        ? ` • factors: ${event.factors.slice(0, 2).map((item) => item.key).join(', ')}`
+                                        : ''}
                                     </div>
                                   ))}
                               </div>
@@ -3954,7 +4043,13 @@ export function LeaksScreen() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => selectPlanMode(leak.id, adaptiveModeSuggestion.targetMode)}
+                                onClick={() =>
+                                  executePolicyAction(leak, {
+                                    actionType: 'switch_mode',
+                                    reason: 'adaptive_mode_suggestion',
+                                    targetMode: adaptiveModeSuggestion.targetMode,
+                                  })
+                                }
                                 disabled={selectingPlanLeakId === leak.id}
                                 className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
                               >
@@ -4100,6 +4195,15 @@ export function LeaksScreen() {
                             Контекстный пульс
                           </div>
                           <div className="flex flex-wrap gap-2">
+                            <Badge
+                              className={
+                                contextPulseRisk === 'high'
+                                  ? 'bg-rose-500/10 text-rose-200 border-rose-500/20'
+                                  : 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
+                              }
+                            >
+                              Риск контекста: {contextPulseRisk === 'high' ? 'высокий' : 'нормальный'}
+                            </Badge>
                             {contextPulse.energyAvg !== null && (
                               <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
                                 Энергия: {contextPulse.energyAvg}
@@ -4151,10 +4255,22 @@ export function LeaksScreen() {
                               <div className="text-xs text-white/55">Последние созданные сущности</div>
                               {snapshotHistory.linkedEntities.slice(0, 4).map((item) => (
                                 <div key={`${item.entityType}-${item.label}-${item.createdAt}`} className="text-xs text-white/70">
-                                  {item.sourcePlanMode && item.sourcePlanMode in PLAN_MODE_LABELS
-                                    ? `[${PLAN_MODE_LABELS[item.sourcePlanMode as LeakSolutionPlan['mode']]}] `
-                                    : ''}
-                                  {item.label} • {formatDate(item.createdAt)}
+                                  <div>
+                                    {item.sourcePlanMode && item.sourcePlanMode in PLAN_MODE_LABELS
+                                      ? `[${PLAN_MODE_LABELS[item.sourcePlanMode as LeakSolutionPlan['mode']]}] `
+                                      : ''}
+                                    {item.label} • {formatDate(item.createdAt)}
+                                  </div>
+                                  {isLeakEntityType(item.entityType) && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => setScreen(getActionScreen(item.entityType))}
+                                      className="mt-1 border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                    >
+                                      Открыть {getActionLabel(item.entityType)}
+                                    </Button>
+                                  )}
                                 </div>
                               ))}
                             </div>

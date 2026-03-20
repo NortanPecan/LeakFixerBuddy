@@ -123,4 +123,24 @@ describe('leak-policy', () => {
     const runJournal = Array.isArray(compacted.runJournal) ? compacted.runJournal : []
     expect(runJournal.length).toBeLessThanOrEqual(120)
   })
+
+  it('stores policy factors in run journal entries', () => {
+    const snapshot = appendRunJournal({}, {
+      type: 'policy_accepted',
+      at: '2026-03-20T12:00:00.000Z',
+      policyCorrelationId: 'policy_test_1',
+      policyActionType: 'switch_mode',
+      factors: [
+        { key: 'failed_recent', weight: 0.8, detail: '2' },
+        { key: 'mode_pressure', weight: 0.5, detail: 'base' },
+      ],
+      note: 'accepted',
+    })
+    const runJournal = Array.isArray(snapshot.runJournal) ? snapshot.runJournal : []
+    expect(runJournal.length).toBe(1)
+    const first = runJournal[0] as Record<string, unknown>
+    const factors = Array.isArray(first.factors) ? first.factors : []
+    expect(factors.length).toBe(2)
+    expect((factors[0] as { key?: string }).key).toBe('failed_recent')
+  })
 })
