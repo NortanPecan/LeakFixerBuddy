@@ -688,6 +688,16 @@ function getFeedbackByActionId(plans?: LeakSolutionPlan[]) {
   return map
 }
 
+function getPlanActionById(plans?: LeakSolutionPlan[]) {
+  const map = new Map<string, LeakPlanAction>()
+  plans?.forEach((plan) => {
+    plan.actions.forEach((action) => {
+      map.set(action.id, action)
+    })
+  })
+  return map
+}
+
 function normalizePattern(rawPattern: unknown): LeakPattern | null {
   if (!rawPattern || typeof rawPattern !== 'object') return null
   const pattern = rawPattern as Record<string, unknown>
@@ -1393,7 +1403,15 @@ export function LeaksScreen() {
   const generatePlansForLeak = async (
     leakId: string,
     regenerate = false,
-    options?: { silent?: boolean },
+    options?: {
+      silent?: boolean
+      retryFocus?: {
+        actionId?: string | null
+        actionTitle: string
+        actionKind?: LeakPlanAction['kind'] | null
+        failureReason?: string | null
+      } | null
+    },
   ) => {
     if (!user?.id) return
 
@@ -1405,6 +1423,10 @@ export function LeaksScreen() {
         body: JSON.stringify({
           userId: user.id,
           regenerate,
+          retryActionId: options?.retryFocus?.actionId || undefined,
+          retryActionTitle: options?.retryFocus?.actionTitle || undefined,
+          retryActionKind: options?.retryFocus?.actionKind || undefined,
+          retryFailureReason: options?.retryFocus?.failureReason || undefined,
         }),
       })
 
@@ -1498,7 +1520,13 @@ export function LeaksScreen() {
     return updateLeakStatus(leak.id, 'in_progress', options)
   }
 
-  const retryLeakPlanning = async (leak: LeakEntity) => {
+  const retryLeakPlanning = async (
+    leak: LeakEntity,
+    options?: {
+      action?: LeakPlanAction | null
+      failureReason?: string | null
+    },
+  ) => {
     if (!user?.id || retryingLeakId) return
 
     setRetryingLeakId(leak.id)
@@ -1509,14 +1537,26 @@ export function LeaksScreen() {
       }
 
       const hadPlans = Boolean(plansByLeak[leak.id]?.length)
-      const generated = await generatePlansForLeak(leak.id, hadPlans, { silent: true })
+      const generated = await generatePlansForLeak(leak.id, hadPlans, {
+        silent: true,
+        retryFocus: options?.action
+          ? {
+              actionId: options.action.id,
+              actionTitle: options.action.title,
+              actionKind: options.action.kind,
+              failureReason: options.failureReason || null,
+            }
+          : null,
+      })
       if (!generated) return
 
       setExpandedLeakId(leak.id)
       showSuccessToast(
-        hadPlans
-          ? 'Лик возвращён в работу, режимы обновлены'
-          : 'Для лика собраны первые режимы',
+        options?.action
+          ? `Пересобрал режимы с фокусом на шаг «${options.action.title}»`
+          : hadPlans
+            ? 'Лик возвращён в работу, режимы обновлены'
+            : 'Для лика собраны первые режимы',
       )
     } finally {
       setRetryingLeakId(null)
@@ -2309,6 +2349,7 @@ export function LeaksScreen() {
               const leakPlans = plansByLeak[leak.id] || []
               const selectedPlan = getSelectedPlan(leakPlans)
               const feedbackByActionId = getFeedbackByActionId(leakPlans)
+              const planActionsById = getPlanActionById(leakPlans)
               const feedbackTimeline = getLeakFeedbackTimeline(leak, leakPlans)
               const contextHypotheses = buildContextHypotheses(leak.contextSnapshot)
               const matchedPattern = patterns.find(
@@ -2892,7 +2933,12 @@ export function LeaksScreen() {
                                       <Button
                                         size="sm"
                                         variant="outline"
-                                        onClick={() => retryLeakPlanning(leak)}
+                                        onClick={() =>
+                                          retryLeakPlanning(leak, {
+                                            action: planAction,
+                                            failureReason: feedback.comment || null,
+                                          })
+                                        }
                                         disabled={retryingLeakId === leak.id}
                                         className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
                                       >
@@ -2981,6 +3027,7 @@ export function LeaksScreen() {
                                     ? metadata.sourcePlanMode
                                     : null
                                 const feedback = sourceActionId ? feedbackByActionId.get(sourceActionId) : null
+                                const sourcePlanAction = sourceActionId ? planActionsById.get(sourceActionId) || null : null
 
                                 return (
                                   <div
@@ -3068,7 +3115,12 @@ export function LeaksScreen() {
                                         <Button
                                           size="sm"
                                           variant="outline"
-                                          onClick={() => retryLeakPlanning(leak)}
+                                          onClick={() =>
+                                            retryLeakPlanning(leak, {
+                                              action: sourcePlanAction,
+                                              failureReason: feedback.comment || null,
+                                            })
+                                          }
                                           disabled={retryingLeakId === leak.id}
                                           className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
                                         >
@@ -3363,7 +3415,12 @@ export function LeaksScreen() {
                                             <Button
                                               size="sm"
                                               variant="outline"
-                                              onClick={() => retryLeakPlanning(leak)}
+                                              onClick={() =>
+                                                retryLeakPlanning(leak, {
+                                                  action,
+                                                  failureReason: getActionFeedback(action)?.comment || null,
+                                                })
+                                              }
                                               disabled={retryingLeakId === leak.id}
                                               className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
                                             >

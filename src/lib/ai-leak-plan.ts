@@ -30,6 +30,12 @@ interface LeakPlanInput {
     sphere: string | null
     contextSnapshot?: unknown
   }
+  retryFocus?: {
+    actionId?: string | null
+    actionTitle: string
+    actionKind?: string | null
+    failureReason?: string | null
+  } | null
 }
 
 interface LeakHistoryContext {

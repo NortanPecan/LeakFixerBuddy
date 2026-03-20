@@ -11,6 +11,15 @@ const SelectPlanSchema = z.object({
   mode: z.enum(['minimum', 'base', 'maximum']),
 })
 
+const GeneratePlansSchema = z.object({
+  userId: z.string().min(1),
+  regenerate: z.boolean().optional(),
+  retryActionId: z.string().min(1).optional(),
+  retryActionTitle: z.string().min(1).optional(),
+  retryActionKind: z.string().min(1).optional(),
+  retryFailureReason: z.string().min(1).optional(),
+})
+
 const CONTEXT_LOOKBACK_DAYS = 7
 
 function toNumber(value: unknown): number | null {
@@ -358,10 +367,25 @@ export async function POST(
   context: { params: Promise<{ leakId: string }> },
 ) {
   try {
-    const body = (await request.json()) as { userId?: string; regenerate?: boolean }
+    const body = await request.json()
+    const parsed = GeneratePlansSchema.safeParse(body)
     const { leakId } = await context.params
-    const userId = body.userId
-    const regenerate = body.regenerate === true
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid plan generation payload', issues: parsed.error.flatten() },
+        { status: 400 },
+      )
+    }
+
+    const {
+      userId,
+      regenerate,
+      retryActionId,
+      retryActionTitle,
+      retryActionKind,
+      retryFailureReason,
+    } = parsed.data
 
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
@@ -391,6 +415,15 @@ export async function POST(
       ...previousSnapshot,
       live: liveContext,
       history: liveContext.history,
+      retry: retryActionTitle
+        ? {
+            actionId: retryActionId || null,
+            actionTitle: retryActionTitle,
+            actionKind: retryActionKind || null,
+            failureReason: retryFailureReason || null,
+            requestedAt: new Date().toISOString(),
+          }
+        : undefined,
       contextUpdatedAt: new Date().toISOString(),
     }
 
@@ -407,6 +440,14 @@ export async function POST(
         ...target.leak,
         contextSnapshot: mergedSnapshot,
       },
+      retryFocus: retryActionTitle
+        ? {
+            actionId: retryActionId || null,
+            actionTitle: retryActionTitle,
+            actionKind: retryActionKind || null,
+            failureReason: retryFailureReason || null,
+          }
+        : null,
     })
 
     await db.$transaction(async (tx) => {
