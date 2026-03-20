@@ -1217,6 +1217,11 @@ export function LeaksScreen() {
 
     if (guidance?.failedActions && guidance.failedActions > 0 && feedbackHistoryFilter !== 'problem') {
       setFeedbackHistoryFilter('problem')
+      return
+    }
+
+    if ((!guidance?.failedActions || guidance.failedActions === 0) && feedbackHistoryFilter === 'problem') {
+      setFeedbackHistoryFilter('all')
     }
   }, [expandedLeakId, plansByLeak, leaks, feedbackHistoryFilter])
 
