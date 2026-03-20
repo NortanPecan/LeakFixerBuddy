@@ -23,6 +23,7 @@ type FeedbackLogEntry = {
   comment: string | null
   policyCorrelationId?: string | null
   feedbackSource?: 'manual' | 'policy'
+  attempt?: number
   updatedAt: string
 }
 
@@ -68,6 +69,7 @@ function normalizeFeedbackLog(raw: unknown): FeedbackLogEntry[] {
           candidate.feedbackSource === 'manual' || candidate.feedbackSource === 'policy'
             ? candidate.feedbackSource
             : undefined,
+        attempt: typeof candidate.attempt === 'number' ? Math.round(candidate.attempt) : undefined,
         updatedAt: candidate.updatedAt,
       }
     })
@@ -335,6 +337,7 @@ export async function POST(
         })
 
         const updatedAt = new Date().toISOString()
+        const attempt = feedbackLog.filter((item) => item.actionId === action.id).length + 1
         const retryCurrent =
           snapshot.retry && typeof snapshot.retry === 'object' && !Array.isArray(snapshot.retry)
             ? (snapshot.retry as Record<string, unknown>)
@@ -380,6 +383,9 @@ export async function POST(
             mode: action.plan.mode as 'minimum' | 'base' | 'maximum',
             actionId: action.id,
             actionTitle: action.title,
+            actionKind: action.kind,
+            actor: 'user',
+            attempt,
             result,
             note: normalizedComment,
           })
@@ -437,6 +443,7 @@ export async function POST(
           comment: normalizedComment,
           policyCorrelationId: actionPolicyCorrelationId || null,
           feedbackSource: actionPolicyCorrelationId ? 'policy' : 'manual',
+          attempt,
           updatedAt,
         })
         if (feedbackLog.length > 80) {
@@ -449,6 +456,9 @@ export async function POST(
           mode: action.plan.mode as 'minimum' | 'base' | 'maximum',
           actionId: action.id,
           actionTitle: action.title,
+          actionKind: action.kind,
+          actor: 'user',
+          attempt,
           result,
           note: normalizedComment,
           policyCorrelationId: actionPolicyCorrelationId || null,
@@ -462,6 +472,8 @@ export async function POST(
             actionId: action.id,
             actionTitle: action.title,
             actionKind: action.kind,
+            actor: 'user',
+            attempt,
             result,
             policyCorrelationId: actionPolicyCorrelationId,
             note: normalizedComment,
@@ -471,6 +483,7 @@ export async function POST(
           snapshot.lastPolicyOutcomeResult = result
           snapshot.lastPolicyOutcomeActionId = action.id
           snapshot.lastPolicyOutcomeCorrelationId = actionPolicyCorrelationId
+          snapshot.lastPolicyOutcomeAttempt = attempt
         }
       }
 

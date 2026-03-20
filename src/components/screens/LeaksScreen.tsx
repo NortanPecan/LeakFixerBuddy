@@ -218,6 +218,11 @@ interface LeakPolicyHint {
       outcomePartial: number
       outcomeFailed: number
       lastOutcomeAt: string | null
+      pendingOutcomeActionIds: string[]
+      pendingOutcomeActionTitles: string[]
+      nextPendingOutcomeActionId: string | null
+      nextPendingOutcomeActionTitle: string | null
+      stage: 'suggested' | 'accepted' | 'awaiting_feedback' | 'learning' | 'completed' | 'rejected'
     } | null
   }
 }
@@ -244,6 +249,7 @@ type FeedbackLogItem = {
   comment: string | null
   policyCorrelationId?: string | null
   feedbackSource?: 'manual' | 'policy'
+  attempt?: number
   updatedAt: string
 }
 
@@ -1162,6 +1168,7 @@ function getFeedbackLogFromSnapshot(contextSnapshot?: Record<string, unknown> | 
           candidate.feedbackSource === 'manual' || candidate.feedbackSource === 'policy'
             ? candidate.feedbackSource
             : undefined,
+        attempt: typeof candidate.attempt === 'number' ? Math.round(candidate.attempt) : undefined,
         updatedAt: candidate.updatedAt,
       }
     })
@@ -1788,6 +1795,29 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
                         outcomePartial: typeof funnel.outcomePartial === 'number' ? funnel.outcomePartial : 0,
                         outcomeFailed: typeof funnel.outcomeFailed === 'number' ? funnel.outcomeFailed : 0,
                         lastOutcomeAt: typeof funnel.lastOutcomeAt === 'string' ? funnel.lastOutcomeAt : null,
+                        pendingOutcomeActionIds: Array.isArray(funnel.pendingOutcomeActionIds)
+                          ? funnel.pendingOutcomeActionIds.filter((item): item is string => typeof item === 'string')
+                          : [],
+                        pendingOutcomeActionTitles: Array.isArray(funnel.pendingOutcomeActionTitles)
+                          ? funnel.pendingOutcomeActionTitles.filter((item): item is string => typeof item === 'string')
+                          : [],
+                        nextPendingOutcomeActionId:
+                          typeof funnel.nextPendingOutcomeActionId === 'string'
+                            ? funnel.nextPendingOutcomeActionId
+                            : null,
+                        nextPendingOutcomeActionTitle:
+                          typeof funnel.nextPendingOutcomeActionTitle === 'string'
+                            ? funnel.nextPendingOutcomeActionTitle
+                            : null,
+                        stage:
+                          funnel.stage === 'suggested' ||
+                          funnel.stage === 'accepted' ||
+                          funnel.stage === 'awaiting_feedback' ||
+                          funnel.stage === 'learning' ||
+                          funnel.stage === 'completed' ||
+                          funnel.stage === 'rejected'
+                            ? funnel.stage
+                            : 'suggested',
                       }
                     })()
                   : null,
@@ -3718,6 +3748,26 @@ export function LeaksScreen() {
               const latestPolicyFailedOutcome = policyEvents.find(
                 (event) => event.type === 'policy_outcome' && event.result === 'not_worked',
               ) || null
+              const currentFunnel = policy?.summary?.currentFunnel || null
+              const currentFunnelStageLabel =
+                currentFunnel?.stage === 'suggested'
+                  ? 'Совет сформирован'
+                  : currentFunnel?.stage === 'accepted'
+                    ? 'Совет принят'
+                    : currentFunnel?.stage === 'awaiting_feedback'
+                      ? 'Ждёт feedback'
+                      : currentFunnel?.stage === 'learning'
+                        ? 'Обучение на outcome'
+                        : currentFunnel?.stage === 'completed'
+                          ? 'Контур завершён'
+                          : currentFunnel?.stage === 'rejected'
+                            ? 'Совет отклонён'
+                            : 'Нет этапа'
+              const nextPendingFunnelActionId = currentFunnel?.nextPendingOutcomeActionId || null
+              const nextPendingFunnelActionTitle =
+                currentFunnel?.nextPendingOutcomeActionTitle ||
+                currentFunnel?.pendingOutcomeActionTitles?.[0] ||
+                null
               const contextPulse = {
                 energyAvg: getContextMetricNumber(leak.contextSnapshot, 'energyAvg'),
                 stressAvg: getContextMetricNumber(leak.contextSnapshot, 'stressAvg'),
@@ -4330,15 +4380,15 @@ export function LeaksScreen() {
                               {policy.computedAt ? ` • ${formatDate(policy.computedAt)}` : ''}
                               {policyComputedMinutes !== null ? ` • ${policyComputedMinutes}м назад` : ''}
                             </div>
-                            {policy.summary?.currentFunnel && (
+                            {currentFunnel && (
                               <div className="mt-2 rounded-xl border border-white/10 bg-black/10 px-2 py-2">
                                 <div className="text-[11px] text-white/55">
-                                  Current funnel: {policy.summary.currentFunnel.correlationId}
+                                  Current funnel: {currentFunnel.correlationId}
                                 </div>
                                 <div className="mt-1 flex flex-wrap gap-2">
                                   <Badge
                                     className={
-                                      policy.summary.currentFunnel.suggestedAt
+                                      currentFunnel.suggestedAt
                                         ? 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20'
                                         : 'bg-white/10 text-white/60 border-white/10'
                                     }
@@ -4347,7 +4397,7 @@ export function LeaksScreen() {
                                   </Badge>
                                   <Badge
                                     className={
-                                      policy.summary.currentFunnel.acceptedAt
+                                      currentFunnel.acceptedAt
                                         ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
                                         : 'bg-white/10 text-white/60 border-white/10'
                                     }
@@ -4356,7 +4406,7 @@ export function LeaksScreen() {
                                   </Badge>
                                   <Badge
                                     className={
-                                      policy.summary.currentFunnel.rejectedAt
+                                      currentFunnel.rejectedAt
                                         ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
                                         : 'bg-white/10 text-white/60 border-white/10'
                                     }
@@ -4364,11 +4414,54 @@ export function LeaksScreen() {
                                     Rejected
                                   </Badge>
                                   <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
-                                    Entities: {policy.summary.currentFunnel.entityCreatedCount}
+                                    Entities: {currentFunnel.entityCreatedCount}
                                   </Badge>
                                   <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
-                                    Outcomes: {policy.summary.currentFunnel.outcomeCount}
+                                    Outcomes: {currentFunnel.outcomeCount}
                                   </Badge>
+                                  <Badge className="bg-white/10 text-white/70 border-white/10">
+                                    Этап: {currentFunnelStageLabel}
+                                  </Badge>
+                                  {currentFunnel.pendingOutcomeActionIds.length > 0 && (
+                                    <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
+                                      Pending outcome: {currentFunnel.pendingOutcomeActionIds.length}
+                                    </Badge>
+                                  )}
+                                  {nextPendingFunnelActionId && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => focusPlanAction(leak.id, nextPendingFunnelActionId)}
+                                      className="h-6 border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 px-2 text-[11px] text-amber-200"
+                                    >
+                                      {nextPendingFunnelActionTitle
+                                        ? `К pending: ${nextPendingFunnelActionTitle}`
+                                        : 'К pending шагу'}
+                                    </Button>
+                                  )}
+                                  {nextPendingFunnelActionId && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() =>
+                                        sendPlanActionFeedback(
+                                          leak.id,
+                                          nextPendingFunnelActionId,
+                                          'partially',
+                                          getFeedbackCommentDraft(
+                                            planActionsById.get(nextPendingFunnelActionId) || null,
+                                          ),
+                                          { silent: false },
+                                        )
+                                      }
+                                      disabled={savingFeedbackActionId === nextPendingFunnelActionId}
+                                      className="h-6 border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 px-2 text-[11px] text-indigo-200"
+                                    >
+                                      {savingFeedbackActionId === nextPendingFunnelActionId
+                                        ? 'Сохраняю...'
+                                        : 'Quick feedback'}
+                                    </Button>
+                                  )}
                                 </div>
                                 <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
                                   <div
@@ -4376,26 +4469,26 @@ export function LeaksScreen() {
                                     style={{
                                       width: `${Math.min(
                                         100,
-                                        (policy.summary.currentFunnel.suggestedAt ? 25 : 0) +
-                                          (policy.summary.currentFunnel.acceptedAt ? 25 : 0) +
-                                          (policy.summary.currentFunnel.entityCreatedCount > 0 ? 25 : 0) +
-                                          (policy.summary.currentFunnel.outcomeCount > 0 ? 25 : 0),
+                                        (currentFunnel.suggestedAt ? 25 : 0) +
+                                          (currentFunnel.acceptedAt ? 25 : 0) +
+                                          (currentFunnel.entityCreatedCount > 0 ? 25 : 0) +
+                                          (currentFunnel.outcomeCount > 0 ? 25 : 0),
                                       )}%`,
                                     }}
                                   />
                                 </div>
                                 <div className="mt-2 grid gap-1 md:grid-cols-2">
                                   <div className="text-[11px] text-white/55">
-                                    Suggested: {policy.summary.currentFunnel.suggestedAt ? formatDate(policy.summary.currentFunnel.suggestedAt) : '—'}
+                                    Suggested: {currentFunnel.suggestedAt ? formatDate(currentFunnel.suggestedAt) : '—'}
                                   </div>
                                   <div className="text-[11px] text-white/55">
-                                    Accepted: {policy.summary.currentFunnel.acceptedAt ? formatDate(policy.summary.currentFunnel.acceptedAt) : '—'}
+                                    Accepted: {currentFunnel.acceptedAt ? formatDate(currentFunnel.acceptedAt) : '—'}
                                   </div>
                                   <div className="text-[11px] text-white/55">
-                                    Rejected: {policy.summary.currentFunnel.rejectedAt ? formatDate(policy.summary.currentFunnel.rejectedAt) : '—'}
+                                    Rejected: {currentFunnel.rejectedAt ? formatDate(currentFunnel.rejectedAt) : '—'}
                                   </div>
                                   <div className="text-[11px] text-white/55">
-                                    Last outcome: {policy.summary.currentFunnel.lastOutcomeAt ? formatDate(policy.summary.currentFunnel.lastOutcomeAt) : '—'}
+                                    Last outcome: {currentFunnel.lastOutcomeAt ? formatDate(currentFunnel.lastOutcomeAt) : '—'}
                                   </div>
                                 </div>
                               </div>

@@ -118,6 +118,9 @@ function summarizeCurrentFunnel(
   let outcomePartial = 0
   let outcomeFailed = 0
   let lastOutcomeAt: string | null = null
+  const createdActionIds: string[] = []
+  const createdActionTitleById = new Map<string, string>()
+  const outcomeActionIds = new Set<string>()
 
   journal.forEach((item) => {
     if (!item || typeof item !== 'object') return
@@ -127,9 +130,20 @@ function summarizeCurrentFunnel(
     if (event.type === 'policy_suggested' && !suggestedAt) suggestedAt = at
     if (event.type === 'policy_accepted' && !acceptedAt) acceptedAt = at
     if (event.type === 'policy_rejected' && !rejectedAt) rejectedAt = at
-    if (event.type === 'action_created') entityCreatedCount += 1
+    if (event.type === 'action_created') {
+      entityCreatedCount += 1
+      if (typeof event.actionId === 'string' && event.actionId) {
+        createdActionIds.push(event.actionId)
+        if (typeof event.actionTitle === 'string' && event.actionTitle) {
+          createdActionTitleById.set(event.actionId, event.actionTitle)
+        }
+      }
+    }
     if (event.type === 'policy_outcome') {
       outcomeCount += 1
+      if (typeof event.actionId === 'string' && event.actionId) {
+        outcomeActionIds.add(event.actionId)
+      }
       if (event.result === 'worked') outcomeWorked += 1
       if (event.result === 'partially') outcomePartial += 1
       if (event.result === 'not_worked') outcomeFailed += 1
@@ -138,6 +152,31 @@ function summarizeCurrentFunnel(
       }
     }
   })
+
+  const pendingOutcomeActionIds = createdActionIds.filter((id) => !outcomeActionIds.has(id))
+  const pendingOutcomeActionTitles = pendingOutcomeActionIds
+    .map((id) => createdActionTitleById.get(id) || null)
+    .filter((item): item is string => Boolean(item))
+  let stage:
+    | 'suggested'
+    | 'accepted'
+    | 'awaiting_feedback'
+    | 'learning'
+    | 'completed'
+    | 'rejected' = 'suggested'
+  if (rejectedAt && !acceptedAt) {
+    stage = 'rejected'
+  } else if (!acceptedAt) {
+    stage = 'suggested'
+  } else if (pendingOutcomeActionIds.length > 0) {
+    stage = 'awaiting_feedback'
+  } else if (outcomeCount === 0) {
+    stage = 'accepted'
+  } else if (outcomeFailed === 0 && outcomePartial === 0 && outcomeWorked > 0) {
+    stage = 'completed'
+  } else {
+    stage = 'learning'
+  }
 
   return {
     correlationId,
@@ -150,6 +189,11 @@ function summarizeCurrentFunnel(
     outcomePartial,
     outcomeFailed,
     lastOutcomeAt,
+    pendingOutcomeActionIds,
+    pendingOutcomeActionTitles,
+    nextPendingOutcomeActionId: pendingOutcomeActionIds[0] || null,
+    nextPendingOutcomeActionTitle: pendingOutcomeActionTitles[0] || null,
+    stage,
   }
 }
 
@@ -217,7 +261,7 @@ export async function GET(
         ...summarizePolicyJournal(nextSnapshot),
         currentFunnel: summarizeCurrentFunnel(nextSnapshot, policy.nextBestAction?.correlationId || null),
       },
-      runJournal: Array.isArray(nextSnapshot.runJournal) ? nextSnapshot.runJournal.slice(0, 10) : [],
+      runJournal: Array.isArray(nextSnapshot.runJournal) ? nextSnapshot.runJournal.slice(0, 20) : [],
     })
   } catch (error) {
     console.error('Error fetching leak policy:', error)
