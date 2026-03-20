@@ -72,7 +72,13 @@ export async function GET(request: NextRequest) {
       }),
     ])
 
-    const leakMap = new Map<string, Array<{ id: string; title: string; status: string; updatedAt: string }>>()
+    const leakMap = new Map<string, Array<{
+      id: string
+      title: string
+      status: string
+      updatedAt: string
+      matchType: 'exact' | 'fuzzy'
+    }>>()
     activeLeaks.forEach((leak) => {
       const key = normalizePatternKey(leak.title)
       const current = leakMap.get(key) || []
@@ -81,6 +87,7 @@ export async function GET(request: NextRequest) {
         title: leak.title,
         status: leak.status,
         updatedAt: leak.updatedAt.toISOString(),
+        matchType: 'exact',
       })
       leakMap.set(key, current)
     })
@@ -88,6 +95,7 @@ export async function GET(request: NextRequest) {
     const enrichedPatterns = patterns.map((pattern) => {
       const patternKey = normalizePatternKey(pattern.leakType)
       let linkedLeaks = leakMap.get(patternKey) || []
+      let linkType: 'exact' | 'fuzzy' | 'none' = linkedLeaks.length > 0 ? 'exact' : 'none'
 
       if (linkedLeaks.length === 0) {
         linkedLeaks = activeLeaks
@@ -100,7 +108,11 @@ export async function GET(request: NextRequest) {
             title: leak.title,
             status: leak.status,
             updatedAt: leak.updatedAt.toISOString(),
+            matchType: 'fuzzy' as const,
           }))
+        if (linkedLeaks.length > 0) {
+          linkType = 'fuzzy'
+        }
       }
       const triedSolutions = Array.isArray(pattern.triedSolutions)
         ? (pattern.triedSolutions as unknown[])
@@ -121,6 +133,7 @@ export async function GET(request: NextRequest) {
         partialCount,
         failedCount,
         workedExamples,
+        linkType,
         activeLeakCount: linkedLeaks.length,
         activeLeaks: linkedLeaks,
       }

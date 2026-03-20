@@ -87,6 +87,7 @@ interface LeakPattern {
   leakType: string
   analysisCount: number
   whatWorked: string[]
+  linkType?: 'exact' | 'fuzzy' | 'none'
   triedSolutions?: Array<{
     text: string
     worked: boolean | null
@@ -119,6 +120,7 @@ interface LeakPattern {
     title: string
     status: string
     updatedAt: string
+    matchType?: 'exact' | 'fuzzy'
   }>
 }
 
@@ -812,6 +814,10 @@ function normalizePattern(rawPattern: unknown): LeakPattern | null {
     whatWorked: Array.isArray(pattern.whatWorked)
       ? pattern.whatWorked.filter((item): item is string => typeof item === 'string')
       : [],
+    linkType:
+      pattern.linkType === 'exact' || pattern.linkType === 'fuzzy' || pattern.linkType === 'none'
+        ? pattern.linkType
+        : undefined,
     triedSolutions,
     workedCount:
       typeof pattern.workedCount === 'number'
@@ -830,7 +836,7 @@ function normalizePattern(rawPattern: unknown): LeakPattern | null {
     activeLeakCount: typeof pattern.activeLeakCount === 'number' ? pattern.activeLeakCount : undefined,
     activeLeaks: Array.isArray(pattern.activeLeaks)
       ? pattern.activeLeaks
-          .filter((item): item is { id: string; title: string; status: string; updatedAt: string } => {
+          .filter((item): item is { id: string; title: string; status: string; updatedAt: string; matchType?: 'exact' | 'fuzzy' } => {
             if (!item || typeof item !== 'object') return false
             const leak = item as Record<string, unknown>
             return (
@@ -840,8 +846,39 @@ function normalizePattern(rawPattern: unknown): LeakPattern | null {
               typeof leak.updatedAt === 'string'
             )
           })
+          .map((item) => ({
+            ...item,
+            matchType:
+              item.matchType === 'exact' || item.matchType === 'fuzzy'
+                ? item.matchType
+                : undefined,
+          }))
       : undefined,
   }
+}
+
+function getPatternLinkTypeForLeak(pattern: LeakPattern, leak: LeakEntity): 'exact' | 'fuzzy' | 'none' {
+  const fromActiveLeak = pattern.activeLeaks?.find((item) => item.id === leak.id)
+  if (fromActiveLeak?.matchType === 'exact' || fromActiveLeak?.matchType === 'fuzzy') {
+    return fromActiveLeak.matchType
+  }
+
+  const patternKey = normalizeLookupValue(pattern.leakType)
+  const leakKey = normalizeLookupValue(leak.title)
+  if (!patternKey || !leakKey) return 'none'
+  if (patternKey === leakKey) return 'exact'
+  if (patternKey.includes(leakKey) || leakKey.includes(patternKey)) return 'fuzzy'
+  return 'none'
+}
+
+function getBestPatternForLeak(patterns: LeakPattern[], leak: LeakEntity): LeakPattern | null {
+  if (!patterns.length) return null
+
+  const exact = patterns.find((pattern) => getPatternLinkTypeForLeak(pattern, leak) === 'exact')
+  if (exact) return exact
+
+  const fuzzy = patterns.find((pattern) => getPatternLinkTypeForLeak(pattern, leak) === 'fuzzy')
+  return fuzzy || null
 }
 
 function getLeakFeedbackTimeline(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
@@ -2435,9 +2472,8 @@ export function LeaksScreen() {
               const feedbackTimeline = getLeakFeedbackTimeline(leak, leakPlans)
               const contextHypotheses = buildContextHypotheses(leak.contextSnapshot)
               const retryFocus = getRetryFocus(leak.contextSnapshot)
-              const matchedPattern = patterns.find(
-                (pattern) => normalizeLookupValue(pattern.leakType) === normalizeLookupValue(leak.title),
-              )
+              const matchedPattern = getBestPatternForLeak(patterns, leak)
+              const matchedPatternLinkType = matchedPattern ? getPatternLinkTypeForLeak(matchedPattern, leak) : 'none'
               const groupKey = getLeakGroupKey(leak, groupBy)
               const prevGroupKey =
                 index > 0 ? getLeakGroupKey(filteredLeaks[index - 1], groupBy) : null
@@ -2835,6 +2871,22 @@ export function LeaksScreen() {
                               </Badge>
                               <Badge className="bg-white/10 text-white/70 border-white/10">
                                 Анализов: {matchedPattern.analysisCount}
+                              </Badge>
+                              <Badge
+                                className={
+                                  matchedPatternLinkType === 'exact'
+                                    ? 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20'
+                                    : matchedPatternLinkType === 'fuzzy'
+                                      ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                                      : 'bg-white/10 text-white/70 border-white/10'
+                                }
+                              >
+                                Связь:{' '}
+                                {matchedPatternLinkType === 'exact'
+                                  ? 'точное совпадение'
+                                  : matchedPatternLinkType === 'fuzzy'
+                                    ? 'похожее название'
+                                    : 'не определена'}
                               </Badge>
                               <Badge className="bg-white/10 text-white/70 border-white/10">
                                 Обновлено: {formatDate(matchedPattern.updatedAt)}
@@ -3711,6 +3763,9 @@ export function LeaksScreen() {
                           title: leak.title,
                           status: leak.status,
                           updatedAt: leak.updatedAt,
+                          matchType: normalizeLookupValue(leak.title) === normalizeLookupValue(pattern.leakType)
+                            ? 'exact'
+                            : 'fuzzy',
                         }))
 
                 return (
@@ -3769,6 +3824,7 @@ export function LeaksScreen() {
                                 className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
                               >
                                 {leak.title}
+                                {leak.matchType === 'fuzzy' ? ' (fuzzy)' : ''}
                               </Button>
                             ))}
                           </div>
