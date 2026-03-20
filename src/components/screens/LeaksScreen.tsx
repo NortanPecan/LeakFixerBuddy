@@ -2540,6 +2540,7 @@ export function LeaksScreen() {
   ) => {
     if (!user?.id) return
     const normalizedComment = comment?.trim() || ''
+    const policyCorrelationId = policyByLeak[leakId]?.nextBestAction?.correlationId || null
     const actionIds = Array.from(
       new Set([actionId, ...(options?.additionalActionIds || [])].map((item) => item.trim()).filter(Boolean)),
     )
@@ -2565,6 +2566,7 @@ export function LeaksScreen() {
           userId: user.id,
           solutionActionId: actionId,
           solutionActionIds: actionIds.length > 1 ? actionIds : undefined,
+          policyCorrelationId: policyCorrelationId || undefined,
           result,
           comment: normalizedComment || null,
         }),
@@ -2639,6 +2641,7 @@ export function LeaksScreen() {
         return next
       })
       void loadPlansForLeak(leakId)
+      void loadPolicyForLeak(leakId)
     } catch (error) {
       showErrorToast(error, 'save plan feedback')
     } finally {
@@ -3293,6 +3296,11 @@ export function LeaksScreen() {
                 },
               }
               const adaptiveModeSuggestion = policy?.adaptiveModeSuggestion || null
+              const selectedModeForChain =
+                policy?.selectedMode || selectedPlan?.mode || selectedModeFromSnapshot || null
+              const createdEntityCountForChain = leak.actions.length
+              const feedbackCountForChain = feedbackByAction.length
+              const workedCountForChain = feedbackByAction.filter((item) => item.result === 'worked').length
               const matchedPattern = getBestPatternForLeak(patterns, leak)
               const matchedPatternLinkType = matchedPattern ? getPatternLinkTypeForLeak(matchedPattern, leak) : 'none'
               const groupKey = getLeakGroupKey(leak, groupBy)
@@ -3625,6 +3633,19 @@ export function LeaksScreen() {
                               : ' Динамика пока смешанная.'}
                           </div>
                         )}
+                        <div className="mt-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2 text-xs text-white/75">
+                          Цепочка выполнения:
+                          {' '}
+                          leak
+                          {' → '}
+                          {selectedModeForChain ? `режим ${PLAN_MODE_LABELS[selectedModeForChain]}` : 'режим не выбран'}
+                          {' → '}
+                          создано сущностей {createdEntityCountForChain}
+                          {' → '}
+                          feedback {feedbackCountForChain}
+                          {' → '}
+                          worked {workedCountForChain}
+                        </div>
                         {contextDriftHint && (
                           <div
                             className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
