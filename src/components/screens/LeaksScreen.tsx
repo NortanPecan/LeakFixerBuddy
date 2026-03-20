@@ -1271,6 +1271,78 @@ function getLiveContextMetrics(contextSnapshot?: Record<string, unknown> | null)
   return metrics
 }
 
+function getContextMetricNumber(
+  contextSnapshot: Record<string, unknown> | null | undefined,
+  key: string,
+) {
+  const metrics = getLiveContextMetrics(contextSnapshot)
+  if (!metrics) return null
+  return typeof metrics[key] === 'number' ? metrics[key] : null
+}
+
+function getSnapshotHistory(contextSnapshot?: Record<string, unknown> | null) {
+  if (!contextSnapshot || typeof contextSnapshot !== 'object' || Array.isArray(contextSnapshot)) {
+    return { linkedEntities: [], actionFeedback: [] } as const
+  }
+  const history =
+    contextSnapshot.history && typeof contextSnapshot.history === 'object' && !Array.isArray(contextSnapshot.history)
+      ? (contextSnapshot.history as Record<string, unknown>)
+      : null
+  if (!history) {
+    return { linkedEntities: [], actionFeedback: [] } as const
+  }
+
+  const linkedEntities = Array.isArray(history.linkedEntities)
+    ? history.linkedEntities
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null
+          const row = item as Record<string, unknown>
+          if (
+            typeof row.entityType !== 'string' ||
+            typeof row.label !== 'string' ||
+            typeof row.createdAt !== 'string'
+          ) {
+            return null
+          }
+          return {
+            entityType: row.entityType,
+            label: row.label,
+            sourceActionTitle: typeof row.sourceActionTitle === 'string' ? row.sourceActionTitle : null,
+            sourceActionKind: typeof row.sourceActionKind === 'string' ? row.sourceActionKind : null,
+            sourcePlanMode: typeof row.sourcePlanMode === 'string' ? row.sourcePlanMode : null,
+            createdAt: row.createdAt,
+          }
+        })
+        .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    : []
+
+  const actionFeedback = Array.isArray(history.actionFeedback)
+    ? history.actionFeedback
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null
+          const row = item as Record<string, unknown>
+          if (
+            typeof row.actionTitle !== 'string' ||
+            typeof row.actionKind !== 'string' ||
+            typeof row.result !== 'string' ||
+            typeof row.updatedAt !== 'string'
+          ) {
+            return null
+          }
+          return {
+            actionTitle: row.actionTitle,
+            actionKind: row.actionKind,
+            result: row.result,
+            comment: typeof row.comment === 'string' ? row.comment : null,
+            updatedAt: row.updatedAt,
+          }
+        })
+        .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    : []
+
+  return { linkedEntities, actionFeedback } as const
+}
+
 function getRecentFeedbackTrend(contextSnapshot?: Record<string, unknown> | null) {
   const metrics = getLiveContextMetrics(contextSnapshot)
   if (!metrics) return null
@@ -3303,6 +3375,13 @@ export function LeaksScreen() {
               const createdEntityCountForChain = leak.actions.length
               const feedbackCountForChain = feedbackByAction.length
               const workedCountForChain = feedbackByAction.filter((item) => item.result === 'worked').length
+              const contextPulse = {
+                energyAvg: getContextMetricNumber(leak.contextSnapshot, 'energyAvg'),
+                stressAvg: getContextMetricNumber(leak.contextSnapshot, 'stressAvg'),
+                sleepHoursAvg: getContextMetricNumber(leak.contextSnapshot, 'sleepHoursAvg'),
+                openTasks: getContextMetricNumber(leak.contextSnapshot, 'openTasks'),
+              }
+              const snapshotHistory = getSnapshotHistory(leak.contextSnapshot)
               const matchedPattern = getBestPatternForLeak(patterns, leak)
               const matchedPatternLinkType = matchedPattern ? getPatternLinkTypeForLeak(matchedPattern, leak) : 'none'
               const groupKey = getLeakGroupKey(leak, groupBy)
@@ -4012,6 +4091,38 @@ export function LeaksScreen() {
                           </div>
                         </div>
                       )}
+                      {(contextPulse.energyAvg !== null ||
+                        contextPulse.stressAvg !== null ||
+                        contextPulse.sleepHoursAvg !== null ||
+                        contextPulse.openTasks !== null) && (
+                        <div className="space-y-2">
+                          <div className="text-xs uppercase tracking-wide text-white/40">
+                            Контекстный пульс
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {contextPulse.energyAvg !== null && (
+                              <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                                Энергия: {contextPulse.energyAvg}
+                              </Badge>
+                            )}
+                            {contextPulse.stressAvg !== null && (
+                              <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
+                                Стресс: {contextPulse.stressAvg}
+                              </Badge>
+                            )}
+                            {contextPulse.sleepHoursAvg !== null && (
+                              <Badge className="bg-sky-500/10 text-sky-200 border-sky-500/20">
+                                Сон: {contextPulse.sleepHoursAvg}ч
+                              </Badge>
+                            )}
+                            {contextPulse.openTasks !== null && (
+                              <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
+                                Открытые задачи: {contextPulse.openTasks}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {contextHypotheses.length > 0 && (
                         <div className="space-y-2">
@@ -4027,6 +4138,34 @@ export function LeaksScreen() {
                                 {item}
                               </div>
                             ))}
+                          </div>
+                        </div>
+                      )}
+                      {(snapshotHistory.linkedEntities.length > 0 || snapshotHistory.actionFeedback.length > 0) && (
+                        <div className="space-y-2">
+                          <div className="text-xs uppercase tracking-wide text-white/40">
+                            Learning memory (snapshot)
+                          </div>
+                          <div className="grid gap-2 md:grid-cols-2">
+                            <div className="rounded-xl border border-white/10 bg-black/10 px-3 py-2 space-y-1">
+                              <div className="text-xs text-white/55">Последние созданные сущности</div>
+                              {snapshotHistory.linkedEntities.slice(0, 4).map((item) => (
+                                <div key={`${item.entityType}-${item.label}-${item.createdAt}`} className="text-xs text-white/70">
+                                  {item.sourcePlanMode && item.sourcePlanMode in PLAN_MODE_LABELS
+                                    ? `[${PLAN_MODE_LABELS[item.sourcePlanMode as LeakSolutionPlan['mode']]}] `
+                                    : ''}
+                                  {item.label} • {formatDate(item.createdAt)}
+                                </div>
+                              ))}
+                            </div>
+                            <div className="rounded-xl border border-white/10 bg-black/10 px-3 py-2 space-y-1">
+                              <div className="text-xs text-white/55">Последние feedback из истории</div>
+                              {snapshotHistory.actionFeedback.slice(0, 4).map((item) => (
+                                <div key={`${item.actionTitle}-${item.updatedAt}`} className="text-xs text-white/70">
+                                  {item.actionTitle} • {item.result} • {formatDate(item.updatedAt)}
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       )}
