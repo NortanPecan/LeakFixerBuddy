@@ -3397,6 +3397,30 @@ export function LeaksScreen() {
                           <div className="text-xs uppercase tracking-wide text-white/40">
                             История feedback
                           </div>
+                          <div className="flex flex-wrap gap-2">
+                            {(() => {
+                              const recent = feedbackTimeline.slice(0, 6)
+                              const worked = recent.filter((item) => item.result === 'worked').length
+                              const partial = recent.filter((item) => item.result === 'partially').length
+                              const failed = recent.filter((item) => item.result === 'not_worked').length
+                              return (
+                                <>
+                                  <Badge className="bg-white/10 text-white/70 border-white/10">
+                                    Последние: {recent.length}
+                                  </Badge>
+                                  <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
+                                    Сработало: {worked}
+                                  </Badge>
+                                  <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
+                                    Частично: {partial}
+                                  </Badge>
+                                  <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
+                                    Не помогло: {failed}
+                                  </Badge>
+                                </>
+                              )
+                            })()}
+                          </div>
                           <div className="space-y-2">
                             {feedbackTimeline.slice(0, 6).map((item) => {
                               const historyAction = planActionsById.get(item.actionId) || null
