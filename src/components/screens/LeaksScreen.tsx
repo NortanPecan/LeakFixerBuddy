@@ -136,6 +136,7 @@ type LeakSortOption = 'updated_desc' | 'created_desc' | 'severity_desc'
 type LeakFocusFilter = 'all' | 'focus'
 type LeakGroupOption = 'none' | 'sphere' | 'source'
 type PatternFilter = 'all' | 'linked'
+type FeedbackHistoryFilter = 'all' | 'problem'
 
 const SEVERITY_OPTIONS: Array<{
   id: 'info' | 'warning' | 'critical'
@@ -1173,6 +1174,7 @@ export function LeaksScreen() {
   const [savingPatternLeakType, setSavingPatternLeakType] = useState<string | null>(null)
   const [retryingLeakId, setRetryingLeakId] = useState<string | null>(null)
   const [focusedPlanActionId, setFocusedPlanActionId] = useState<string | null>(null)
+  const [feedbackHistoryFilter, setFeedbackHistoryFilter] = useState<FeedbackHistoryFilter>('all')
 
   useEffect(() => {
     if (!focusedPlanActionId) return
@@ -2598,6 +2600,10 @@ export function LeaksScreen() {
               const feedbackByActionId = getFeedbackByActionId(leakPlans)
               const planActionsById = getPlanActionById(leakPlans)
               const feedbackTimeline = getLeakFeedbackTimeline(leak, leakPlans)
+              const visibleFeedbackTimeline =
+                feedbackHistoryFilter === 'problem'
+                  ? feedbackTimeline.filter((item) => item.result !== 'worked')
+                  : feedbackTimeline
               const latestWorkedOutcome = getLatestWorkedOutcome(leak, leakPlans)
               const contextHypotheses = buildContextHypotheses(leak.contextSnapshot)
               const retryFocus = getRetryFocus(leak.contextSnapshot)
@@ -3394,8 +3400,34 @@ export function LeaksScreen() {
 
                       {feedbackTimeline.length > 0 && (
                         <div className="space-y-2">
-                          <div className="text-xs uppercase tracking-wide text-white/40">
-                            История feedback
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-xs uppercase tracking-wide text-white/40">
+                              История feedback
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setFeedbackHistoryFilter('all')}
+                                className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+                                  feedbackHistoryFilter === 'all'
+                                    ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
+                                    : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                                }`}
+                              >
+                                Все
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setFeedbackHistoryFilter('problem')}
+                                className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+                                  feedbackHistoryFilter === 'problem'
+                                    ? 'border-amber-400/30 bg-amber-500/10 text-amber-200'
+                                    : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                                }`}
+                              >
+                                Проблемные
+                              </button>
+                            </div>
                           </div>
                           <div className="flex flex-wrap gap-2">
                             {(() => {
@@ -3422,7 +3454,11 @@ export function LeaksScreen() {
                             })()}
                           </div>
                           <div className="space-y-2">
-                            {feedbackTimeline.slice(0, 6).map((item) => {
+                            {visibleFeedbackTimeline.length === 0 ? (
+                              <div className="rounded-xl border border-white/10 bg-black/10 px-3 py-2 text-xs text-white/55">
+                                По текущему фильтру пока нет событий.
+                              </div>
+                            ) : visibleFeedbackTimeline.slice(0, 6).map((item) => {
                               const historyAction = planActionsById.get(item.actionId) || null
 
                               return (
