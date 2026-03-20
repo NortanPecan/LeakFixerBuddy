@@ -197,6 +197,37 @@ function summarizeCurrentFunnel(
   }
 }
 
+function summarizeRecentFunnels(
+  snapshot: Record<string, unknown>,
+  currentCorrelationId: string | null,
+  limit = 5,
+) {
+  const journal = Array.isArray(snapshot.runJournal) ? snapshot.runJournal : []
+  const ids: string[] = []
+  journal.forEach((item) => {
+    if (!item || typeof item !== 'object') return
+    const event = item as Record<string, unknown>
+    const correlationId =
+      typeof event.policyCorrelationId === 'string' ? event.policyCorrelationId : null
+    if (!correlationId) return
+    if (!ids.includes(correlationId)) {
+      ids.push(correlationId)
+    }
+  })
+
+  return ids
+    .slice(0, limit)
+    .map((id) => {
+      const summary = summarizeCurrentFunnel(snapshot, id)
+      if (!summary) return null
+      return {
+        ...summary,
+        isCurrent: Boolean(currentCorrelationId && id === currentCorrelationId),
+      }
+    })
+    .filter((item) => Boolean(item))
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ leakId: string }> },
@@ -254,12 +285,15 @@ export async function GET(
       })
     }
 
+    const currentCorrelationId = policy.nextBestAction?.correlationId || null
+
     return NextResponse.json({
       success: true,
       policy,
       summary: {
         ...summarizePolicyJournal(nextSnapshot),
-        currentFunnel: summarizeCurrentFunnel(nextSnapshot, policy.nextBestAction?.correlationId || null),
+        currentFunnel: summarizeCurrentFunnel(nextSnapshot, currentCorrelationId),
+        recentFunnels: summarizeRecentFunnels(nextSnapshot, currentCorrelationId, 5),
       },
       runJournal: Array.isArray(nextSnapshot.runJournal) ? nextSnapshot.runJournal.slice(0, 20) : [],
     })

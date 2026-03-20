@@ -224,6 +224,24 @@ interface LeakPolicyHint {
       nextPendingOutcomeActionTitle: string | null
       stage: 'suggested' | 'accepted' | 'awaiting_feedback' | 'learning' | 'completed' | 'rejected'
     } | null
+    recentFunnels?: Array<{
+      correlationId: string
+      suggestedAt: string | null
+      acceptedAt: string | null
+      rejectedAt: string | null
+      entityCreatedCount: number
+      outcomeCount: number
+      outcomeWorked: number
+      outcomePartial: number
+      outcomeFailed: number
+      lastOutcomeAt: string | null
+      pendingOutcomeActionIds: string[]
+      pendingOutcomeActionTitles: string[]
+      nextPendingOutcomeActionId: string | null
+      nextPendingOutcomeActionTitle: string | null
+      stage: 'suggested' | 'accepted' | 'awaiting_feedback' | 'learning' | 'completed' | 'rejected'
+      isCurrent: boolean
+    }>
   }
 }
 
@@ -1373,9 +1391,13 @@ function getSnapshotHistory(contextSnapshot?: Record<string, unknown> | null) {
           return {
             entityType: row.entityType,
             label: row.label,
+            sourceActionId: typeof row.sourceActionId === 'string' ? row.sourceActionId : null,
             sourceActionTitle: typeof row.sourceActionTitle === 'string' ? row.sourceActionTitle : null,
             sourceActionKind: typeof row.sourceActionKind === 'string' ? row.sourceActionKind : null,
             sourcePlanMode: typeof row.sourcePlanMode === 'string' ? row.sourcePlanMode : null,
+            policyCorrelationId:
+              typeof row.policyCorrelationId === 'string' ? row.policyCorrelationId : null,
+            reused: row.reused === true,
             createdAt: row.createdAt,
           }
         })
@@ -1396,10 +1418,18 @@ function getSnapshotHistory(contextSnapshot?: Record<string, unknown> | null) {
             return null
           }
           return {
+            actionId: typeof row.actionId === 'string' ? row.actionId : null,
             actionTitle: row.actionTitle,
             actionKind: row.actionKind,
             result: row.result,
             comment: typeof row.comment === 'string' ? row.comment : null,
+            policyCorrelationId:
+              typeof row.policyCorrelationId === 'string' ? row.policyCorrelationId : null,
+            feedbackSource:
+              row.feedbackSource === 'manual' || row.feedbackSource === 'policy'
+                ? row.feedbackSource
+                : null,
+            attempt: typeof row.attempt === 'number' ? Math.round(row.attempt) : null,
             updatedAt: row.updatedAt,
           }
         })
@@ -1707,6 +1737,49 @@ function normalizeAdaptiveMode(value: unknown): AdaptiveModeHint | null {
   }
 }
 
+function normalizePolicyFunnel(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const funnel = value as Record<string, unknown>
+  if (typeof funnel.correlationId !== 'string') return null
+  return {
+    correlationId: funnel.correlationId,
+    suggestedAt: typeof funnel.suggestedAt === 'string' ? funnel.suggestedAt : null,
+    acceptedAt: typeof funnel.acceptedAt === 'string' ? funnel.acceptedAt : null,
+    rejectedAt: typeof funnel.rejectedAt === 'string' ? funnel.rejectedAt : null,
+    entityCreatedCount:
+      typeof funnel.entityCreatedCount === 'number' ? Math.round(funnel.entityCreatedCount) : 0,
+    outcomeCount: typeof funnel.outcomeCount === 'number' ? Math.round(funnel.outcomeCount) : 0,
+    outcomeWorked: typeof funnel.outcomeWorked === 'number' ? Math.round(funnel.outcomeWorked) : 0,
+    outcomePartial: typeof funnel.outcomePartial === 'number' ? Math.round(funnel.outcomePartial) : 0,
+    outcomeFailed: typeof funnel.outcomeFailed === 'number' ? Math.round(funnel.outcomeFailed) : 0,
+    lastOutcomeAt: typeof funnel.lastOutcomeAt === 'string' ? funnel.lastOutcomeAt : null,
+    pendingOutcomeActionIds: Array.isArray(funnel.pendingOutcomeActionIds)
+      ? funnel.pendingOutcomeActionIds.filter((item): item is string => typeof item === 'string')
+      : [],
+    pendingOutcomeActionTitles: Array.isArray(funnel.pendingOutcomeActionTitles)
+      ? funnel.pendingOutcomeActionTitles.filter((item): item is string => typeof item === 'string')
+      : [],
+    nextPendingOutcomeActionId:
+      typeof funnel.nextPendingOutcomeActionId === 'string'
+        ? funnel.nextPendingOutcomeActionId
+        : null,
+    nextPendingOutcomeActionTitle:
+      typeof funnel.nextPendingOutcomeActionTitle === 'string'
+        ? funnel.nextPendingOutcomeActionTitle
+        : null,
+    stage:
+      funnel.stage === 'suggested' ||
+      funnel.stage === 'accepted' ||
+      funnel.stage === 'awaiting_feedback' ||
+      funnel.stage === 'learning' ||
+      funnel.stage === 'completed' ||
+      funnel.stage === 'rejected'
+        ? funnel.stage
+        : 'suggested',
+    isCurrent: funnel.isCurrent === true,
+  }
+}
+
 function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
   if (!value || typeof value !== 'object') return null
   const candidate = value as Record<string, unknown>
@@ -1776,51 +1849,12 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
                   )
                 : {}
             return {
-              currentFunnel:
-                summary.currentFunnel &&
-                typeof summary.currentFunnel === 'object' &&
-                !Array.isArray(summary.currentFunnel)
-                  ? (() => {
-                      const funnel = summary.currentFunnel as Record<string, unknown>
-                      if (typeof funnel.correlationId !== 'string') return null
-                      return {
-                        correlationId: funnel.correlationId,
-                        suggestedAt: typeof funnel.suggestedAt === 'string' ? funnel.suggestedAt : null,
-                        acceptedAt: typeof funnel.acceptedAt === 'string' ? funnel.acceptedAt : null,
-                        rejectedAt: typeof funnel.rejectedAt === 'string' ? funnel.rejectedAt : null,
-                        entityCreatedCount:
-                          typeof funnel.entityCreatedCount === 'number' ? funnel.entityCreatedCount : 0,
-                        outcomeCount: typeof funnel.outcomeCount === 'number' ? funnel.outcomeCount : 0,
-                        outcomeWorked: typeof funnel.outcomeWorked === 'number' ? funnel.outcomeWorked : 0,
-                        outcomePartial: typeof funnel.outcomePartial === 'number' ? funnel.outcomePartial : 0,
-                        outcomeFailed: typeof funnel.outcomeFailed === 'number' ? funnel.outcomeFailed : 0,
-                        lastOutcomeAt: typeof funnel.lastOutcomeAt === 'string' ? funnel.lastOutcomeAt : null,
-                        pendingOutcomeActionIds: Array.isArray(funnel.pendingOutcomeActionIds)
-                          ? funnel.pendingOutcomeActionIds.filter((item): item is string => typeof item === 'string')
-                          : [],
-                        pendingOutcomeActionTitles: Array.isArray(funnel.pendingOutcomeActionTitles)
-                          ? funnel.pendingOutcomeActionTitles.filter((item): item is string => typeof item === 'string')
-                          : [],
-                        nextPendingOutcomeActionId:
-                          typeof funnel.nextPendingOutcomeActionId === 'string'
-                            ? funnel.nextPendingOutcomeActionId
-                            : null,
-                        nextPendingOutcomeActionTitle:
-                          typeof funnel.nextPendingOutcomeActionTitle === 'string'
-                            ? funnel.nextPendingOutcomeActionTitle
-                            : null,
-                        stage:
-                          funnel.stage === 'suggested' ||
-                          funnel.stage === 'accepted' ||
-                          funnel.stage === 'awaiting_feedback' ||
-                          funnel.stage === 'learning' ||
-                          funnel.stage === 'completed' ||
-                          funnel.stage === 'rejected'
-                            ? funnel.stage
-                            : 'suggested',
-                      }
-                    })()
-                  : null,
+              currentFunnel: normalizePolicyFunnel(summary.currentFunnel),
+              recentFunnels: Array.isArray(summary.recentFunnels)
+                ? summary.recentFunnels
+                    .map(normalizePolicyFunnel)
+                    .filter((item): item is NonNullable<ReturnType<typeof normalizePolicyFunnel>> => Boolean(item))
+                : [],
               accepted: typeof summary.accepted === 'number' ? summary.accepted : 0,
               rejected: typeof summary.rejected === 'number' ? summary.rejected : 0,
               outcomes: typeof summary.outcomes === 'number' ? summary.outcomes : 0,
@@ -3768,6 +3802,9 @@ export function LeaksScreen() {
                 currentFunnel?.nextPendingOutcomeActionTitle ||
                 currentFunnel?.pendingOutcomeActionTitles?.[0] ||
                 null
+              const recentFunnels = (policy?.summary?.recentFunnels || [])
+                .filter((item) => item.correlationId !== currentFunnel?.correlationId)
+                .slice(0, 3)
               const contextPulse = {
                 energyAvg: getContextMetricNumber(leak.contextSnapshot, 'energyAvg'),
                 stressAvg: getContextMetricNumber(leak.contextSnapshot, 'stressAvg'),
@@ -4493,6 +4530,61 @@ export function LeaksScreen() {
                                 </div>
                               </div>
                             )}
+                            {recentFunnels.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                <div className="text-[11px] text-white/55">Recent funnels</div>
+                                {recentFunnels.map((funnel) => {
+                                  const stageLabel =
+                                    funnel.stage === 'suggested'
+                                      ? 'совет'
+                                      : funnel.stage === 'accepted'
+                                        ? 'принят'
+                                        : funnel.stage === 'awaiting_feedback'
+                                          ? 'ждёт feedback'
+                                          : funnel.stage === 'learning'
+                                            ? 'learning'
+                                            : funnel.stage === 'completed'
+                                              ? 'завершён'
+                                              : 'отклонён'
+                                  return (
+                                    <div
+                                      key={`recent-funnel-${funnel.correlationId}`}
+                                      className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5"
+                                    >
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <Badge className="bg-white/10 text-white/65 border-white/10">
+                                          {funnel.correlationId}
+                                        </Badge>
+                                        <Badge className="bg-white/10 text-white/65 border-white/10">
+                                          Этап: {stageLabel}
+                                        </Badge>
+                                        <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                                          E:{funnel.entityCreatedCount}
+                                        </Badge>
+                                        <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
+                                          O:{funnel.outcomeCount}
+                                        </Badge>
+                                        {funnel.pendingOutcomeActionIds.length > 0 && (
+                                          <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
+                                            pending {funnel.pendingOutcomeActionIds.length}
+                                          </Badge>
+                                        )}
+                                        {funnel.nextPendingOutcomeActionId && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => focusPlanAction(leak.id, funnel.nextPendingOutcomeActionId || '')}
+                                            className="h-6 border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 px-2 text-[11px] text-amber-200"
+                                          >
+                                            К pending
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
                             <div className="mt-2 flex flex-wrap gap-2">
                               <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
                                 Принято: {policyAcceptedCount}
@@ -4854,6 +4946,16 @@ export function LeaksScreen() {
                                       : ''}
                                     {item.label} • {formatDate(item.createdAt)}
                                   </div>
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {item.reused && (
+                                      <Badge className="bg-white/10 text-white/65 border-white/10">Reused</Badge>
+                                    )}
+                                    {item.policyCorrelationId && (
+                                      <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                                        Corr: {item.policyCorrelationId.slice(0, 18)}
+                                      </Badge>
+                                    )}
+                                  </div>
                                   {isLeakEntityType(item.entityType) && (
                                     <Button
                                       size="sm"
@@ -4871,7 +4973,26 @@ export function LeaksScreen() {
                               <div className="text-xs text-white/55">Последние feedback из истории</div>
                               {snapshotHistory.actionFeedback.slice(0, 4).map((item) => (
                                 <div key={`${item.actionTitle}-${item.updatedAt}`} className="text-xs text-white/70">
-                                  {item.actionTitle} • {item.result} • {formatDate(item.updatedAt)}
+                                  <div>
+                                    {item.actionTitle} • {item.result} • {formatDate(item.updatedAt)}
+                                  </div>
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {item.feedbackSource === 'policy' && (
+                                      <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                                        Policy outcome
+                                      </Badge>
+                                    )}
+                                    {item.attempt && (
+                                      <Badge className="bg-white/10 text-white/65 border-white/10">
+                                        Attempt {item.attempt}
+                                      </Badge>
+                                    )}
+                                    {item.policyCorrelationId && (
+                                      <Badge className="bg-white/10 text-white/65 border-white/10">
+                                        Corr: {item.policyCorrelationId.slice(0, 18)}
+                                      </Badge>
+                                    )}
+                                  </div>
                                 </div>
                               ))}
                             </div>

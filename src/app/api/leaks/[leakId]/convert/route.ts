@@ -381,6 +381,7 @@ export async function POST(
 
         if (existingLinkForAction) {
           reusedActions += 1
+          const reusedAt = new Date().toISOString()
           await tx.leakActionLink.upsert({
             where: {
               leakId_entityType_entityId: {
@@ -415,9 +416,29 @@ export async function POST(
               },
             },
           })
+          const history =
+            snapshot.history && typeof snapshot.history === 'object' && !Array.isArray(snapshot.history)
+              ? ({ ...(snapshot.history as Record<string, unknown>) } as Record<string, unknown>)
+              : {}
+          const linkedEntities = Array.isArray(history.linkedEntities)
+            ? [...(history.linkedEntities as unknown[])]
+            : []
+          linkedEntities.unshift({
+            entityType: existingLinkForAction.entityType,
+            label: existingLinkForAction.label,
+            sourceActionId: action.id,
+            sourceActionTitle: action.title,
+            sourceActionKind: action.kind,
+            sourcePlanMode: selectedPlan.mode,
+            policyCorrelationId: policyCorrelationId || null,
+            createdAt: reusedAt,
+            reused: true,
+          })
+          history.linkedEntities = linkedEntities
+          snapshot.history = history
           snapshot = appendRunJournal(snapshot, {
             type: 'action_created',
-            at: new Date().toISOString(),
+            at: reusedAt,
             mode: selectedPlan.mode as PlanMode,
             actionId: action.id,
             actionTitle: action.title,
@@ -549,6 +570,7 @@ export async function POST(
         }
 
         createdEntities.push(created)
+        const createdAt = new Date().toISOString()
         existingLinks.push({
           entityType: created.entityType,
           entityId: created.entityId,
@@ -591,9 +613,29 @@ export async function POST(
             },
           },
         })
+        const history =
+          snapshot.history && typeof snapshot.history === 'object' && !Array.isArray(snapshot.history)
+            ? ({ ...(snapshot.history as Record<string, unknown>) } as Record<string, unknown>)
+            : {}
+        const linkedEntities = Array.isArray(history.linkedEntities)
+          ? [...(history.linkedEntities as unknown[])]
+          : []
+        linkedEntities.unshift({
+          entityType: created.entityType,
+          label: created.label,
+          sourceActionId: action.id,
+          sourceActionTitle: action.title,
+          sourceActionKind: action.kind,
+          sourcePlanMode: selectedPlan.mode,
+          policyCorrelationId: policyCorrelationId || null,
+          createdAt,
+          reused: false,
+        })
+        history.linkedEntities = linkedEntities
+        snapshot.history = history
         snapshot = appendRunJournal(snapshot, {
           type: 'action_created',
-          at: new Date().toISOString(),
+          at: createdAt,
           mode: selectedPlan.mode as PlanMode,
           actionId: action.id,
           actionTitle: action.title,

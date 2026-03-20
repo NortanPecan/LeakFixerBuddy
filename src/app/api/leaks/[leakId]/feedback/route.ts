@@ -449,6 +449,27 @@ export async function POST(
         if (feedbackLog.length > 80) {
           feedbackLog.length = 80
         }
+        const history =
+          snapshot.history && typeof snapshot.history === 'object' && !Array.isArray(snapshot.history)
+            ? ({ ...(snapshot.history as Record<string, unknown>) } as Record<string, unknown>)
+            : {}
+        const actionFeedback = Array.isArray(history.actionFeedback)
+          ? [...(history.actionFeedback as unknown[])]
+          : []
+        actionFeedback.unshift({
+          actionId: action.id,
+          actionTitle: action.title,
+          actionKind: action.kind,
+          mode: action.plan.mode,
+          result,
+          comment: normalizedComment,
+          policyCorrelationId: actionPolicyCorrelationId || null,
+          feedbackSource: actionPolicyCorrelationId ? 'policy' : 'manual',
+          attempt,
+          updatedAt,
+        })
+        history.actionFeedback = actionFeedback
+        snapshot.history = history
 
         const withFeedback = appendRunJournal(snapshot, {
           type: 'feedback_saved',
