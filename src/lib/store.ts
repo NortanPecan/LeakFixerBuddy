@@ -6,6 +6,13 @@ import { getMoodStatus } from '@/lib/mood-utils'
 // Navigation state
 export type Screen = 'home' | 'fitness' | 'rituals' | 'gym' | 'profile' | 'create-ritual' | 'catalog' | 'all-rituals' | 'tasks' | 'chain' | 'create-task' | 'create-chain' | 'notes' | 'note-detail' | 'development' | 'content-detail' | 'finance' | 'challenges' | 'challenge-detail' | 'health' | 'daily-summary' | 'goals' | 'skills' | 'traits' | 'export' | 'stats' | 'buddies' | 'journey' | 'leaks' | 'onboarding' | 'zones' | 'settings' | 'weekly-report' | 'monthly-report' | 'habits' | 'calorie-goal'
 
+export const DEFAULT_NAV_ITEMS: Screen[] = ['home', 'gym', 'rituals', 'goals', 'leaks', 'profile']
+const LEGACY_DEFAULT_NAV_ITEMS: Screen[] = ['home', 'gym', 'rituals', 'goals', 'profile']
+
+function isSameNavItems(left: Screen[], right: Screen[]) {
+  return left.length === right.length && left.every((screen, index) => screen === right[index])
+}
+
 interface User {
   id: string
   telegramId: string
@@ -132,7 +139,7 @@ interface AppState {
   // Actions
   login: (isDemo?: boolean) => Promise<boolean>
   loginWithEmail: (email: string, password: string, action: 'signin' | 'signup', name?: string) => Promise<{ ok: boolean; error?: string }>
-  logout: () => void
+  logout: () => Promise<void>
   updateProgress: (day?: number, streak?: number, points?: number) => Promise<void>
   updateGlobalState: (mood: number, energy: number) => Promise<void>
   loadDailyData: (date: string) => Promise<DailyData | null>
@@ -141,6 +148,18 @@ interface AppState {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function buildGlobalStateFromResponse(data: { globalState?: { mood: number; energy?: number; trend?: number } | null }): GlobalState | null {
+  if (!data.globalState) return null
+
+  const moodStatus = getMoodStatus(data.globalState.mood)
+  return {
+    mood: data.globalState.mood,
+    energy: data.globalState.energy || 5,
+    trend: data.globalState.trend || 0,
+    status: moodStatus.status,
+  }
 }
 
 export const useAppStore = create<AppState>()(
@@ -215,7 +234,7 @@ export const useAppStore = create<AppState>()(
 
       // Demo mode
       // Custom nav
-      navItems: ['home', 'gym', 'rituals', 'goals', 'profile'] as Screen[],
+      navItems: DEFAULT_NAV_ITEMS,
       setNavItems: (items) => set({ navItems: items }),
 
       isDemoMode: false,
@@ -246,6 +265,21 @@ export const useAppStore = create<AppState>()(
           if (isDemo) {
             response = await fetch('/api/auth?demo=true')
           } else {
+            const sessionResponse = await fetch('/api/auth/session', { cache: 'no-store' })
+            if (sessionResponse.ok) {
+              const sessionData = await sessionResponse.json()
+              set({
+                user: sessionData.user,
+                profile: sessionData.profile,
+                globalState: buildGlobalStateFromResponse(sessionData),
+                isDemoMode: sessionData.isDemo || false,
+                isOwnerMode: false,
+                isInitialized: true,
+                isLoading: false,
+              })
+              return true
+            }
+
             const tg = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp
             const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : ''
             const isTelegramContext = !!tg || /Telegram/i.test(userAgent)
@@ -292,22 +326,10 @@ export const useAppStore = create<AppState>()(
 
           const data = await response.json()
 
-          // Calculate global state from daily state
-          let globalState: GlobalState | null = null
-          if (data.globalState) {
-            const moodStatus = getMoodStatus(data.globalState.mood)
-            globalState = {
-              mood: data.globalState.mood,
-              energy: data.globalState.energy || 5,
-              trend: data.globalState.trend || 0,
-              status: moodStatus.status
-            }
-          }
-
           set({
             user: data.user,
             profile: data.profile,
-            globalState,
+            globalState: buildGlobalStateFromResponse(data),
             isDemoMode: data.isDemo || false,
             isOwnerMode: false,
             isInitialized: true,
@@ -341,18 +363,6 @@ export const useAppStore = create<AppState>()(
             return { ok: false, error: data.error || 'Auth failed' }
           }
 
-          const { getMoodStatus } = await import('@/lib/mood-utils')
-          let globalState: GlobalState | null = null
-          if (data.globalState) {
-            const moodStatus = getMoodStatus(data.globalState.mood)
-            globalState = {
-              mood: data.globalState.mood,
-              energy: data.globalState.energy || 5,
-              trend: data.globalState.trend || 0,
-              status: moodStatus.status,
-            }
-          }
-
           if (typeof window !== 'undefined') {
             localStorage.setItem('leakfixer-auth-mode', 'email')
           }
@@ -360,7 +370,7 @@ export const useAppStore = create<AppState>()(
           set({
             user: data.user,
             profile: data.profile,
-            globalState,
+            globalState: buildGlobalStateFromResponse(data),
             isDemoMode: false,
             isOwnerMode: false,
             isInitialized: true,
@@ -376,7 +386,17 @@ export const useAppStore = create<AppState>()(
       },
 
       // Logout
-      logout: () => {
+      logout: async () => {
+        try {
+          await fetch('/api/auth/session', { method: 'DELETE' })
+        } catch (error) {
+          console.error('Logout error:', error)
+        }
+
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('leakfixer-auth-mode')
+        }
+
         set({
           user: null,
           profile: null,
@@ -492,6 +512,19 @@ export const useAppStore = create<AppState>()(
       name: 'leakfixer-storage',
       // Only use localStorage on client side to avoid SSR errors
       storage: typeof window !== 'undefined' ? createJSONStorage(() => localStorage) : undefined,
+      merge: (persistedState, currentState) => {
+        const merged = {
+          ...currentState,
+          ...(persistedState as Partial<AppState>),
+        }
+
+        const persistedNavItems = (persistedState as Partial<AppState>)?.navItems
+        if (Array.isArray(persistedNavItems) && isSameNavItems(persistedNavItems, LEGACY_DEFAULT_NAV_ITEMS)) {
+          merged.navItems = DEFAULT_NAV_ITEMS
+        }
+
+        return merged
+      },
       partialize: (state) => ({
         user: state.user,
         profile: state.profile,

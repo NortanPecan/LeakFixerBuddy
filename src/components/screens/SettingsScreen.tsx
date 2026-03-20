@@ -1,6 +1,6 @@
 'use client'
 
-import { useAppStore, Screen } from '@/lib/store'
+import { useAppStore, Screen, DEFAULT_NAV_ITEMS } from '@/lib/store'
 import { ALL_NAV_OPTIONS } from '@/components/BottomNav'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,7 +24,7 @@ interface UserSettings {
 export function SettingsScreen() {
   const { user, setScreen, navItems, setNavItems } = useAppStore()
   const [localNavItems, setLocalNavItems] = useState<Screen[]>(
-    navItems.length > 0 ? navItems : ['home', 'gym', 'rituals', 'goals', 'profile']
+    navItems.length > 0 ? navItems : DEFAULT_NAV_ITEMS
   )
   const [settings, setSettings] = useState<UserSettings>({
     ritualReminders: true,
@@ -299,7 +299,7 @@ export function SettingsScreen() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setLocalNavItems(['home', 'gym', 'rituals', 'goals', 'profile'])}
+                    onClick={() => setLocalNavItems(DEFAULT_NAV_ITEMS)}
               >
                 По умолчанию
               </Button>
