@@ -384,6 +384,10 @@ function getSelectedPlan(plans?: LeakSolutionPlan[]) {
 type LeakGuidanceTone = keyof typeof LEAK_GUIDANCE_STYLES
 type LeakGuidanceAction = 'generate' | 'retry' | 'resolve' | 'reopen' | null
 
+function getPlanActionAnchorId(leakId: string, actionId: string) {
+  return `leak-plan-action-${leakId}-${actionId}`
+}
+
 function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
   const selectedPlan = getSelectedPlan(plans)
 
@@ -403,6 +407,7 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       pendingActions: 0,
       feedbackActions: 0,
       bottleneckText: 'Нет выбранного режима: сначала собери минимум/base/maximum.',
+      bottleneckActionId: null,
     }
   }
 
@@ -448,6 +453,7 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
         firstNoFeedbackAction?.title ||
         firstPendingAction?.title ||
         'Leak закрыт, но можно вернуть в работу при повторении симптома.',
+      bottleneckActionId: firstFailedAction?.id || firstNoFeedbackAction?.id || firstPendingAction?.id || null,
     }
   }
 
@@ -469,6 +475,7 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       bottleneckText: firstFailedAction
         ? `Сбойный шаг: ${firstFailedAction.title}`
         : 'Есть неуспешные шаги, лучше пересобрать подход.',
+      bottleneckActionId: firstFailedAction?.id || null,
     }
   }
 
@@ -490,6 +497,7 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       bottleneckText: firstPendingAction
         ? `Не создано: ${firstPendingAction.title}`
         : 'Есть неприменённые шаги в выбранном режиме.',
+      bottleneckActionId: firstPendingAction?.id || null,
     }
   }
 
@@ -511,6 +519,7 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       bottleneckText: firstNoFeedbackAction
         ? `Нет feedback: ${firstNoFeedbackAction.title}`
         : 'Не по всем созданным шагам есть feedback.',
+      bottleneckActionId: firstNoFeedbackAction?.id || null,
     }
   }
 
@@ -530,6 +539,7 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       pendingActions,
       feedbackActions,
       bottleneckText: 'Есть рабочие шаги: зафиксируй результат и закрой leak, если симптом ушёл.',
+      bottleneckActionId: null,
     }
   }
 
@@ -549,6 +559,7 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       pendingActions,
       feedbackActions,
       bottleneckText: 'Есть частично успешные шаги: стоит усилить режим или сменить сценарий.',
+      bottleneckActionId: null,
     }
   }
 
@@ -567,6 +578,7 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
     pendingActions,
     feedbackActions,
     bottleneckText: 'Критичных блокеров нет: можно тестировать следующий шаг или уточнять контекст.',
+    bottleneckActionId: null,
   }
 }
 
@@ -1073,6 +1085,17 @@ export function LeaksScreen() {
   const [feedbackCommentByAction, setFeedbackCommentByAction] = useState<Record<string, string>>({})
   const [savingPatternLeakType, setSavingPatternLeakType] = useState<string | null>(null)
   const [retryingLeakId, setRetryingLeakId] = useState<string | null>(null)
+  const [focusedPlanActionId, setFocusedPlanActionId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!focusedPlanActionId) return
+
+    const timer = window.setTimeout(() => {
+      setFocusedPlanActionId(null)
+    }, 3200)
+
+    return () => window.clearTimeout(timer)
+  }, [focusedPlanActionId])
 
   const hasDraft = title.trim().length > 0 || details.trim().length > 0
 
@@ -1604,6 +1627,18 @@ export function LeaksScreen() {
     if (willOpen && !plansByLeak[leakId] && loadingPlansLeakId !== leakId) {
       await loadPlansForLeak(leakId)
     }
+  }
+
+  const focusPlanAction = (leakId: string, actionId: string) => {
+    setExpandedLeakId(leakId)
+    setFocusedPlanActionId(actionId)
+
+    setTimeout(() => {
+      const node = document.getElementById(getPlanActionAnchorId(leakId, actionId))
+      if (node) {
+        node.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }, 0)
   }
 
   const isPlanActionConverted = (action: LeakPlanAction) => isConvertedPlanAction(action)
@@ -2739,6 +2774,18 @@ export function LeaksScreen() {
                             </Button>
                           </div>
                         )}
+                        {guidance.bottleneckActionId && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => focusPlanAction(leak.id, guidance.bottleneckActionId)}
+                              className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                            >
+                              Перейти к узкому шагу
+                            </Button>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap gap-2">
@@ -3012,7 +3059,12 @@ export function LeaksScreen() {
                               return (
                                 <div
                                   key={planAction.id}
-                                  className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"
+                                  id={getPlanActionAnchorId(leak.id, planAction.id)}
+                                  className={`rounded-xl border bg-white/[0.03] px-3 py-2 transition-colors ${
+                                    focusedPlanActionId === planAction.id
+                                      ? 'border-indigo-400/40 shadow-[0_0_0_1px_rgba(99,102,241,0.35)]'
+                                      : 'border-white/10'
+                                  }`}
                                 >
                                   <div className="flex flex-wrap items-center gap-2">
                                     <Badge variant="outline" className="border-white/10 text-white/55">
