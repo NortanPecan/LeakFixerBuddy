@@ -34,7 +34,7 @@ function startOfLookbackWindow(days: number) {
 async function buildLiveLeakContext(userId: string, leakId: string) {
   const since = startOfLookbackWindow(CONTEXT_LOOKBACK_DAYS)
 
-  const [dailyStates, foodEntries, fitnessDays, transactions, activeSupplementsCount, supplementIntakeCheckedCount, workoutCount, ritualCount, checkins, doneTasksCount, openTasksCount, linkedEntities, feedbackRows] =
+  const [dailyStates, foodEntries, fitnessDays, transactions, emotionLogs, activeSupplementsCount, supplementIntakeCheckedCount, workoutCount, ritualCount, checkins, doneTasksCount, openTasksCount, linkedEntities, feedbackRows] =
     await Promise.all([
       db.dailyState.findMany({
         where: { userId, date: { gte: since } },
@@ -73,6 +73,20 @@ async function buildLiveLeakContext(userId: string, leakId: string) {
         select: {
           amount: true,
           date: true,
+        },
+      }),
+      db.emotionLog.findMany({
+        where: {
+          userId,
+          createdAt: { gte: since },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        take: 120,
+        select: {
+          emotion: true,
+          intensity: true,
         },
       }),
       db.supplement.count({
@@ -188,6 +202,14 @@ async function buildLiveLeakContext(userId: string, leakId: string) {
           ).toFixed(0),
         )
       : null
+  const emotionIntensityAvg = avg(emotionLogs.map((item) => toNumber(item.intensity)))
+  const negativeEmotionCount = emotionLogs.filter((item) =>
+    ['anxiety', 'anger', 'sad'].includes(String(item.emotion || '').toLowerCase()),
+  ).length
+  const negativeEmotionShare =
+    emotionLogs.length > 0
+      ? Number(((negativeEmotionCount / emotionLogs.length) * 100).toFixed(0))
+      : null
 
   return {
     generatedAt: new Date().toISOString(),
@@ -213,6 +235,9 @@ async function buildLiveLeakContext(userId: string, leakId: string) {
       activeSupplements: activeSupplementsCount,
       supplementIntakeChecked7d: supplementIntakeCheckedCount,
       supplementAdherenceRate,
+      emotionLogsCount7d: emotionLogs.length,
+      emotionIntensityAvg,
+      negativeEmotionShare,
       morningCheckins: morningCheckins.length,
       eveningCheckins: eveningCheckins.length,
       dayRatingAvg: avg(eveningCheckins.map((item) => toNumber(item.dayRating))),

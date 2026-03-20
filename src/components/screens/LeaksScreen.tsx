@@ -548,6 +548,9 @@ function getContextSnapshotItems(contextSnapshot?: Record<string, unknown> | nul
     activeSupplements: 'Активных добавок',
     supplementIntakeChecked7d: 'Приёмов добавок (7д)',
     supplementAdherenceRate: 'Дисциплина добавок (%)',
+    emotionLogsCount7d: 'Эмоций отмечено (7д)',
+    emotionIntensityAvg: 'Средняя интенсивность эмоций',
+    negativeEmotionShare: 'Негативные эмоции (%)',
     morningCheckins: 'Утренних check-in',
     eveningCheckins: 'Вечерних check-in',
     dayRatingAvg: 'Средняя оценка дня',
@@ -751,6 +754,7 @@ function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null
   const openTasks = toNum('openTasks')
   const activeSupplements = toNum('activeSupplements')
   const supplementAdherenceRate = toNum('supplementAdherenceRate')
+  const negativeEmotionShare = toNum('negativeEmotionShare')
 
   if (sleepHoursAvg !== null && sleepHoursAvg < 6.5) {
     hypotheses.push('Наблюдение: недосып может усиливать leak. Стоит проверить связь сна и срывов.')
@@ -787,6 +791,9 @@ function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null
   }
   if (activeSupplements !== null && activeSupplements > 0 && supplementAdherenceRate !== null && supplementAdherenceRate < 50) {
     hypotheses.push('Наблюдение: низкая дисциплина по добавкам. Это может усиливать просадки в энергии и устойчивости.')
+  }
+  if (negativeEmotionShare !== null && negativeEmotionShare >= 60) {
+    hypotheses.push('Наблюдение: преобладают негативные эмоции. Для leak полезно добавить шаг на стабилизацию состояния.')
   }
 
   return hypotheses.slice(0, 3)
