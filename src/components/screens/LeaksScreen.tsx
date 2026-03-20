@@ -242,6 +242,15 @@ interface LeakPolicyHint {
       stage: 'suggested' | 'accepted' | 'awaiting_feedback' | 'learning' | 'completed' | 'rejected'
       isCurrent: boolean
     }>
+    learningSignals?: {
+      loopHealth: number
+      recentFeedbackCount: number
+      recentWorkedCount: number
+      recentPartialCount: number
+      recentFailedCount: number
+      topFailureReasons: Array<{ text: string; count: number }>
+      repeatedActions: Array<{ actionTitle: string; attempt: number }>
+    }
   }
 }
 
@@ -1855,6 +1864,62 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
                     .map(normalizePolicyFunnel)
                     .filter((item): item is NonNullable<ReturnType<typeof normalizePolicyFunnel>> => Boolean(item))
                 : [],
+              learningSignals:
+                summary.learningSignals &&
+                typeof summary.learningSignals === 'object' &&
+                !Array.isArray(summary.learningSignals)
+                  ? (() => {
+                      const signals = summary.learningSignals as Record<string, unknown>
+                      return {
+                        loopHealth:
+                          typeof signals.loopHealth === 'number' ? Math.round(signals.loopHealth) : 0,
+                        recentFeedbackCount:
+                          typeof signals.recentFeedbackCount === 'number'
+                            ? Math.round(signals.recentFeedbackCount)
+                            : 0,
+                        recentWorkedCount:
+                          typeof signals.recentWorkedCount === 'number'
+                            ? Math.round(signals.recentWorkedCount)
+                            : 0,
+                        recentPartialCount:
+                          typeof signals.recentPartialCount === 'number'
+                            ? Math.round(signals.recentPartialCount)
+                            : 0,
+                        recentFailedCount:
+                          typeof signals.recentFailedCount === 'number'
+                            ? Math.round(signals.recentFailedCount)
+                            : 0,
+                        topFailureReasons: Array.isArray(signals.topFailureReasons)
+                          ? signals.topFailureReasons
+                              .map((item) => {
+                                if (!item || typeof item !== 'object') return null
+                                const row = item as Record<string, unknown>
+                                if (typeof row.text !== 'string' || typeof row.count !== 'number') return null
+                                return { text: row.text, count: Math.round(row.count) }
+                              })
+                              .filter((item): item is { text: string; count: number } => Boolean(item))
+                          : [],
+                        repeatedActions: Array.isArray(signals.repeatedActions)
+                          ? signals.repeatedActions
+                              .map((item) => {
+                                if (!item || typeof item !== 'object') return null
+                                const row = item as Record<string, unknown>
+                                if (typeof row.actionTitle !== 'string' || typeof row.attempt !== 'number') return null
+                                return { actionTitle: row.actionTitle, attempt: Math.round(row.attempt) }
+                              })
+                              .filter((item): item is { actionTitle: string; attempt: number } => Boolean(item))
+                          : [],
+                      }
+                    })()
+                  : {
+                      loopHealth: 0,
+                      recentFeedbackCount: 0,
+                      recentWorkedCount: 0,
+                      recentPartialCount: 0,
+                      recentFailedCount: 0,
+                      topFailureReasons: [],
+                      repeatedActions: [],
+                    },
               accepted: typeof summary.accepted === 'number' ? summary.accepted : 0,
               rejected: typeof summary.rejected === 'number' ? summary.rejected : 0,
               outcomes: typeof summary.outcomes === 'number' ? summary.outcomes : 0,
@@ -3727,6 +3792,15 @@ export function LeaksScreen() {
                         acc[key] = (acc[key] || 0) + 1
                         return acc
                       }, {})
+              const learningSignals = policy?.summary?.learningSignals || {
+                loopHealth: 0,
+                recentFeedbackCount: 0,
+                recentWorkedCount: 0,
+                recentPartialCount: 0,
+                recentFailedCount: 0,
+                topFailureReasons: [],
+                repeatedActions: [],
+              }
               const contextDriftHint = policy?.contextDrift || null
               const executionScore = policy?.executionScore || {
                 value: 0,
@@ -4618,6 +4692,96 @@ export function LeaksScreen() {
                                 </Badge>
                               )}
                             </div>
+                            {learningSignals.recentFeedbackCount > 0 && (
+                              <div className="mt-2 rounded-xl border border-white/10 bg-black/10 px-2 py-2 space-y-2">
+                                <div className="flex flex-wrap gap-2">
+                                  <Badge
+                                    className={
+                                      learningSignals.loopHealth >= 70
+                                        ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
+                                        : learningSignals.loopHealth >= 45
+                                          ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                                          : 'bg-rose-500/10 text-rose-200 border-rose-500/20'
+                                    }
+                                  >
+                                    Loop health: {learningSignals.loopHealth}
+                                  </Badge>
+                                  <Badge className="bg-white/10 text-white/70 border-white/10">
+                                    Recent feedback: {learningSignals.recentFeedbackCount}
+                                  </Badge>
+                                  <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
+                                    Worked {learningSignals.recentWorkedCount}
+                                  </Badge>
+                                  <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
+                                    Partial {learningSignals.recentPartialCount}
+                                  </Badge>
+                                  <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
+                                    Failed {learningSignals.recentFailedCount}
+                                  </Badge>
+                                </div>
+                                {learningSignals.topFailureReasons.length > 0 && (
+                                  <div className="flex flex-wrap gap-2">
+                                    {learningSignals.topFailureReasons.map((item) => (
+                                      <Badge
+                                        key={`failure-reason-${item.text}`}
+                                        className="bg-amber-500/10 text-amber-200 border-amber-500/20"
+                                      >
+                                        {item.text} ({item.count})
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                )}
+                                {learningSignals.repeatedActions.length > 0 && (
+                                  <div className="flex flex-wrap gap-2">
+                                    {learningSignals.repeatedActions.slice(0, 3).map((item) => (
+                                      <Badge
+                                        key={`repeat-action-${item.actionTitle}`}
+                                        className="bg-white/10 text-white/70 border-white/10"
+                                      >
+                                        Retry: {item.actionTitle} ({item.attempt})
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                )}
+                                <div className="flex flex-wrap gap-2">
+                                  {learningSignals.loopHealth < 45 && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() =>
+                                        executePolicyAction(leak, {
+                                          actionType: 'regenerate_context',
+                                          reason: 'low_loop_health',
+                                        })
+                                      }
+                                      disabled={policyActionBusy}
+                                      className="border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/15 text-rose-200"
+                                    >
+                                      Обновить контекст
+                                    </Button>
+                                  )}
+                                  {learningSignals.repeatedActions.length > 0 &&
+                                    selectedPlan &&
+                                    selectedPlan.mode !== 'minimum' && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() =>
+                                          executePolicyAction(leak, {
+                                            actionType: 'switch_mode',
+                                            targetMode: 'minimum',
+                                            reason: 'repeat_action_pressure',
+                                          })
+                                        }
+                                        disabled={policyActionBusy}
+                                        className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
+                                      >
+                                        Переключить на minimum
+                                      </Button>
+                                    )}
+                                </div>
+                              </div>
+                            )}
                             {Object.keys(policyRejectReasonCounts).length > 0 && (
                               <div className="mt-2 flex flex-wrap gap-2">
                                 {Object.entries(policyRejectReasonCounts).map(([reason, count]) => (

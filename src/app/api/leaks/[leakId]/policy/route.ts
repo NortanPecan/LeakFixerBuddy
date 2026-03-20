@@ -228,6 +228,81 @@ function summarizeRecentFunnels(
     .filter((item) => Boolean(item))
 }
 
+function summarizeLearningSignals(snapshot: Record<string, unknown>) {
+  const history =
+    snapshot.history && typeof snapshot.history === 'object' && !Array.isArray(snapshot.history)
+      ? (snapshot.history as Record<string, unknown>)
+      : {}
+  const actionFeedbackRaw = Array.isArray(history.actionFeedback) ? history.actionFeedback : []
+  const actionFeedback = actionFeedbackRaw
+    .map((item) => (item && typeof item === 'object' ? (item as Record<string, unknown>) : null))
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+
+  const recent = actionFeedback
+    .filter((item) => typeof item.updatedAt === 'string')
+    .sort(
+      (a, b) =>
+        new Date(String(b.updatedAt)).getTime() - new Date(String(a.updatedAt)).getTime(),
+    )
+    .slice(0, 12)
+
+  const failureRecent = recent.filter((item) => item.result === 'not_worked')
+  const partialRecent = recent.filter((item) => item.result === 'partially')
+  const workedRecent = recent.filter((item) => item.result === 'worked')
+
+  const reasonCounts: Record<string, number> = {}
+  failureRecent.forEach((item) => {
+    const comment = typeof item.comment === 'string' ? item.comment.trim() : ''
+    if (!comment) return
+    const key = comment.length > 48 ? `${comment.slice(0, 48)}…` : comment
+    reasonCounts[key] = (reasonCounts[key] || 0) + 1
+  })
+  const topFailureReasons = Object.entries(reasonCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([text, count]) => ({ text, count }))
+
+  const attemptByAction = new Map<string, { actionTitle: string; attempt: number }>()
+  actionFeedback.forEach((item) => {
+    const actionId = typeof item.actionId === 'string' ? item.actionId : null
+    const actionTitle =
+      typeof item.actionTitle === 'string' ? item.actionTitle : 'Без названия шага'
+    const attempt = typeof item.attempt === 'number' ? Math.round(item.attempt) : 1
+    if (!actionId) return
+    const prev = attemptByAction.get(actionId)
+    if (!prev || attempt > prev.attempt) {
+      attemptByAction.set(actionId, { actionTitle, attempt })
+    }
+  })
+  const repeatedActions = Array.from(attemptByAction.values())
+    .filter((item) => item.attempt >= 2)
+    .sort((a, b) => b.attempt - a.attempt)
+    .slice(0, 5)
+
+  const totalRecent = Math.max(recent.length, 1)
+  const workedShare = workedRecent.length / totalRecent
+  const failureShare = failureRecent.length / totalRecent
+  const partialShare = partialRecent.length / totalRecent
+  const repeatPenalty = Math.min(25, repeatedActions.length * 8)
+  const health = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(workedShare * 70 + (1 - failureShare) * 25 + (1 - partialShare) * 5 - repeatPenalty),
+    ),
+  )
+
+  return {
+    loopHealth: health,
+    recentFeedbackCount: recent.length,
+    recentWorkedCount: workedRecent.length,
+    recentPartialCount: partialRecent.length,
+    recentFailedCount: failureRecent.length,
+    topFailureReasons,
+    repeatedActions,
+  }
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ leakId: string }> },
@@ -294,6 +369,7 @@ export async function GET(
         ...summarizePolicyJournal(nextSnapshot),
         currentFunnel: summarizeCurrentFunnel(nextSnapshot, currentCorrelationId),
         recentFunnels: summarizeRecentFunnels(nextSnapshot, currentCorrelationId, 5),
+        learningSignals: summarizeLearningSignals(nextSnapshot),
       },
       runJournal: Array.isArray(nextSnapshot.runJournal) ? nextSnapshot.runJournal.slice(0, 20) : [],
     })
