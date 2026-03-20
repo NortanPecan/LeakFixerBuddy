@@ -3091,6 +3091,15 @@ export function LeaksScreen() {
                               </Button>
                             </div>
                           )}
+                          {matchedPattern && (
+                            <div className="text-xs text-white/55">
+                              {matchedPatternLinkType === 'exact'
+                                ? 'Связь построена по точному совпадению названия leak и pattern.'
+                                : matchedPatternLinkType === 'fuzzy'
+                                  ? 'Связь построена по похожему названию. Проверь формулировку leak для более точного обучения.'
+                                  : 'Тип связи не определён автоматически.'}
+                            </div>
+                          )}
                           {matchedPattern?.workedExamples && matchedPattern.workedExamples.length > 0 ? (
                             <div className="space-y-2">
                               {matchedPattern.workedExamples.map((item) => (
