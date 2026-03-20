@@ -3610,6 +3610,14 @@ export function LeaksScreen() {
                   : 'rejected'
                 : 'pending'
               const policyComputedMinutes = getMinutesSince(policy?.computedAt)
+              const policyAcceptRate =
+                policyAcceptedCount + policyRejectedCount > 0
+                  ? Math.round((policyAcceptedCount / (policyAcceptedCount + policyRejectedCount)) * 100)
+                  : null
+              const policyWorkedRate =
+                policyOutcomeCount > 0
+                  ? Math.round((policyOutcomeWorked / policyOutcomeCount) * 100)
+                  : null
               const policyRejectReasonCounts =
                 policy?.summary?.rejectReasons && Object.keys(policy.summary.rejectReasons).length > 0
                   ? policy.summary.rejectReasons
@@ -4202,6 +4210,20 @@ export function LeaksScreen() {
                                     Outcomes: {policy.summary.currentFunnel.outcomeCount}
                                   </Badge>
                                 </div>
+                                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                                  <div
+                                    className="h-full rounded-full bg-indigo-400/80"
+                                    style={{
+                                      width: `${Math.min(
+                                        100,
+                                        (policy.summary.currentFunnel.suggestedAt ? 25 : 0) +
+                                          (policy.summary.currentFunnel.acceptedAt ? 25 : 0) +
+                                          (policy.summary.currentFunnel.entityCreatedCount > 0 ? 25 : 0) +
+                                          (policy.summary.currentFunnel.outcomeCount > 0 ? 25 : 0),
+                                      )}%`,
+                                    }}
+                                  />
+                                </div>
                               </div>
                             )}
                             <div className="mt-2 flex flex-wrap gap-2">
@@ -4226,6 +4248,16 @@ export function LeaksScreen() {
                               <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
                                 Created by policy: {policyLinkedCreatedCount}
                               </Badge>
+                              {policyAcceptRate !== null && (
+                                <Badge className="bg-white/10 text-white/75 border-white/10">
+                                  Accept rate: {policyAcceptRate}%
+                                </Badge>
+                              )}
+                              {policyWorkedRate !== null && (
+                                <Badge className="bg-white/10 text-white/75 border-white/10">
+                                  Worked rate: {policyWorkedRate}%
+                                </Badge>
+                              )}
                             </div>
                             {Object.keys(policyRejectReasonCounts).length > 0 && (
                               <div className="mt-2 flex flex-wrap gap-2">
