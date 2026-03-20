@@ -3171,6 +3171,16 @@ export function LeaksScreen() {
                             {selectedPlan.actions.map((planAction, index) => {
                               const linkedEntity = getLinkedEntityForPlanAction(leak, planAction)
                               const feedback = feedbackByActionId.get(planAction.id)
+                              const actionStage: 'plan' | 'entity' | 'feedback_worked' | 'feedback_partial' | 'feedback_failed' =
+                                !linkedEntity
+                                  ? 'plan'
+                                  : !feedback
+                                    ? 'entity'
+                                    : feedback.result === 'worked'
+                                      ? 'feedback_worked'
+                                      : feedback.result === 'partially'
+                                        ? 'feedback_partial'
+                                        : 'feedback_failed'
 
                               return (
                                 <div
@@ -3190,6 +3200,41 @@ export function LeaksScreen() {
                                       {PLAN_KIND_LABELS[planAction.kind]}
                                     </Badge>
                                     <div className="text-sm text-white">{planAction.title}</div>
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                                    <Badge
+                                      className={
+                                        actionStage === 'plan'
+                                          ? 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20'
+                                          : 'bg-white/10 text-white/50 border-white/10'
+                                      }
+                                    >
+                                      1. План
+                                    </Badge>
+                                    <span className="text-white/25">→</span>
+                                    <Badge
+                                      className={
+                                        actionStage === 'entity' || actionStage.startsWith('feedback')
+                                          ? 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20'
+                                          : 'bg-white/10 text-white/50 border-white/10'
+                                      }
+                                    >
+                                      2. Сущность
+                                    </Badge>
+                                    <span className="text-white/25">→</span>
+                                    <Badge
+                                      className={
+                                        actionStage === 'feedback_worked'
+                                          ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
+                                          : actionStage === 'feedback_partial'
+                                            ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                                            : actionStage === 'feedback_failed'
+                                              ? 'bg-rose-500/10 text-rose-200 border-rose-500/20'
+                                              : 'bg-white/10 text-white/50 border-white/10'
+                                      }
+                                    >
+                                      3. Feedback
+                                    </Badge>
                                   </div>
                                   <div className="mt-2 flex flex-wrap gap-2">
                                     <Badge className={PLAN_MODE_STYLES[selectedPlan.mode]}>
