@@ -10,6 +10,30 @@ function normalizePatternKey(value: string) {
     .replace(/\s+/g, ' ')
 }
 
+function patternTokens(value: string) {
+  return normalizePatternKey(value)
+    .split(' ')
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 3)
+}
+
+function tokenOverlapScore(a: string[], b: string[]) {
+  if (!a.length || !b.length) return 0
+  const aSet = new Set(a)
+  const bSet = new Set(b)
+  const intersection = Array.from(aSet).filter((item) => bSet.has(item)).length
+  const union = new Set([...aSet, ...bSet]).size
+  return union > 0 ? intersection / union : 0
+}
+
+function isClusterMatch(a: string, b: string) {
+  if (!a || !b) return false
+  if (a === b) return true
+  if (a.includes(b) || b.includes(a)) return true
+  const overlap = tokenOverlapScore(patternTokens(a), patternTokens(b))
+  return overlap >= 0.45
+}
+
 function normalizeTriedSolution(item: unknown) {
   if (!item || typeof item !== 'object') return null
   const candidate = item as Record<string, unknown>
@@ -128,6 +152,7 @@ export async function GET(request: NextRequest) {
 
       return {
         ...pattern,
+        patternKey,
         triedSolutions,
         workedCount,
         partialCount,
@@ -138,8 +163,71 @@ export async function GET(request: NextRequest) {
         activeLeaks: linkedLeaks,
       }
     })
+    const clusters: Array<{
+      key: string
+      label: string
+      members: number[]
+    }> = []
+    enrichedPatterns.forEach((pattern, index) => {
+      const match = clusters.find((cluster) => isClusterMatch(cluster.key, pattern.patternKey))
+      if (match) {
+        match.members.push(index)
+        return
+      }
+      clusters.push({
+        key: pattern.patternKey || `cluster-${index}`,
+        label: pattern.leakType,
+        members: [index],
+      })
+    })
 
-    return NextResponse.json({ success: true, patterns: enrichedPatterns })
+    const clusterStats = clusters
+      .map((cluster) => {
+        const members = cluster.members.map((index) => enrichedPatterns[index])
+        const workedCount = members.reduce((sum, item) => sum + (item.workedCount || 0), 0)
+        const partialCount = members.reduce((sum, item) => sum + (item.partialCount || 0), 0)
+        const failedCount = members.reduce((sum, item) => sum + (item.failedCount || 0), 0)
+        const analysisCount = members.reduce((sum, item) => sum + (item.analysisCount || 0), 0)
+        const leakTypes = members.map((item) => item.leakType)
+        return {
+          key: cluster.key,
+          label: cluster.label,
+          size: members.length,
+          workedCount,
+          partialCount,
+          failedCount,
+          analysisCount,
+          leakTypes,
+        }
+      })
+      .sort((a, b) => b.size - a.size || b.analysisCount - a.analysisCount)
+
+    const patternsWithCluster = enrichedPatterns.map((pattern) => {
+      const cluster =
+        clusterStats.find((item) => isClusterMatch(item.key, pattern.patternKey)) || null
+      return {
+        ...pattern,
+        clusterKey: cluster?.key || pattern.patternKey,
+        clusterLabel: cluster?.label || pattern.leakType,
+        clusterSize: cluster?.size || 1,
+        clusterWorkedCount: cluster?.workedCount || pattern.workedCount || 0,
+        clusterPartialCount: cluster?.partialCount || pattern.partialCount || 0,
+        clusterFailedCount: cluster?.failedCount || pattern.failedCount || 0,
+        clusterLeakTypes: cluster?.leakTypes || [pattern.leakType],
+      }
+    })
+    const clustersView = clusterStats.slice(0, 12).map((cluster) => ({
+      key: cluster.key,
+      label: cluster.label,
+      size: cluster.size,
+      workedCount: cluster.workedCount,
+      partialCount: cluster.partialCount,
+      failedCount: cluster.failedCount,
+      analysisCount: cluster.analysisCount,
+      leakTypes: cluster.leakTypes.slice(0, 6),
+    }))
+
+    return NextResponse.json({ success: true, patterns: patternsWithCluster, clusters: clustersView })
   } catch (error) {
     console.error('[ai/patterns GET] error:', error)
     return NextResponse.json({ error: 'Failed to get patterns' }, { status: 500 })

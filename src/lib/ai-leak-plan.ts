@@ -60,6 +60,30 @@ const PLAN_MODES: LeakPlanMode[] = ['minimum', 'base', 'maximum']
 const ACTION_KINDS: LeakPlanActionKind[] = ['task', 'ritual', 'skill', 'trait', 'challenge', 'content']
 const CONFIDENCE_LABELS: LeakPlanConfidence[] = ['low', 'medium', 'high']
 
+function normalizePatternKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+}
+
+function isRelatedLeakType(base: string, candidate: string) {
+  const a = normalizePatternKey(base)
+  const b = normalizePatternKey(candidate)
+  if (!a || !b) return false
+  if (a === b) return false
+  if (a.includes(b) || b.includes(a)) return true
+  const aTokens = a.split(' ').filter((item) => item.length >= 3)
+  const bTokens = b.split(' ').filter((item) => item.length >= 3)
+  if (!aTokens.length || !bTokens.length) return false
+  const aSet = new Set(aTokens)
+  const bSet = new Set(bTokens)
+  const intersection = Array.from(aSet).filter((item) => bSet.has(item)).length
+  const union = new Set([...aSet, ...bSet]).size
+  return union > 0 ? intersection / union >= 0.45 : false
+}
+
 const SYSTEM_PROMPT = `Ты строишь 3 реалистичных плана решения лика для LeakFixer Buddy.
 
 Ответь только JSON без markdown:
@@ -413,7 +437,7 @@ export async function generateLeakPlans(input: LeakPlanInput): Promise<{
 }> {
   const { userId, leak, retryFocus } = input
 
-  const [existingPattern, leakHistory] = await Promise.all([
+  const [existingPattern, leakHistory, userPatterns] = await Promise.all([
     db.userAiPattern.findUnique({
       where: { userId_leakType: { userId, leakType: leak.title } },
       select: {
@@ -422,6 +446,17 @@ export async function generateLeakPlans(input: LeakPlanInput): Promise<{
       },
     }),
     loadLeakHistoryContext(userId, leak.id),
+    db.userAiPattern.findMany({
+      where: { userId },
+      orderBy: { updatedAt: 'desc' },
+      take: 40,
+      select: {
+        leakType: true,
+        whatWorked: true,
+        triedSolutions: true,
+        updatedAt: true,
+      },
+    }),
   ])
 
   const whatWorked = Array.isArray(existingPattern?.whatWorked)
@@ -440,6 +475,24 @@ export async function generateLeakPlans(input: LeakPlanInput): Promise<{
     linkedEntities: [...leakHistory.linkedEntities, ...snapshotHistory.linkedEntities].slice(0, 30),
     actionFeedback: [...leakHistory.actionFeedback, ...snapshotHistory.actionFeedback].slice(0, 30),
   }
+  const clusterPatterns = userPatterns
+    .filter((item) => isRelatedLeakType(leak.title, item.leakType))
+    .slice(0, 8)
+  const clusterWorkedExamples = clusterPatterns
+    .flatMap((item) => (Array.isArray(item.whatWorked) ? (item.whatWorked as string[]) : []))
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 10)
+  const clusterFailedExamples = clusterPatterns
+    .flatMap((item) =>
+      Array.isArray(item.triedSolutions)
+        ? (item.triedSolutions as Array<Record<string, unknown>>)
+            .filter((solution) => solution?.result === 'not_worked')
+            .map((solution) => String(solution.text || '').trim())
+            .filter(Boolean)
+        : [],
+    )
+    .slice(0, 10)
 
   const feedbackSummary =
     mergedHistory.actionFeedback.length > 0
@@ -499,6 +552,15 @@ export async function generateLeakPlans(input: LeakPlanInput): Promise<{
     leak.contextSnapshot ? `Контекст: ${JSON.stringify(leak.contextSnapshot)}` : null,
     whatWorked.length > 0 ? `Что уже срабатывало: ${whatWorked.join('; ')}` : null,
     triedSolutions.length > 0 ? `Что уже пробовали: ${triedSolutions.join('; ')}` : null,
+    clusterPatterns.length > 0
+      ? `Похожие кластеры ликов: ${clusterPatterns.map((item) => item.leakType).join('; ')}`
+      : null,
+    clusterWorkedExamples.length > 0
+      ? `По похожим кластерам сработало: ${clusterWorkedExamples.join('; ')}`
+      : null,
+    clusterFailedExamples.length > 0
+      ? `По похожим кластерам не сработало: ${clusterFailedExamples.join('; ')}`
+      : null,
     entitySummary ? `Что уже создавали из этого leak: ${entitySummary}` : null,
     feedbackSummary ? `Фидбек по действиям: ${feedbackSummary}` : null,
     successfulAntiExamples.length > 0

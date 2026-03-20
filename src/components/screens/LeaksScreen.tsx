@@ -87,6 +87,13 @@ interface LeakPattern {
   leakType: string
   analysisCount: number
   whatWorked: string[]
+  clusterKey?: string
+  clusterLabel?: string
+  clusterSize?: number
+  clusterWorkedCount?: number
+  clusterPartialCount?: number
+  clusterFailedCount?: number
+  clusterLeakTypes?: string[]
   linkType?: 'exact' | 'fuzzy' | 'none'
   triedSolutions?: Array<{
     text: string
@@ -121,6 +128,27 @@ interface LeakPattern {
     status: string
     updatedAt: string
     matchType?: 'exact' | 'fuzzy'
+  }>
+}
+
+interface NextBestActionHint {
+  type: 'generate' | 'create_entity' | 'give_feedback' | 'retry' | 'switch_mode' | 'regenerate_context'
+  reason: string
+  actionId?: string | null
+  targetMode?: LeakSolutionPlan['mode'] | null
+  confidence: 'low' | 'medium' | 'high'
+}
+
+interface ContextDriftHint {
+  isStale: boolean
+  score: number
+  generatedAt: string | null
+  checkedAt: string
+  changedMetrics: Array<{
+    key: string
+    before: number
+    now: number
+    deltaPct: number
   }>
 }
 
@@ -277,6 +305,10 @@ function buildLeakMessage(leak: LeakEntity) {
 
 function normalizeLookupValue(value: string | null | undefined) {
   return String(value || '').trim().toLowerCase()
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
 }
 
 function normalizeLeak(rawLeak: LeakEntity): LeakEntity {
@@ -901,6 +933,18 @@ function normalizePattern(rawPattern: unknown): LeakPattern | null {
       typeof pattern.failedCount === 'number'
         ? pattern.failedCount
         : triedSolutions.filter((item) => item.result === 'not_worked').length,
+    clusterKey: typeof pattern.clusterKey === 'string' ? pattern.clusterKey : undefined,
+    clusterLabel: typeof pattern.clusterLabel === 'string' ? pattern.clusterLabel : undefined,
+    clusterSize: typeof pattern.clusterSize === 'number' ? pattern.clusterSize : undefined,
+    clusterWorkedCount:
+      typeof pattern.clusterWorkedCount === 'number' ? pattern.clusterWorkedCount : undefined,
+    clusterPartialCount:
+      typeof pattern.clusterPartialCount === 'number' ? pattern.clusterPartialCount : undefined,
+    clusterFailedCount:
+      typeof pattern.clusterFailedCount === 'number' ? pattern.clusterFailedCount : undefined,
+    clusterLeakTypes: Array.isArray(pattern.clusterLeakTypes)
+      ? pattern.clusterLeakTypes.filter((item): item is string => typeof item === 'string').slice(0, 8)
+      : undefined,
     workedExamples,
     updatedAt: typeof pattern.updatedAt === 'string' ? pattern.updatedAt : new Date().toISOString(),
     activeLeakCount: typeof pattern.activeLeakCount === 'number' ? pattern.activeLeakCount : undefined,
@@ -1311,6 +1355,135 @@ function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null
   return hypotheses.slice(0, 3)
 }
 
+function normalizeNextBestAction(value: unknown): NextBestActionHint | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as Record<string, unknown>
+  const type = candidate.type
+  if (
+    type !== 'generate' &&
+    type !== 'create_entity' &&
+    type !== 'give_feedback' &&
+    type !== 'retry' &&
+    type !== 'switch_mode' &&
+    type !== 'regenerate_context'
+  ) {
+    return null
+  }
+  if (typeof candidate.reason !== 'string' || !candidate.reason.trim()) return null
+  const confidence =
+    candidate.confidence === 'low' || candidate.confidence === 'medium' || candidate.confidence === 'high'
+      ? candidate.confidence
+      : 'medium'
+  const targetMode =
+    candidate.targetMode === 'minimum' || candidate.targetMode === 'base' || candidate.targetMode === 'maximum'
+      ? candidate.targetMode
+      : null
+  return {
+    type,
+    reason: candidate.reason.trim(),
+    confidence,
+    actionId: typeof candidate.actionId === 'string' ? candidate.actionId : null,
+    targetMode,
+  }
+}
+
+function normalizeContextDrift(value: unknown): ContextDriftHint | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as Record<string, unknown>
+  if (typeof candidate.isStale !== 'boolean' || typeof candidate.score !== 'number') return null
+  const changedMetrics = Array.isArray(candidate.changedMetrics)
+    ? candidate.changedMetrics
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null
+          const metric = item as Record<string, unknown>
+          if (
+            typeof metric.key !== 'string' ||
+            typeof metric.before !== 'number' ||
+            typeof metric.now !== 'number' ||
+            typeof metric.deltaPct !== 'number'
+          ) {
+            return null
+          }
+          return {
+            key: metric.key,
+            before: metric.before,
+            now: metric.now,
+            deltaPct: metric.deltaPct,
+          }
+        })
+        .filter((item): item is ContextDriftHint['changedMetrics'][number] => Boolean(item))
+    : []
+  return {
+    isStale: candidate.isStale,
+    score: Math.round(candidate.score),
+    generatedAt: typeof candidate.generatedAt === 'string' ? candidate.generatedAt : null,
+    checkedAt: typeof candidate.checkedAt === 'string' ? candidate.checkedAt : new Date().toISOString(),
+    changedMetrics,
+  }
+}
+
+function getExecutionScore(
+  guidance: ReturnType<typeof buildLeakGuidance>,
+  feedbackRows: ReturnType<typeof getLeakFeedbackByAction>,
+  drift: ContextDriftHint | null,
+) {
+  const total = Math.max(guidance.totalActions, 1)
+  const createdShare = guidance.createdActions / total
+  const feedbackShare = guidance.feedbackActions / total
+  const workedShare = guidance.feedbackActions > 0 ? guidance.workedActions / guidance.feedbackActions : 0
+  const attemptsAvg =
+    feedbackRows.length > 0
+      ? feedbackRows.reduce((sum, row) => sum + row.attempts, 0) / feedbackRows.length
+      : 1
+
+  let score = 0
+  score += createdShare * 40
+  score += feedbackShare * 25
+  score += workedShare * 25
+  score += clamp(12 - Math.max(0, attemptsAvg - 1) * 6, 0, 10)
+  score -= drift?.isStale ? Math.min(15, Math.round((drift.score || 0) / 6)) : 0
+  const value = clamp(Math.round(score), 0, 100)
+  return {
+    value,
+    tone:
+      value >= 70
+        ? 'good'
+        : value >= 40
+          ? 'mid'
+          : 'low',
+  }
+}
+
+function getAdaptiveModeSuggestion(
+  selectedMode: LeakSolutionPlan['mode'] | null,
+  feedbackRows: ReturnType<typeof getLeakFeedbackByAction>,
+) {
+  if (!selectedMode) return null
+  const recent = feedbackRows.slice(0, 4)
+  if (recent.length < 3) return null
+  const failed = recent.filter((item) => item.result === 'not_worked').length
+  const worked = recent.filter((item) => item.result === 'worked').length
+  if (failed >= 2 && selectedMode !== 'minimum') {
+    return {
+      targetMode: 'minimum' as LeakSolutionPlan['mode'],
+      reason: 'Слишком много свежих неудач, лучше временно упростить режим.',
+    }
+  }
+  if (worked >= 3 && selectedMode === 'minimum') {
+    return {
+      targetMode: 'base' as LeakSolutionPlan['mode'],
+      reason: 'Стабильные успехи в последних шагах, можно расширить режим.',
+    }
+  }
+  if (worked >= 3 && selectedMode === 'base') {
+    return {
+      targetMode: 'maximum' as LeakSolutionPlan['mode'],
+      reason: 'Шаги устойчиво работают, есть запас для усиления плана.',
+    }
+  }
+  return null
+}
+
 export function LeaksScreen() {
   const { user, setScreen } = useAppStore()
   const [loading, setLoading] = useState(true)
@@ -1351,6 +1524,8 @@ export function LeaksScreen() {
   const [savingPatternLeakType, setSavingPatternLeakType] = useState<string | null>(null)
   const [retryingLeakId, setRetryingLeakId] = useState<string | null>(null)
   const [focusedPlanActionId, setFocusedPlanActionId] = useState<string | null>(null)
+  const [nextBestActionByLeak, setNextBestActionByLeak] = useState<Record<string, NextBestActionHint | null>>({})
+  const [contextDriftByLeak, setContextDriftByLeak] = useState<Record<string, ContextDriftHint | null>>({})
   const [feedbackHistoryFilterByLeak, setFeedbackHistoryFilterByLeak] = useState<
     Record<string, FeedbackHistoryFilter>
   >({})
@@ -1410,6 +1585,8 @@ export function LeaksScreen() {
       const patternsData = await patternsRes.json()
 
       setLeaks(Array.isArray(leaksData.leaks) ? leaksData.leaks.map(normalizeLeak) : [])
+      setNextBestActionByLeak({})
+      setContextDriftByLeak({})
       setSignals(Array.isArray(signalsData.leakHints) ? signalsData.leakHints : [])
       setPatterns(
         Array.isArray(patternsData.patterns)
@@ -1827,6 +2004,14 @@ export function LeaksScreen() {
         ...current,
         [leakId]: normalizePlans(data.plans || []),
       }))
+      setNextBestActionByLeak((current) => ({
+        ...current,
+        [leakId]: normalizeNextBestAction(data.nextBestAction),
+      }))
+      setContextDriftByLeak((current) => ({
+        ...current,
+        [leakId]: normalizeContextDrift(data.contextDrift),
+      }))
     } catch (error) {
       showErrorToast(error, 'load leak plans')
     } finally {
@@ -1871,6 +2056,14 @@ export function LeaksScreen() {
         ...current,
         [leakId]: normalizePlans(data.plans || []),
       }))
+      setNextBestActionByLeak((current) => ({
+        ...current,
+        [leakId]: normalizeNextBestAction(data.nextBestAction),
+      }))
+      setContextDriftByLeak((current) => ({
+        ...current,
+        [leakId]: normalizeContextDrift(data.contextDrift),
+      }))
       if (!options?.silent) {
         showSuccessToast(regenerate ? 'Планы пересобраны' : 'Планы для лика готовы')
       }
@@ -1903,6 +2096,14 @@ export function LeaksScreen() {
       setPlansByLeak((current) => ({
         ...current,
         [leakId]: normalizePlans(data.plans || []),
+      }))
+      setNextBestActionByLeak((current) => ({
+        ...current,
+        [leakId]: normalizeNextBestAction(data.nextBestAction),
+      }))
+      setContextDriftByLeak((current) => ({
+        ...current,
+        [leakId]: normalizeContextDrift(data.contextDrift),
       }))
       setLeaks((current) =>
         current.map((leak) => {
@@ -2923,6 +3124,13 @@ export function LeaksScreen() {
               const retryFocus = getRetryFocus(leak.contextSnapshot)
               const selectedModeFromSnapshot = getSnapshotMode(leak.contextSnapshot, 'selectedPlanMode')
               const lastStableMode = getSnapshotMode(leak.contextSnapshot, 'lastStableMode')
+              const nextBestActionHint = nextBestActionByLeak[leak.id] || null
+              const contextDriftHint = contextDriftByLeak[leak.id] || null
+              const executionScore = getExecutionScore(guidance, feedbackByAction, contextDriftHint)
+              const adaptiveModeSuggestion = getAdaptiveModeSuggestion(
+                selectedPlan?.mode || null,
+                feedbackByAction,
+              )
               const matchedPattern = getBestPatternForLeak(patterns, leak)
               const matchedPatternLinkType = matchedPattern ? getPatternLinkTypeForLeak(matchedPattern, leak) : 'none'
               const groupKey = getLeakGroupKey(leak, groupBy)
@@ -3161,6 +3369,17 @@ export function LeaksScreen() {
                             <Badge className={PLAN_MODE_STYLES[guidance.selectedPlan.mode]}>
                               {PLAN_MODE_LABELS[guidance.selectedPlan.mode]}
                             </Badge>
+                            <Badge
+                              className={
+                                executionScore.tone === 'good'
+                                  ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
+                                  : executionScore.tone === 'mid'
+                                    ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                                    : 'bg-rose-500/10 text-rose-200 border-rose-500/20'
+                              }
+                            >
+                              Execution score: {executionScore.value}
+                            </Badge>
                             <Badge className="bg-white/10 text-white/75 border-white/10">
                               Создано {guidance.createdActions}/{guidance.totalActions}
                             </Badge>
@@ -3236,7 +3455,101 @@ export function LeaksScreen() {
                               ? ' Режим можно упростить до minimum.'
                               : recentFeedbackTrend.isStable
                                 ? ' Динамика стабильная: можно аккуратно усиливать режим.'
-                                : ' Динамика пока смешанная.'}
+                              : ' Динамика пока смешанная.'}
+                          </div>
+                        )}
+                        {contextDriftHint && (
+                          <div
+                            className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
+                              contextDriftHint.isStale
+                                ? 'border-rose-500/25 bg-rose-500/10 text-rose-100'
+                                : 'border-white/10 bg-black/10 text-white/70'
+                            }`}
+                          >
+                            Drift контекста: {contextDriftHint.score}%.
+                            {contextDriftHint.generatedAt
+                              ? ` База: ${formatDate(contextDriftHint.generatedAt)}.`
+                              : ' База генерации ещё не зафиксирована.'}
+                            {contextDriftHint.changedMetrics.length > 0 && (
+                              <div className="mt-1 text-[11px] text-white/60">
+                                Изменилось: {contextDriftHint.changedMetrics.map((item) => `${item.key} (${item.deltaPct > 0 ? '+' : ''}${item.deltaPct}%)`).join(', ')}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {nextBestActionHint && (
+                          <div className="mt-3 rounded-xl border border-indigo-500/20 bg-indigo-500/10 px-3 py-2">
+                            <div className="text-xs uppercase tracking-wide text-indigo-200/80">
+                              Next Best Action ({nextBestActionHint.confidence})
+                            </div>
+                            <div className="mt-1 text-sm text-indigo-100">{nextBestActionHint.reason}</div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {nextBestActionHint.type === 'switch_mode' && nextBestActionHint.targetMode && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => selectPlanMode(leak.id, nextBestActionHint.targetMode)}
+                                  disabled={selectingPlanLeakId === leak.id}
+                                  className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
+                                >
+                                  {selectingPlanLeakId === leak.id
+                                    ? 'Переключаю...'
+                                    : `Переключить: ${PLAN_MODE_LABELS[nextBestActionHint.targetMode]}`}
+                                </Button>
+                              )}
+                              {nextBestActionHint.type === 'create_entity' && nextBestActionHint.actionId && selectedPlan && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    const action = selectedPlan.actions.find((item) => item.id === nextBestActionHint.actionId)
+                                    if (action) {
+                                      applySinglePlanAction(leak, selectedPlan.mode, action)
+                                    }
+                                  }}
+                                  className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
+                                >
+                                  Создать рекомендуемый шаг
+                                </Button>
+                              )}
+                              {nextBestActionHint.type === 'give_feedback' && nextBestActionHint.actionId && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => focusPlanAction(leak.id, nextBestActionHint.actionId)}
+                                  className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
+                                >
+                                  Перейти к feedback
+                                </Button>
+                              )}
+                              {nextBestActionHint.type === 'retry' && nextBestActionHint.actionId && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    retryLeakPlanning(leak, {
+                                      action: planActionsById.get(nextBestActionHint.actionId || '') || null,
+                                      failureReason: null,
+                                    })
+                                  }
+                                  disabled={retryingLeakId === leak.id}
+                                  className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
+                                >
+                                  {retryingLeakId === leak.id ? 'Обновляю...' : 'Retry по рекомендации'}
+                                </Button>
+                              )}
+                              {(nextBestActionHint.type === 'generate' || nextBestActionHint.type === 'regenerate_context') && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => generatePlansForLeak(leak.id, true)}
+                                  disabled={generatingPlansLeakId === leak.id}
+                                  className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
+                                >
+                                  {generatingPlansLeakId === leak.id ? 'Собираю...' : 'Пересобрать планы'}
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         )}
                         {guidance.action && (
@@ -3258,6 +3571,26 @@ export function LeaksScreen() {
                             </Button>
                           </div>
                         )}
+                        {adaptiveModeSuggestion &&
+                          selectedPlan &&
+                          adaptiveModeSuggestion.targetMode !== selectedPlan.mode && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => selectPlanMode(leak.id, adaptiveModeSuggestion.targetMode)}
+                                disabled={selectingPlanLeakId === leak.id}
+                                className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
+                              >
+                                {selectingPlanLeakId === leak.id
+                                  ? 'Переключаю...'
+                                  : `Adaptive: ${PLAN_MODE_LABELS[adaptiveModeSuggestion.targetMode]}`}
+                              </Button>
+                              <div className="text-xs text-white/60 self-center">
+                                {adaptiveModeSuggestion.reason}
+                              </div>
+                            </div>
+                          )}
                         {recentFeedbackTrend?.isRisky && selectedPlan?.mode !== 'minimum' && (
                           <div className="mt-3 flex flex-wrap gap-2">
                             <Button
@@ -4660,6 +4993,21 @@ export function LeaksScreen() {
                             Активных leaks: {pattern.activeLeakCount}
                           </Badge>
                         )}
+                        {typeof pattern.clusterSize === 'number' && pattern.clusterSize > 1 && (
+                          <Badge className="bg-fuchsia-500/10 text-fuchsia-200 border-fuchsia-500/20">
+                            Кластер: {pattern.clusterSize}
+                          </Badge>
+                        )}
+                        {typeof pattern.clusterWorkedCount === 'number' && pattern.clusterWorkedCount > 0 && (
+                          <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
+                            Кластер worked: {pattern.clusterWorkedCount}
+                          </Badge>
+                        )}
+                        {typeof pattern.clusterFailedCount === 'number' && pattern.clusterFailedCount > 0 && (
+                          <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
+                            Кластер failed: {pattern.clusterFailedCount}
+                          </Badge>
+                        )}
                         {exactLinkedCount > 0 && (
                           <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
                             Exact: {exactLinkedCount}
@@ -4683,6 +5031,23 @@ export function LeaksScreen() {
                           {savingPatternLeakType === pattern.leakType ? 'Сохраняю...' : 'В leak'}
                         </Button>
                       </div>
+                      {pattern.clusterLeakTypes && pattern.clusterLeakTypes.length > 1 && (
+                        <div className="rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/10 px-3 py-2">
+                          <div className="text-xs uppercase tracking-wide text-fuchsia-100/80">
+                            Learning cluster
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-2">
+                            {pattern.clusterLeakTypes.slice(0, 6).map((item) => (
+                              <Badge
+                                key={`${pattern.leakType}-cluster-${item}`}
+                                className="bg-white/10 text-white/80 border-white/10"
+                              >
+                                {item}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       {activeLinkedLeaks.length > 0 && (
                         <div className="space-y-2">
