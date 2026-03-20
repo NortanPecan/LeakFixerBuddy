@@ -249,7 +249,25 @@ interface LeakPolicyHint {
       recentPartialCount: number
       recentFailedCount: number
       topFailureReasons: Array<{ text: string; count: number }>
-      repeatedActions: Array<{ actionTitle: string; attempt: number }>
+      failureBuckets: {
+        time: number
+        energy: number
+        context: number
+        complexity: number
+        unknown: number
+      }
+      dominantFailureBucket: 'time' | 'energy' | 'context' | 'complexity' | 'unknown'
+      repeatedActions: Array<{ actionId: string; actionTitle: string; attempt: number }>
+      unstableActions: Array<{
+        actionId: string
+        actionTitle: string
+        attempts: number
+        failures: number
+        partials: number
+        worked: number
+        lastResult: 'worked' | 'partially' | 'not_worked' | 'unknown'
+        lastUpdatedAt: string | null
+      }>
     }
   }
 }
@@ -1899,15 +1917,93 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
                               })
                               .filter((item): item is { text: string; count: number } => Boolean(item))
                           : [],
+                        failureBuckets:
+                          signals.failureBuckets &&
+                          typeof signals.failureBuckets === 'object' &&
+                          !Array.isArray(signals.failureBuckets)
+                            ? (() => {
+                                const buckets = signals.failureBuckets as Record<string, unknown>
+                                return {
+                                  time: typeof buckets.time === 'number' ? Math.round(buckets.time) : 0,
+                                  energy: typeof buckets.energy === 'number' ? Math.round(buckets.energy) : 0,
+                                  context: typeof buckets.context === 'number' ? Math.round(buckets.context) : 0,
+                                  complexity:
+                                    typeof buckets.complexity === 'number' ? Math.round(buckets.complexity) : 0,
+                                  unknown: typeof buckets.unknown === 'number' ? Math.round(buckets.unknown) : 0,
+                                }
+                              })()
+                            : { time: 0, energy: 0, context: 0, complexity: 0, unknown: 0 },
+                        dominantFailureBucket:
+                          signals.dominantFailureBucket === 'time' ||
+                          signals.dominantFailureBucket === 'energy' ||
+                          signals.dominantFailureBucket === 'context' ||
+                          signals.dominantFailureBucket === 'complexity' ||
+                          signals.dominantFailureBucket === 'unknown'
+                            ? signals.dominantFailureBucket
+                            : 'unknown',
                         repeatedActions: Array.isArray(signals.repeatedActions)
                           ? signals.repeatedActions
                               .map((item) => {
                                 if (!item || typeof item !== 'object') return null
                                 const row = item as Record<string, unknown>
-                                if (typeof row.actionTitle !== 'string' || typeof row.attempt !== 'number') return null
-                                return { actionTitle: row.actionTitle, attempt: Math.round(row.attempt) }
+                                if (
+                                  typeof row.actionId !== 'string' ||
+                                  typeof row.actionTitle !== 'string' ||
+                                  typeof row.attempt !== 'number'
+                                ) {
+                                  return null
+                                }
+                                return {
+                                  actionId: row.actionId,
+                                  actionTitle: row.actionTitle,
+                                  attempt: Math.round(row.attempt),
+                                }
                               })
-                              .filter((item): item is { actionTitle: string; attempt: number } => Boolean(item))
+                              .filter((item): item is { actionId: string; actionTitle: string; attempt: number } => Boolean(item))
+                          : [],
+                        unstableActions: Array.isArray(signals.unstableActions)
+                          ? signals.unstableActions
+                              .map((item) => {
+                                if (!item || typeof item !== 'object') return null
+                                const row = item as Record<string, unknown>
+                                if (
+                                  typeof row.actionId !== 'string' ||
+                                  typeof row.actionTitle !== 'string' ||
+                                  typeof row.attempts !== 'number'
+                                ) {
+                                  return null
+                                }
+                                return {
+                                  actionId: row.actionId,
+                                  actionTitle: row.actionTitle,
+                                  attempts: Math.round(row.attempts),
+                                  failures: typeof row.failures === 'number' ? Math.round(row.failures) : 0,
+                                  partials: typeof row.partials === 'number' ? Math.round(row.partials) : 0,
+                                  worked: typeof row.worked === 'number' ? Math.round(row.worked) : 0,
+                                  lastResult:
+                                    row.lastResult === 'worked' ||
+                                    row.lastResult === 'partially' ||
+                                    row.lastResult === 'not_worked' ||
+                                    row.lastResult === 'unknown'
+                                      ? row.lastResult
+                                      : 'unknown',
+                                  lastUpdatedAt: typeof row.lastUpdatedAt === 'string' ? row.lastUpdatedAt : null,
+                                }
+                              })
+                              .filter(
+                                (
+                                  item,
+                                ): item is {
+                                  actionId: string
+                                  actionTitle: string
+                                  attempts: number
+                                  failures: number
+                                  partials: number
+                                  worked: number
+                                  lastResult: 'worked' | 'partially' | 'not_worked' | 'unknown'
+                                  lastUpdatedAt: string | null
+                                } => Boolean(item),
+                              )
                           : [],
                       }
                     })()
@@ -1918,7 +2014,10 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
                       recentPartialCount: 0,
                       recentFailedCount: 0,
                       topFailureReasons: [],
+                      failureBuckets: { time: 0, energy: 0, context: 0, complexity: 0, unknown: 0 },
+                      dominantFailureBucket: 'unknown',
                       repeatedActions: [],
+                      unstableActions: [],
                     },
               accepted: typeof summary.accepted === 'number' ? summary.accepted : 0,
               rejected: typeof summary.rejected === 'number' ? summary.rejected : 0,
@@ -3799,7 +3898,10 @@ export function LeaksScreen() {
                 recentPartialCount: 0,
                 recentFailedCount: 0,
                 topFailureReasons: [],
+                failureBuckets: { time: 0, energy: 0, context: 0, complexity: 0, unknown: 0 },
+                dominantFailureBucket: 'unknown' as const,
                 repeatedActions: [],
+                unstableActions: [],
               }
               const contextDriftHint = policy?.contextDrift || null
               const executionScore = policy?.executionScore || {
@@ -4731,15 +4833,68 @@ export function LeaksScreen() {
                                     ))}
                                   </div>
                                 )}
+                                <div className="flex flex-wrap gap-2">
+                                  <Badge className="bg-white/10 text-white/70 border-white/10">
+                                    Bucket: time {learningSignals.failureBuckets.time}
+                                  </Badge>
+                                  <Badge className="bg-white/10 text-white/70 border-white/10">
+                                    energy {learningSignals.failureBuckets.energy}
+                                  </Badge>
+                                  <Badge className="bg-white/10 text-white/70 border-white/10">
+                                    context {learningSignals.failureBuckets.context}
+                                  </Badge>
+                                  <Badge className="bg-white/10 text-white/70 border-white/10">
+                                    complexity {learningSignals.failureBuckets.complexity}
+                                  </Badge>
+                                  <Badge className="bg-white/10 text-white/70 border-white/10">
+                                    unknown {learningSignals.failureBuckets.unknown}
+                                  </Badge>
+                                  <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
+                                    Dominant: {learningSignals.dominantFailureBucket}
+                                  </Badge>
+                                </div>
                                 {learningSignals.repeatedActions.length > 0 && (
                                   <div className="flex flex-wrap gap-2">
                                     {learningSignals.repeatedActions.slice(0, 3).map((item) => (
                                       <Badge
-                                        key={`repeat-action-${item.actionTitle}`}
+                                        key={`repeat-action-${item.actionId}`}
                                         className="bg-white/10 text-white/70 border-white/10"
                                       >
                                         Retry: {item.actionTitle} ({item.attempt})
                                       </Badge>
+                                    ))}
+                                  </div>
+                                )}
+                                {learningSignals.unstableActions.length > 0 && (
+                                  <div className="space-y-1">
+                                    {learningSignals.unstableActions.slice(0, 3).map((item) => (
+                                      <div
+                                        key={`unstable-action-${item.actionId}`}
+                                        className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5"
+                                      >
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <Badge className="bg-white/10 text-white/70 border-white/10">
+                                            {item.actionTitle}
+                                          </Badge>
+                                          <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
+                                            Fail {item.failures}
+                                          </Badge>
+                                          <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
+                                            Partial {item.partials}
+                                          </Badge>
+                                          <Badge className="bg-white/10 text-white/70 border-white/10">
+                                            Attempts {item.attempts}
+                                          </Badge>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => focusPlanAction(leak.id, item.actionId)}
+                                            className="h-6 border-white/15 bg-white/5 hover:bg-white/10 px-2 text-[11px] text-white"
+                                          >
+                                            К шагу
+                                          </Button>
+                                        </div>
+                                      </div>
                                     ))}
                                   </div>
                                 )}
@@ -4758,6 +4913,41 @@ export function LeaksScreen() {
                                       className="border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/15 text-rose-200"
                                     >
                                       Обновить контекст
+                                    </Button>
+                                  )}
+                                  {learningSignals.dominantFailureBucket === 'complexity' &&
+                                    selectedPlan &&
+                                    selectedPlan.mode !== 'minimum' && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() =>
+                                          executePolicyAction(leak, {
+                                            actionType: 'switch_mode',
+                                            targetMode: 'minimum',
+                                            reason: 'dominant_complexity_failure',
+                                          })
+                                        }
+                                        disabled={policyActionBusy}
+                                        className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
+                                      >
+                                        Упростить режим
+                                      </Button>
+                                    )}
+                                  {learningSignals.dominantFailureBucket === 'context' && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() =>
+                                        executePolicyAction(leak, {
+                                          actionType: 'regenerate_context',
+                                          reason: 'dominant_context_failure',
+                                        })
+                                      }
+                                      disabled={policyActionBusy}
+                                      className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
+                                    >
+                                      Пересобрать с новым контекстом
                                     </Button>
                                   )}
                                   {learningSignals.repeatedActions.length > 0 &&

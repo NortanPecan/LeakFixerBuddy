@@ -251,8 +251,49 @@ function summarizeLearningSignals(snapshot: Record<string, unknown>) {
   const workedRecent = recent.filter((item) => item.result === 'worked')
 
   const reasonCounts: Record<string, number> = {}
+  const failureBuckets: Record<'time' | 'energy' | 'context' | 'complexity' | 'unknown', number> = {
+    time: 0,
+    energy: 0,
+    context: 0,
+    complexity: 0,
+    unknown: 0,
+  }
   failureRecent.forEach((item) => {
     const comment = typeof item.comment === 'string' ? item.comment.trim() : ''
+    const lowered = comment.toLowerCase()
+    if (
+      lowered.includes('время') ||
+      lowered.includes('не усп') ||
+      lowered.includes('time') ||
+      lowered.includes('busy')
+    ) {
+      failureBuckets.time += 1
+    } else if (
+      lowered.includes('энерг') ||
+      lowered.includes('сил') ||
+      lowered.includes('устал') ||
+      lowered.includes('energy') ||
+      lowered.includes('sleep')
+    ) {
+      failureBuckets.energy += 1
+    } else if (
+      lowered.includes('контекст') ||
+      lowered.includes('стресс') ||
+      lowered.includes('работ') ||
+      lowered.includes('family') ||
+      lowered.includes('context')
+    ) {
+      failureBuckets.context += 1
+    } else if (
+      lowered.includes('сложно') ||
+      lowered.includes('too hard') ||
+      lowered.includes('big') ||
+      lowered.includes('сложн')
+    ) {
+      failureBuckets.complexity += 1
+    } else {
+      failureBuckets.unknown += 1
+    }
     if (!comment) return
     const key = comment.length > 48 ? `${comment.slice(0, 48)}…` : comment
     reasonCounts[key] = (reasonCounts[key] || 0) + 1
@@ -262,7 +303,20 @@ function summarizeLearningSignals(snapshot: Record<string, unknown>) {
     .slice(0, 3)
     .map(([text, count]) => ({ text, count }))
 
-  const attemptByAction = new Map<string, { actionTitle: string; attempt: number }>()
+  const attemptByAction = new Map<string, { actionId: string; actionTitle: string; attempt: number }>()
+  const actionStats = new Map<
+    string,
+    {
+      actionId: string
+      actionTitle: string
+      attempts: number
+      failures: number
+      partials: number
+      worked: number
+      lastResult: 'worked' | 'partially' | 'not_worked' | 'unknown'
+      lastUpdatedAt: string | null
+    }
+  >()
   actionFeedback.forEach((item) => {
     const actionId = typeof item.actionId === 'string' ? item.actionId : null
     const actionTitle =
@@ -271,12 +325,40 @@ function summarizeLearningSignals(snapshot: Record<string, unknown>) {
     if (!actionId) return
     const prev = attemptByAction.get(actionId)
     if (!prev || attempt > prev.attempt) {
-      attemptByAction.set(actionId, { actionTitle, attempt })
+      attemptByAction.set(actionId, { actionId, actionTitle, attempt })
     }
+    const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : null
+    const result =
+      item.result === 'worked' || item.result === 'partially' || item.result === 'not_worked'
+        ? (item.result as 'worked' | 'partially' | 'not_worked')
+        : 'unknown'
+    const stats = actionStats.get(actionId) || {
+      actionId,
+      actionTitle,
+      attempts: 0,
+      failures: 0,
+      partials: 0,
+      worked: 0,
+      lastResult: 'unknown' as const,
+      lastUpdatedAt: null as string | null,
+    }
+    stats.attempts += 1
+    if (result === 'not_worked') stats.failures += 1
+    if (result === 'partially') stats.partials += 1
+    if (result === 'worked') stats.worked += 1
+    if (updatedAt && (!stats.lastUpdatedAt || new Date(updatedAt).getTime() > new Date(stats.lastUpdatedAt).getTime())) {
+      stats.lastUpdatedAt = updatedAt
+      stats.lastResult = result
+    }
+    actionStats.set(actionId, stats)
   })
   const repeatedActions = Array.from(attemptByAction.values())
     .filter((item) => item.attempt >= 2)
     .sort((a, b) => b.attempt - a.attempt)
+    .slice(0, 5)
+  const unstableActions = Array.from(actionStats.values())
+    .filter((item) => item.failures >= 2 || (item.failures >= 1 && item.partials >= 1))
+    .sort((a, b) => b.failures - a.failures || b.partials - a.partials || b.attempts - a.attempts)
     .slice(0, 5)
 
   const totalRecent = Math.max(recent.length, 1)
@@ -291,6 +373,7 @@ function summarizeLearningSignals(snapshot: Record<string, unknown>) {
       Math.round(workedShare * 70 + (1 - failureShare) * 25 + (1 - partialShare) * 5 - repeatPenalty),
     ),
   )
+  const dominantFailureBucket = Object.entries(failureBuckets).sort((a, b) => b[1] - a[1])[0]?.[0] || 'unknown'
 
   return {
     loopHealth: health,
@@ -299,7 +382,10 @@ function summarizeLearningSignals(snapshot: Record<string, unknown>) {
     recentPartialCount: partialRecent.length,
     recentFailedCount: failureRecent.length,
     topFailureReasons,
+    failureBuckets,
+    dominantFailureBucket,
     repeatedActions,
+    unstableActions,
   }
 }
 
