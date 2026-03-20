@@ -1782,6 +1782,37 @@ export function LeaksScreen() {
     }
   }
 
+  const syncLeakTitleWithPattern = async (leak: LeakEntity, pattern: LeakPattern) => {
+    if (!user?.id || updatingLeakId) return
+    const nextTitle = pattern.leakType.trim()
+    if (!nextTitle || normalizeLookupValue(nextTitle) === normalizeLookupValue(leak.title)) return
+
+    setUpdatingLeakId(leak.id)
+    try {
+      const response = await fetch('/api/leaks', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          id: leak.id,
+          title: nextTitle,
+          description: leak.description || null,
+        }),
+      })
+
+      if (!response.ok) throw response
+
+      const data = await response.json()
+      const updatedLeak = normalizeLeak(data.leak as LeakEntity)
+      setLeaks((current) => current.map((item) => (item.id === leak.id ? updatedLeak : item)))
+      showSuccessToast('Название leak синхронизировано с паттерном')
+    } catch (error) {
+      showErrorToast(error, 'sync leak title with pattern')
+    } finally {
+      setUpdatingLeakId(null)
+    }
+  }
+
   const focusPlanAction = (leakId: string, actionId: string) => {
     setExpandedLeakId(leakId)
     setFocusedPlanActionId(actionId)
@@ -3243,6 +3274,23 @@ export function LeaksScreen() {
                                   : 'Тип связи не определён автоматически.'}
                             </div>
                           )}
+                          {matchedPattern &&
+                            matchedPatternLinkType === 'fuzzy' &&
+                            normalizeLookupValue(matchedPattern.leakType) !== normalizeLookupValue(leak.title) && (
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => syncLeakTitleWithPattern(leak, matchedPattern)}
+                                  disabled={updatingLeakId === leak.id}
+                                  className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
+                                >
+                                  {updatingLeakId === leak.id
+                                    ? 'Синхронизирую...'
+                                    : 'Синхронизировать название с паттерном'}
+                                </Button>
+                              </div>
+                            )}
                           {matchedPattern?.workedExamples && matchedPattern.workedExamples.length > 0 ? (
                             <div className="space-y-2">
                               {matchedPattern.workedExamples.map((item) => (
