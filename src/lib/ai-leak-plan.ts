@@ -411,7 +411,7 @@ export async function generateLeakPlans(input: LeakPlanInput): Promise<{
   plans: LeakPlanDraft[]
   provider: 'groq' | 'gemini' | 'fallback'
 }> {
-  const { userId, leak } = input
+  const { userId, leak, retryFocus } = input
 
   const [existingPattern, leakHistory] = await Promise.all([
     db.userAiPattern.findUnique({
@@ -460,7 +460,19 @@ export async function generateLeakPlans(input: LeakPlanInput): Promise<{
           .join('; ')
       : null
 
+  const retryFocusLine =
+    retryFocus && retryFocus.actionTitle.trim().length > 0
+      ? [
+          `Retry focus: ${retryFocus.actionTitle.trim()}`,
+          retryFocus.actionKind ? `kind=${retryFocus.actionKind}` : null,
+          retryFocus.failureReason ? `reason=${retryFocus.failureReason}` : null,
+        ]
+          .filter(Boolean)
+          .join(' | ')
+      : null
+
   const userMessage = [
+    retryFocusLine,
     `Лик: ${leak.title}`,
     leak.description ? `Описание: ${leak.description}` : null,
     `Severity: ${leak.severity}`,

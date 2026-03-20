@@ -654,6 +654,22 @@ function getContextSnapshotItems(contextSnapshot?: Record<string, unknown> | nul
   return lines
 }
 
+function getRetryFocus(contextSnapshot?: Record<string, unknown> | null) {
+  if (!contextSnapshot) return null
+  const retry =
+    contextSnapshot.retry && typeof contextSnapshot.retry === 'object' && !Array.isArray(contextSnapshot.retry)
+      ? (contextSnapshot.retry as Record<string, unknown>)
+      : null
+  if (!retry) return null
+
+  return {
+    actionTitle: typeof retry.actionTitle === 'string' ? retry.actionTitle : null,
+    actionKind: typeof retry.actionKind === 'string' ? retry.actionKind : null,
+    failureReason: typeof retry.failureReason === 'string' ? retry.failureReason : null,
+    requestedAt: typeof retry.requestedAt === 'string' ? retry.requestedAt : null,
+  }
+}
+
 function getLeakActionMetadata(action: LeakActionLink) {
   if (!action.metadata || typeof action.metadata !== 'object' || Array.isArray(action.metadata)) {
     return null
@@ -2388,6 +2404,7 @@ export function LeaksScreen() {
               const planActionsById = getPlanActionById(leakPlans)
               const feedbackTimeline = getLeakFeedbackTimeline(leak, leakPlans)
               const contextHypotheses = buildContextHypotheses(leak.contextSnapshot)
+              const retryFocus = getRetryFocus(leak.contextSnapshot)
               const matchedPattern = patterns.find(
                 (pattern) => normalizeLookupValue(pattern.leakType) === normalizeLookupValue(leak.title),
               )
@@ -2548,6 +2565,24 @@ export function LeaksScreen() {
                         </div>
                         <div className="mt-1 text-sm font-medium text-white">{guidance.title}</div>
                         <p className="mt-1 text-sm text-white/70">{guidance.description}</p>
+                        {retryFocus?.actionTitle && (
+                          <div className="mt-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+                            <div className="text-xs text-amber-200">
+                              Retry-фокус: {retryFocus.actionTitle}
+                              {retryFocus.actionKind ? ` (${PLAN_KIND_LABELS[retryFocus.actionKind as LeakPlanAction['kind']] || retryFocus.actionKind})` : ''}
+                            </div>
+                            {retryFocus.failureReason && (
+                              <div className="mt-1 text-xs text-amber-100/85">
+                                Причина прошлого сбоя: {retryFocus.failureReason}
+                              </div>
+                            )}
+                            {retryFocus.requestedAt && (
+                              <div className="mt-1 text-[11px] text-amber-100/70">
+                                Последний retry: {formatDate(retryFocus.requestedAt)}
+                              </div>
+                            )}
+                          </div>
+                        )}
                         {guidance.selectedPlan && (
                           <div className="mt-3 flex flex-wrap gap-2">
                             <Badge className={PLAN_MODE_STYLES[guidance.selectedPlan.mode]}>
