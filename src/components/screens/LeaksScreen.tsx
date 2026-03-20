@@ -1053,13 +1053,19 @@ function getRecentFeedbackTrend(contextSnapshot?: Record<string, unknown> | null
     typeof metrics.recentFeedbackNegativeShare === 'number'
       ? metrics.recentFeedbackNegativeShare
       : null
+  const workedShare =
+    typeof metrics.recentFeedbackWorkedShare === 'number'
+      ? metrics.recentFeedbackWorkedShare
+      : null
 
   if (windowSize === null || windowSize <= 0 || negativeShare === null) return null
 
   return {
     windowSize,
     negativeShare,
+    workedShare,
     isRisky: windowSize >= 3 && negativeShare >= 67,
+    isStable: windowSize >= 3 && workedShare !== null && workedShare >= 67 && negativeShare <= 33,
   }
 }
 
@@ -2978,7 +2984,9 @@ export function LeaksScreen() {
                             {recentFeedbackTrend.negativeShare}%.
                             {recentFeedbackTrend.isRisky
                               ? ' Режим можно упростить до minimum.'
-                              : ' Динамика пока стабильная.'}
+                              : recentFeedbackTrend.isStable
+                                ? ' Динамика стабильная: можно аккуратно усиливать режим.'
+                                : ' Динамика пока смешанная.'}
                           </div>
                         )}
                         {guidance.action && (
@@ -3010,6 +3018,19 @@ export function LeaksScreen() {
                               className="border-amber-500/25 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
                             >
                               {selectingPlanLeakId === leak.id ? 'Переключаю...' : 'Переключить на минимум'}
+                            </Button>
+                          </div>
+                        )}
+                        {recentFeedbackTrend?.isStable && selectedPlan?.mode === 'minimum' && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => selectPlanMode(leak.id, 'base')}
+                              disabled={selectingPlanLeakId === leak.id}
+                              className="border-emerald-500/25 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-200"
+                            >
+                              {selectingPlanLeakId === leak.id ? 'Переключаю...' : 'Переключить на базу'}
                             </Button>
                           </div>
                         )}
