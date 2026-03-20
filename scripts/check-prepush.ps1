@@ -95,9 +95,12 @@ if ($textFiles.Count -gt 0) {
 }
 
 if ($lintFiles.Count -gt 0) {
-  $eslintCmd = Join-Path $repoRoot 'node_modules\.bin\eslint.cmd'
+  $eslintCmd = Join-Path $repoRoot 'node_modules\.bin\eslint.exe'
   if (-not (Test-Path $eslintCmd)) {
-    throw "eslint.cmd not found at $eslintCmd"
+    $eslintCmd = Join-Path $repoRoot 'node_modules\.bin\eslint.cmd'
+  }
+  if (-not (Test-Path $eslintCmd)) {
+    throw "eslint binary not found in node_modules/.bin"
   }
 
   Write-Output "Running eslint on changed files..."
