@@ -76,6 +76,14 @@
 - дефолтный набор навигации обновлён, чтобы новый модуль не терялся;
 - для пользователей со старым дефолтным набором nav добавлена мягкая миграция persisted navigation;
 - `docs/CODEX_NEXT_CHAT.md` переведён на актуальный handoff по `Leaks`, а не по security.
+- В `LeaksScreen` улучшены пустые состояния inbox: отдельно для настоящего empty state и отдельно для ситуации, когда всё спрятали фильтры.
+- У карточки leak появился блок `Следующий шаг`: он показывает выбранный режим, прогресс по действиям и подсказывает лучший следующий ход.
+- Быстрые конвертации `в задачу / в ритуал / в AI-челлендж` убраны из верхнего ряда кнопок внутрь деталей leak, чтобы уменьшить визуальный шум.
+- Добавлен явный retry/reopen flow: по неудачному feedback можно пересобрать режим, а закрытый leak проще вернуть в работу.
+- Исправлена битая кодировка в user-facing навигации (`BottomNav`) и нескольких API-сообщениях.
+- Добавлен `npm run check:encoding`, и теперь `npm run lint` сначала валит сборку на типичных mojibake-последовательностях битой кириллицы и сломанных emoji.
+- Добавлен git hook `.githooks/pre-commit`, который гоняет `scripts/check-encoding-staged.ps1` перед коммитом.
+- Добавлен git hook `.githooks/pre-push`, который гоняет `scripts/check-prepush.ps1`: encoding + `eslint` только по файлам, которые реально уходят в push.
 
 ---
 
@@ -241,9 +249,23 @@
    - улучшать explanation вокруг confidence / why this plan
 
 4. Потом уже идти в более глубокие продуктовые шаги
-   - richer leak details
-   - better AI explanations
-   - deeper context from other modules
+  - richer leak details
+  - better AI explanations
+  - deeper context from other modules
+
+### Точка остановки на сейчас
+
+- discoverability и кодировка user-facing навигации уже поправлены;
+- `LeaksScreen` стал понятнее в моменте:
+  - есть directed empty states;
+  - есть блок `Следующий шаг`;
+  - есть retry / reopen flow;
+  - быстрые конвертации перенесены внутрь деталей leak;
+- следующий лучший продуктовый шаг:
+  - добить execution loop до совсем ясного состояния;
+  - показать связь `leak -> выбранный режим -> созданные сущности -> feedback` ещё нагляднее;
+  - добавить более явный reopen / retry UX именно на уровне action history и created entities;
+  - потом углублять learning layer и context snapshot.
 
 ---
 
@@ -343,6 +365,9 @@
 Обычная локальная проверка на текущем этапе:
 
 - точечный `eslint` по изменённым файлам
+- перед завершением UI-правок не пропускать `npm run check:encoding`
+- если hook перестал срабатывать, проверить `git config core.hooksPath .githooks`
+- перед пушем можно вручную повторить то же поведение через `npm run check:prepush`
 
 Не надо без причины гонять весь проектный lint, если задача локальная.
 

@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { calculateChallengeProgress } from '@/lib/challenge-utils'
-
+import { requireAuthenticatedUser, requireSelf } from '@/lib/server-auth'
 
 // GET /api/challenges?userId=xxx or /api/challenges?id=xxx
 export async function GET(request: NextRequest) {
+  const auth = requireAuthenticatedUser(request)
+  if ('error' in auth) {
+    return auth.error
+  }
+
   const { searchParams } = new URL(request.url)
   const userId = searchParams.get('userId')
   const challengeId = searchParams.get('id')
@@ -18,46 +23,51 @@ export async function GET(request: NextRequest) {
         where: { id: challengeId },
         include: {
           direction: true,
-          progressDetails: true
-        }
+          progressDetails: true,
+        },
       })
 
       if (!challenge) {
         return NextResponse.json({ error: 'Challenge not found' }, { status: 404 })
       }
 
+      if (challenge.userId !== auth.session.userId) {
+        return NextResponse.json(
+          { error: 'Forbidden', hint: 'You can only access your own challenges' },
+          { status: 403 },
+        )
+      }
+
       const challengeWithProgress = await calculateChallengeProgress(challenge, challenge.userId)
-      
-      // Get linked entities from config
+
       let linkedRituals: unknown[] = []
       let linkedSkills: unknown[] = []
       let linkedTraits: unknown[] = []
-      
+
       try {
         const config = JSON.parse(challenge.config || '{}')
         if (config.linkedRitualIds?.length) {
           linkedRituals = await db.ritual.findMany({
             where: { id: { in: config.linkedRitualIds } },
-            select: { id: true, title: true, category: true }
+            select: { id: true, title: true, category: true },
           })
         }
         if (config.linkedSkillIds?.length) {
           linkedSkills = await db.skill.findMany({
             where: { id: { in: config.linkedSkillIds } },
-            select: { id: true, name: true, level: true }
+            select: { id: true, name: true, level: true },
           })
         }
         if (config.linkedTraitIds?.length) {
           linkedTraits = await db.trait.findMany({
             where: { id: { in: config.linkedTraitIds } },
-            select: { id: true, name: true, score: true }
+            select: { id: true, name: true, score: true },
           })
         }
       } catch {
         // ignore parse errors
       }
 
-      // Tracker history: last 7 days per metric
       let trackerDays: Array<{ date: string; value: number | null; met: boolean }> = []
       if (challengeWithProgress.type === 'tracker') {
         try {
@@ -114,7 +124,9 @@ export async function GET(request: NextRequest) {
 
             trackerDays.push({ date: dateStr, value, met })
           }
-        } catch { /* ignore */ }
+        } catch {
+          // ignore tracker parse errors
+        }
       }
 
       return NextResponse.json({
@@ -125,7 +137,7 @@ export async function GET(request: NextRequest) {
           linkedSkills,
           linkedTraits,
           trackerDays,
-        }
+        },
       })
     } catch (error) {
       console.error('Error fetching challenge:', error)
@@ -133,9 +145,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  if (!userId) {
-    return NextResponse.json({ error: 'userId or id is required' }, { status: 400 })
-  }
+  const selfCheck = requireSelf(request, userId)
+  if ('error' in selfCheck) return selfCheck.error
 
   try {
     const where: Record<string, unknown> = { userId }
@@ -144,18 +155,14 @@ export async function GET(request: NextRequest) {
 
     const challenges = await db.challenge.findMany({
       where,
-      orderBy: [
-        { status: 'asc' },
-        { createdAt: 'desc' }
-      ],
+      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
       include: {
-        direction: { select: { id: true, title: true, color: true } }
-      }
+        direction: { select: { id: true, title: true, color: true } },
+      },
     })
 
-    // Calculate progress for each challenge
     const challengesWithProgress = await Promise.all(
-      challenges.map(c => calculateChallengeProgress(c, userId))
+      challenges.map(c => calculateChallengeProgress(c, userId!)),
     )
 
     return NextResponse.json({ success: true, challenges: challengesWithProgress })
@@ -169,12 +176,15 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { 
-      userId, name, title, description, type, category, zone, directionId, chainId, 
-      config, startDate, duration, endDate, status 
+    const {
+      userId, name, title, description, type, category, zone, directionId, chainId,
+      config, startDate, duration, endDate, status,
     } = body
 
-    if (!userId || !name) {
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
+
+    if (!name) {
       return NextResponse.json({ error: 'userId and name are required' }, { status: 400 })
     }
 
@@ -185,7 +195,7 @@ export async function POST(request: NextRequest) {
 
     const start = startDate ? new Date(startDate) : new Date()
     let calculatedEndDate = endDate ? new Date(endDate) : null
-    
+
     if (!calculatedEndDate && duration) {
       calculatedEndDate = new Date(start)
       calculatedEndDate.setDate(calculatedEndDate.getDate() + duration)
@@ -207,11 +217,11 @@ export async function POST(request: NextRequest) {
         startDate: start,
         duration: duration || 30,
         endDate: calculatedEndDate,
-        status: status || 'active'
+        status: status || 'active',
       },
       include: {
-        direction: { select: { id: true, title: true, color: true } }
-      }
+        direction: { select: { id: true, title: true, color: true } },
+      },
     })
 
     return NextResponse.json({ success: true, challenge })
@@ -222,7 +232,6 @@ export async function POST(request: NextRequest) {
 }
 
 // PATCH /api/challenges - Update challenge or manually mark a day
-// Special: { id, markDay: true } → increment ChallengeProgress.daysCompleted by 1
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
@@ -232,12 +241,19 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
 
-    // Manual day mark — used for custom challenges without ritual linking
-    if (markDay) {
-      const challenge = await db.challenge.findUnique({ where: { id } })
-      if (!challenge) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    const challenge = await db.challenge.findUnique({
+      where: { id },
+      select: { id: true, userId: true, status: true, duration: true, name: true },
+    })
 
-      // Dedup: only one mark per calendar day
+    if (!challenge) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, challenge.userId)
+    if ('error' in auth) return auth.error
+
+    if (markDay) {
       const todayStr = new Date().toISOString().split('T')[0]
       const existing = await db.challengeProgress.findFirst({ where: { challengeId: id } })
       if (existing) {
@@ -252,15 +268,15 @@ export async function PATCH(request: NextRequest) {
       } else {
         await db.challengeProgress.create({ data: { challengeId: id, daysCompleted: 1, currentStreak: 1 } })
       }
+
       const daysCompleted = existing ? existing.daysCompleted + 1 : 1
       const newProgress = Math.min(100, Math.round((daysCompleted / challenge.duration) * 100))
-      const newStatus   = newProgress >= 100 ? 'completed' : challenge.status
+      const newStatus = newProgress >= 100 ? 'completed' : challenge.status
       const updated = await db.challenge.update({
         where: { id },
         data: { progress: newProgress, status: newStatus },
       })
 
-      // When completing: award CHALLENGE_FIRST + TG notification (same as calculateChallengeProgress)
       if (newStatus === 'completed' && challenge.status === 'active') {
         try {
           await db.achievement.create({
@@ -270,11 +286,14 @@ export async function PATCH(request: NextRequest) {
               metadata: JSON.stringify({ challengeId: challenge.id, challengeName: challenge.name }),
             },
           })
-        } catch { /* already exists */ }
+        } catch {
+          // already exists
+        }
+
         try {
           const botToken = process.env.TELEGRAM_BOT_TOKEN
           if (botToken) {
-            const tgUser = await db.user.findUnique({ where: { id: challenge.userId }, select: { telegramId: true } })
+            const tgUser = await db.appUser.findUnique({ where: { id: challenge.userId }, select: { telegramId: true } })
             if (tgUser?.telegramId) {
               await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
                 method: 'POST',
@@ -287,7 +306,9 @@ export async function PATCH(request: NextRequest) {
               })
             }
           }
-        } catch { /* non-critical */ }
+        } catch {
+          // non-critical
+        }
       }
 
       return NextResponse.json({ success: true, challenge: updated, daysCompleted })
@@ -305,13 +326,13 @@ export async function PATCH(request: NextRequest) {
     if (startDate !== undefined) updateData.startDate = new Date(startDate)
     if (endDate !== undefined) updateData.endDate = endDate ? new Date(endDate) : null
 
-    const challenge = await db.challenge.update({
+    const updatedChallenge = await db.challenge.update({
       where: { id },
       data: updateData,
       include: { direction: { select: { id: true, title: true, color: true } } },
     })
 
-    return NextResponse.json({ success: true, challenge })
+    return NextResponse.json({ success: true, challenge: updatedChallenge })
   } catch (error) {
     console.error('Error updating challenge:', error)
     return NextResponse.json({ error: 'Failed to update challenge' }, { status: 500 })
@@ -328,6 +349,18 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
+    const challenge = await db.challenge.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+
+    if (!challenge) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, challenge.userId)
+    if ('error' in auth) return auth.error
+
     await db.challengeProgress.deleteMany({ where: { challengeId: id } })
     await db.challenge.delete({ where: { id } })
     return NextResponse.json({ success: true })

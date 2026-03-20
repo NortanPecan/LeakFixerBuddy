@@ -10,21 +10,21 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 
 export const ALL_NAV_OPTIONS: { screen: Screen; icon: typeof Home; label: string; emoji: string }[] = [
-  { screen: 'home', icon: Home, label: 'Р“Р»Р°РІРЅР°СЏ', emoji: 'рџЏ ' },
-  { screen: 'gym', icon: Dumbbell, label: 'GYM', emoji: 'рџ’Є' },
-  { screen: 'rituals', icon: Flame, label: 'Р РёС‚СѓР°Р»С‹', emoji: 'рџ”Ґ' },
-  { screen: 'goals', icon: Target, label: 'Р¦РµР»Рё', emoji: 'рџЋЇ' },
+  { screen: 'home', icon: Home, label: 'Главная', emoji: '🏠' },
+  { screen: 'gym', icon: Dumbbell, label: 'GYM', emoji: '💪' },
+  { screen: 'rituals', icon: Flame, label: 'Ритуалы', emoji: '🔥' },
+  { screen: 'goals', icon: Target, label: 'Цели', emoji: '🎯' },
   { screen: 'leaks', icon: Search, label: 'Лики', emoji: '🕳️' },
-  { screen: 'profile', icon: User, label: 'РџСЂРѕС„РёР»СЊ', emoji: 'рџ‘¤' },
-  { screen: 'fitness', icon: Heart, label: 'Р—РґРѕСЂРѕРІСЊРµ', emoji: 'вќ¤пёЏ' },
-  { screen: 'finance', icon: Wallet, label: 'Р¤РёРЅР°РЅСЃС‹', emoji: 'рџ’°' },
-  { screen: 'tasks', icon: ListTodo, label: 'Р—Р°РґР°С‡Рё', emoji: 'рџ“‹' },
-  { screen: 'notes', icon: BookOpen, label: 'Р—Р°РјРµС‚РєРё', emoji: 'рџ“ќ' },
-  { screen: 'health', icon: Zap, label: 'РџРёС‚Р°РЅРёРµ', emoji: 'вљЎ' },
-  { screen: 'challenges', icon: Trophy, label: 'Р’С‹Р·РѕРІС‹', emoji: 'рџЏ†' },
-  { screen: 'zones', icon: MapPin, label: 'Р—РѕРЅС‹', emoji: 'рџ—єпёЏ' },
-  { screen: 'development', icon: TrendingUp, label: 'Р Р°Р·РІРёС‚РёРµ', emoji: 'рџ“€' },
-  { screen: 'buddies', icon: Users, label: 'Р‘Р°РґРґРё', emoji: 'рџ‘Ґ' },
+  { screen: 'profile', icon: User, label: 'Профиль', emoji: '👤' },
+  { screen: 'fitness', icon: Heart, label: 'Здоровье', emoji: '❤️' },
+  { screen: 'finance', icon: Wallet, label: 'Финансы', emoji: '💰' },
+  { screen: 'tasks', icon: ListTodo, label: 'Задачи', emoji: '📋' },
+  { screen: 'notes', icon: BookOpen, label: 'Заметки', emoji: '📝' },
+  { screen: 'health', icon: Zap, label: 'Питание', emoji: '⚡' },
+  { screen: 'challenges', icon: Trophy, label: 'Вызовы', emoji: '🏆' },
+  { screen: 'zones', icon: MapPin, label: 'Зоны', emoji: '🗺️' },
+  { screen: 'development', icon: TrendingUp, label: 'Развитие', emoji: '📈' },
+  { screen: 'buddies', icon: Users, label: 'Бадди', emoji: '👥' },
 ]
 
 export function BottomNav() {

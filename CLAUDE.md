@@ -11,6 +11,8 @@ Self-improvement social network. Next.js 14 App Router + TypeScript + Prisma + S
 - **БД**: только Supabase PostgreSQL через Prisma ORM (локальной БД нет!)
 - **Язык UI**: русский
 - **Lint**: `bun run lint` перед каждым коммитом (0 ошибок!)
+- **Кодировка**: все user-facing тексты и файлы проекта только в UTF-8; перед коммитом не пропускать `npm run check:encoding`, перед push доступен `npm run check:prepush`
+- **Git hooks**: локально включён `core.hooksPath=.githooks`; `pre-commit` ловит битую кодировку в staged-файлах, `pre-push` гоняет encoding + eslint только по файлам, которые реально уходят в push
 - **Миграции**: применяются вручную через Supabase SQL Editor, файл кладём в `prisma/migrations/`
 
 ---
@@ -74,6 +76,8 @@ src/
 bun run lint          # проверка линтера (0 ошибок!)
 bun run build         # сборка
 bun run db:generate   # после изменений schema.prisma
+npm run check:encoding
+npm run check:prepush
 ```
 
 ## ENV переменные

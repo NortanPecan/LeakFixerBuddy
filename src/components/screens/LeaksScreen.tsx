@@ -182,6 +182,12 @@ const SPHERE_OPTIONS = [
   { id: 'poker', label: 'Покер' },
 ] as const
 
+const LEAK_GUIDANCE_STYLES = {
+  indigo: 'border-indigo-500/20 bg-indigo-500/10',
+  emerald: 'border-emerald-500/20 bg-emerald-500/10',
+  amber: 'border-amber-500/20 bg-amber-500/10',
+} as const
+
 function getCurrentMonday(): string {
   const today = new Date()
   const day = today.getDay()
@@ -294,6 +300,191 @@ function getSourceLabel(source: LeakEntity['source']) {
   }
 }
 
+function getSphereLabel(sphere: string | null | undefined) {
+  if (!sphere) return 'Без сферы'
+
+  const option = SPHERE_OPTIONS.find((item) => item.id === sphere)
+  return option?.label || sphere
+}
+
+function isConvertedPlanAction(action: LeakPlanAction) {
+  return Boolean(action.payload?.convertedEntityId && action.payload?.convertedEntityType)
+}
+
+function getLatestPlanFeedback(action: LeakPlanAction) {
+  return action.feedbacks?.[0] || null
+}
+
+function getSelectedPlan(plans?: LeakSolutionPlan[]) {
+  return plans?.find((plan) => plan.isSelected) || plans?.[0] || null
+}
+
+type LeakGuidanceTone = keyof typeof LEAK_GUIDANCE_STYLES
+type LeakGuidanceAction = 'generate' | 'retry' | 'resolve' | 'reopen' | null
+
+function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
+  const selectedPlan = getSelectedPlan(plans)
+
+  if (!selectedPlan) {
+    return {
+      tone: 'indigo' as LeakGuidanceTone,
+      title: 'Собери три режима решения',
+      description: 'Minimum, base и maximum помогут быстро выбрать реалистичный путь, а не зависнуть на одном совете.',
+      action: 'generate' as LeakGuidanceAction,
+      actionLabel: 'Сделать 3 плана',
+      selectedPlan: null,
+      totalActions: 0,
+      createdActions: 0,
+      workedActions: 0,
+      partialActions: 0,
+      failedActions: 0,
+      pendingActions: 0,
+      feedbackActions: 0,
+    }
+  }
+
+  const totalActions = selectedPlan.actions.length
+  const createdActions = selectedPlan.actions.filter(isConvertedPlanAction).length
+  const workedActions = selectedPlan.actions.filter(
+    (action) => getLatestPlanFeedback(action)?.result === 'worked',
+  ).length
+  const partialActions = selectedPlan.actions.filter(
+    (action) => getLatestPlanFeedback(action)?.result === 'partially',
+  ).length
+  const failedActions = selectedPlan.actions.filter(
+    (action) => getLatestPlanFeedback(action)?.result === 'not_worked',
+  ).length
+  const feedbackActions = workedActions + partialActions + failedActions
+  const pendingActions = Math.max(totalActions - createdActions, 0)
+
+  if (leak.status === 'resolved' || leak.status === 'archived') {
+    return {
+      tone: 'indigo' as LeakGuidanceTone,
+      title: 'Leak сейчас закрыт',
+      description:
+        failedActions > 0 || partialActions > 0 || pendingActions > 0
+          ? 'Если проблема вернулась, верни leak в работу и продолжай уже с обновлённым режимом.'
+          : 'Если симптом вернётся, его можно быстро вернуть в работу без создания нового leak.',
+      action: 'reopen' as LeakGuidanceAction,
+      actionLabel: 'Вернуть в работу',
+      selectedPlan,
+      totalActions,
+      createdActions,
+      workedActions,
+      partialActions,
+      failedActions,
+      pendingActions,
+      feedbackActions,
+    }
+  }
+
+  if (failedActions > 0) {
+    return {
+      tone: 'amber' as LeakGuidanceTone,
+      title: 'Часть решений не сработала',
+      description: 'Пересобери план или выбери другой режим, чтобы не застрять на нерабочем сценарии.',
+      action: 'retry' as LeakGuidanceAction,
+      actionLabel: 'Попробовать заново',
+      selectedPlan,
+      totalActions,
+      createdActions,
+      workedActions,
+      partialActions,
+      failedActions,
+      pendingActions,
+      feedbackActions,
+    }
+  }
+
+  if (pendingActions > 0) {
+    return {
+      tone: 'indigo' as LeakGuidanceTone,
+      title: `Выбран режим «${PLAN_MODE_LABELS[selectedPlan.mode]}»`,
+      description: `Создано ${createdActions} из ${totalActions} действий. Остальные можно применить по одному или целиком.`,
+      action: null,
+      actionLabel: '',
+      selectedPlan,
+      totalActions,
+      createdActions,
+      workedActions,
+      partialActions,
+      failedActions,
+      pendingActions,
+      feedbackActions,
+    }
+  }
+
+  if (createdActions > 0 && feedbackActions < createdActions) {
+    return {
+      tone: 'amber' as LeakGuidanceTone,
+      title: 'План уже применён',
+      description: 'Теперь важно отметить, что реально помогло, чтобы leak-модуль учился на живом опыте.',
+      action: null,
+      actionLabel: '',
+      selectedPlan,
+      totalActions,
+      createdActions,
+      workedActions,
+      partialActions,
+      failedActions,
+      pendingActions,
+      feedbackActions,
+    }
+  }
+
+  if (workedActions > 0 && leak.status !== 'resolved') {
+    return {
+      tone: 'emerald' as LeakGuidanceTone,
+      title: 'Есть рабочие решения',
+      description: `Сработало ${workedActions} действий. Если проблема больше не возвращается, можно закрывать leak.`,
+      action: 'resolve' as LeakGuidanceAction,
+      actionLabel: 'Отметить решённым',
+      selectedPlan,
+      totalActions,
+      createdActions,
+      workedActions,
+      partialActions,
+      failedActions,
+      pendingActions,
+      feedbackActions,
+    }
+  }
+
+  if (partialActions > 0) {
+    return {
+      tone: 'amber' as LeakGuidanceTone,
+      title: 'Можно усилить текущий подход',
+      description: 'Что-то уже помогает, но не полностью. Пересобери режим или попробуй другой сценарий.',
+      action: 'retry' as LeakGuidanceAction,
+      actionLabel: 'Усилить план',
+      selectedPlan,
+      totalActions,
+      createdActions,
+      workedActions,
+      partialActions,
+      failedActions,
+      pendingActions,
+      feedbackActions,
+    }
+  }
+
+  return {
+    tone: 'indigo' as LeakGuidanceTone,
+    title: 'План готов к следующему шагу',
+    description: 'Можно открыть созданные сущности, собрать новый режим или уточнить leak, если контекст изменился.',
+    action: 'retry' as LeakGuidanceAction,
+    actionLabel: 'Пересобрать план',
+    selectedPlan,
+    totalActions,
+    createdActions,
+    workedActions,
+    partialActions,
+    failedActions,
+    pendingActions,
+    feedbackActions,
+  }
+}
+
 function getContextSnapshotItems(contextSnapshot?: Record<string, unknown> | null) {
   if (!contextSnapshot) return []
 
@@ -352,6 +543,7 @@ export function LeaksScreen() {
   const [savingFeedbackActionId, setSavingFeedbackActionId] = useState<string | null>(null)
   const [feedbackCommentByAction, setFeedbackCommentByAction] = useState<Record<string, string>>({})
   const [savingPatternLeakType, setSavingPatternLeakType] = useState<string | null>(null)
+  const [retryingLeakId, setRetryingLeakId] = useState<string | null>(null)
 
   const hasDraft = title.trim().length > 0 || details.trim().length > 0
 
@@ -399,7 +591,8 @@ export function LeaksScreen() {
       return (
         normalizeLookupValue(leak.title).includes(normalizedQuery) ||
         normalizeLookupValue(leak.description).includes(normalizedQuery) ||
-        normalizeLookupValue(leak.sphere).includes(normalizedQuery)
+        normalizeLookupValue(leak.sphere).includes(normalizedQuery) ||
+        normalizeLookupValue(getSphereLabel(leak.sphere)).includes(normalizedQuery)
       )
     })
   }, [leaks, searchQuery, sourceFilter, statusFilter])
@@ -471,7 +664,11 @@ export function LeaksScreen() {
     }
   }
 
-  const updateLeakStatus = async (leakId: string, status: Exclude<LeakStatusFilter, 'all'>) => {
+  const updateLeakStatus = async (
+    leakId: string,
+    status: Exclude<LeakStatusFilter, 'all'>,
+    options?: { silent?: boolean },
+  ) => {
     if (!user?.id || updatingLeakId) return
 
     setUpdatingLeakId(leakId)
@@ -496,9 +693,13 @@ export function LeaksScreen() {
       setLeaks((current) =>
         current.map((leak) => (leak.id === leakId ? updatedLeak : leak)),
       )
-      showSuccessToast('Статус лика обновлён')
+      if (!options?.silent) {
+        showSuccessToast('Статус лика обновлён')
+      }
+      return true
     } catch (error) {
       showErrorToast(error, 'update leak status')
+      return false
     } finally {
       setUpdatingLeakId(null)
     }
@@ -650,7 +851,11 @@ export function LeaksScreen() {
     }
   }
 
-  const generatePlansForLeak = async (leakId: string, regenerate = false) => {
+  const generatePlansForLeak = async (
+    leakId: string,
+    regenerate = false,
+    options?: { silent?: boolean },
+  ) => {
     if (!user?.id) return
 
     setGeneratingPlansLeakId(leakId)
@@ -671,9 +876,13 @@ export function LeaksScreen() {
         ...current,
         [leakId]: normalizePlans(data.plans || []),
       }))
-      showSuccessToast(regenerate ? 'Планы пересобраны' : 'Планы для лика готовы')
+      if (!options?.silent) {
+        showSuccessToast(regenerate ? 'Планы пересобраны' : 'Планы для лика готовы')
+      }
+      return true
     } catch (error) {
       showErrorToast(error, 'generate leak plans')
+      return false
     } finally {
       setGeneratingPlansLeakId(null)
     }
@@ -717,10 +926,9 @@ export function LeaksScreen() {
     }
   }
 
-  const isPlanActionConverted = (action: LeakPlanAction) =>
-    Boolean(action.payload?.convertedEntityId && action.payload?.convertedEntityType)
+  const isPlanActionConverted = (action: LeakPlanAction) => isConvertedPlanAction(action)
 
-  const getActionFeedback = (action: LeakPlanAction) => action.feedbacks?.[0] || null
+  const getActionFeedback = (action: LeakPlanAction) => getLatestPlanFeedback(action)
 
   const getFeedbackCommentDraft = (action: LeakPlanAction) => {
     if (feedbackCommentByAction[action.id] !== undefined) {
@@ -728,6 +936,64 @@ export function LeaksScreen() {
     }
 
     return action.feedbacks?.[0]?.comment || ''
+  }
+
+  const clearLeakFilters = () => {
+    setStatusFilter('all')
+    setSourceFilter('all')
+    setSearchQuery('')
+  }
+
+  const reopenLeak = async (leak: LeakEntity, options?: { silent?: boolean }) => {
+    return updateLeakStatus(leak.id, 'in_progress', options)
+  }
+
+  const retryLeakPlanning = async (leak: LeakEntity) => {
+    if (!user?.id || retryingLeakId) return
+
+    setRetryingLeakId(leak.id)
+    try {
+      if (leak.status === 'resolved' || leak.status === 'archived') {
+        const reopened = await reopenLeak(leak, { silent: true })
+        if (!reopened) return
+      }
+
+      const hadPlans = Boolean(plansByLeak[leak.id]?.length)
+      const generated = await generatePlansForLeak(leak.id, hadPlans, { silent: true })
+      if (!generated) return
+
+      setExpandedLeakId(leak.id)
+      showSuccessToast(
+        hadPlans
+          ? 'Лик возвращён в работу, режимы обновлены'
+          : 'Для лика собраны первые режимы',
+      )
+    } finally {
+      setRetryingLeakId(null)
+    }
+  }
+
+  const runGuidanceAction = async (leak: LeakEntity, action: LeakGuidanceAction) => {
+    if (!action) return
+
+    if (action === 'generate') {
+      await generatePlansForLeak(leak.id, false)
+      return
+    }
+
+    if (action === 'retry') {
+      await retryLeakPlanning(leak)
+      return
+    }
+
+    if (action === 'resolve') {
+      await updateLeakStatus(leak.id, 'resolved')
+      return
+    }
+
+    if (action === 'reopen') {
+      await reopenLeak(leak)
+    }
   }
 
   const applySelectedPlan = async (leak: LeakEntity, mode?: LeakSolutionPlan['mode']) => {
@@ -1308,16 +1574,63 @@ export function LeaksScreen() {
 
           {filteredLeaks.length === 0 ? (
             <Card style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <CardContent className="pt-6">
-                <p className="text-sm text-white/60">
-                  Здесь будут лежать сохранённые лики. У них теперь есть собственный lifecycle: новый, в работе, решён, архив.
-                </p>
+              <CardContent className="pt-6 space-y-4">
+                {leaks.length === 0 ? (
+                  <>
+                    <div className="space-y-2">
+                      <div className="text-white font-medium">Здесь появится твой inbox ликов</div>
+                      <p className="text-sm text-white/60">
+                        Начни с одной короткой фразы в блоке выше, либо забери готовый сигнал из weekly data и уже потом разбери его с AI.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setActiveTab('signals')}
+                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                      >
+                        Сигналы ({signals.length})
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setActiveTab('patterns')}
+                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                      >
+                        Patterns ({patterns.length})
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <div className="text-white font-medium">По текущим фильтрам ничего не найдено</div>
+                      <p className="text-sm text-white/60">
+                        Сбрось фильтры или поиск, чтобы снова увидеть весь inbox и активные leak-сценарии.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={clearLeakFilters}
+                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                      >
+                        Сбросить фильтры
+                      </Button>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           ) : (
-            filteredLeaks.map((leak) => (
-              <Card key={leak.id} style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <CardContent className="pt-4 space-y-3">
+            filteredLeaks.map((leak) => {
+              const guidance = buildLeakGuidance(leak, plansByLeak[leak.id])
+
+              return (
+                <Card key={leak.id} style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <CardContent className="pt-4 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-white font-medium">{leak.title}</div>
@@ -1431,44 +1744,69 @@ export function LeaksScreen() {
                     >
                       Редактировать
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => convertLeakToTask(leak)}
-                      disabled={actionLeakId === leak.id || hasActionType(leak, 'task')}
-                      className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                    >
-                      В задачу
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => convertLeakToRitual(leak)}
-                      disabled={actionLeakId === leak.id || hasActionType(leak, 'ritual')}
-                      className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                    >
-                      В ритуал
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => convertLeakToChallenge(leak)}
-                      disabled={actionLeakId === leak.id || hasActionType(leak, 'challenge')}
-                      className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
-                    >
-                      AI-челлендж
-                    </Button>
                   </div>
 
                   {expandedLeakId === leak.id && (
                     <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                      <div className={`rounded-2xl border p-3 ${LEAK_GUIDANCE_STYLES[guidance.tone]}`}>
+                        <div className="text-xs uppercase tracking-wide text-white/45">
+                          Следующий шаг
+                        </div>
+                        <div className="mt-1 text-sm font-medium text-white">{guidance.title}</div>
+                        <p className="mt-1 text-sm text-white/70">{guidance.description}</p>
+                        {guidance.selectedPlan && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Badge className={PLAN_MODE_STYLES[guidance.selectedPlan.mode]}>
+                              {PLAN_MODE_LABELS[guidance.selectedPlan.mode]}
+                            </Badge>
+                            <Badge className="bg-white/10 text-white/75 border-white/10">
+                              Создано {guidance.createdActions}/{guidance.totalActions}
+                            </Badge>
+                            {guidance.workedActions > 0 && (
+                              <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
+                                Сработало {guidance.workedActions}
+                              </Badge>
+                            )}
+                            {guidance.partialActions > 0 && (
+                              <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
+                                Частично {guidance.partialActions}
+                              </Badge>
+                            )}
+                            {guidance.failedActions > 0 && (
+                              <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
+                                Не помогло {guidance.failedActions}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                        {guidance.action && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => runGuidanceAction(leak, guidance.action)}
+                              disabled={
+                                retryingLeakId === leak.id ||
+                                updatingLeakId === leak.id ||
+                                generatingPlansLeakId === leak.id
+                              }
+                              className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                            >
+                              {retryingLeakId === leak.id && guidance.action === 'retry'
+                                ? 'Обновляю...'
+                                : guidance.actionLabel}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
                       <div className="flex flex-wrap gap-2">
                         <Badge className="bg-white/10 text-white/75 border-white/10">
                           Источник: {getSourceLabel(leak.source)}
                         </Badge>
                         {leak.sphere && (
                           <Badge className="bg-white/10 text-white/75 border-white/10">
-                            Сфера: {leak.sphere}
+                            Сфера: {getSphereLabel(leak.sphere)}
                           </Badge>
                         )}
                       </div>
@@ -1597,6 +1935,44 @@ export function LeaksScreen() {
                             ))}
                           </div>
                         )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-xs uppercase tracking-wide text-white/40">
+                          Быстрый перевод без плана
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => convertLeakToTask(leak)}
+                            disabled={actionLeakId === leak.id || hasActionType(leak, 'task')}
+                            className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                          >
+                            В задачу
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => convertLeakToRitual(leak)}
+                            disabled={actionLeakId === leak.id || hasActionType(leak, 'ritual')}
+                            className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                          >
+                            В ритуал
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => convertLeakToChallenge(leak)}
+                            disabled={actionLeakId === leak.id || hasActionType(leak, 'challenge')}
+                            className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
+                          >
+                            AI-челлендж
+                          </Button>
+                        </div>
+                        <p className="text-xs text-white/45">
+                          Если не нужен целый режим, leak можно сразу превратить в одну понятную сущность.
+                        </p>
                       </div>
 
                       <div className="space-y-3">
@@ -1805,6 +2181,28 @@ export function LeaksScreen() {
                                               Последний фидбек: {formatDate(getActionFeedback(action)!.updatedAt)}
                                             </div>
                                           )}
+                                          {getActionFeedback(action)?.result !== 'worked' && (
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              onClick={() => retryLeakPlanning(leak)}
+                                              disabled={retryingLeakId === leak.id}
+                                              className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
+                                            >
+                                              {retryingLeakId === leak.id ? 'Обновляю...' : 'Нужен другой подход'}
+                                            </Button>
+                                          )}
+                                          {getActionFeedback(action)?.result === 'worked' && leak.status !== 'resolved' && (
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              onClick={() => updateLeakStatus(leak.id, 'resolved')}
+                                              disabled={updatingLeakId === leak.id}
+                                              className="border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-200"
+                                            >
+                                              Закрыть leak
+                                            </Button>
+                                          )}
                                         </div>
                                       )}
                                     </div>
@@ -1823,7 +2221,8 @@ export function LeaksScreen() {
                   )}
                 </CardContent>
               </Card>
-            ))
+              )
+            })
           )}
         </TabsContent>
 

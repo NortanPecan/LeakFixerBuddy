@@ -1,31 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
+
+type BuddyRequester = {
+  id: string
+  telegramFirstName: string | null
+  telegramLastName: string | null
+  telegramUsername: string | null
+  telegramPhotoUrl: string | null
+  firstName: string | null
+  lastName: string | null
+  photoUrl: string | null
+  username: string | null
+}
+
+function formatBuddyName(requester: Omit<BuddyRequester, 'id'> | null | undefined, fallback: string) {
+  if (!requester) return fallback
+
+  if (requester.telegramFirstName) {
+    return `${requester.telegramFirstName}${requester.telegramLastName ? ` ${requester.telegramLastName}` : ''}`
+  }
+
+  if (requester.firstName) {
+    return `${requester.firstName}${requester.lastName ? ` ${requester.lastName}` : ''}`
+  }
+
+  return requester.telegramUsername || requester.username || fallback
+}
 
 // GET - Fetch buddies for user (outgoing) and incoming requests
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
-    const type = searchParams.get('type') || 'all' // 'outgoing', 'incoming', 'all'
+    const type = searchParams.get('type') || 'all'
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
-    if (!userId) {
-      return NextResponse.json({ error: 'userId required' }, { status: 400 })
-    }
-
-    // Outgoing: requests I sent to others
     const outgoing = await db.buddy.findMany({
       where: { userId },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     })
 
-    // Incoming: requests others sent to me (where I am the partner)
-    // Need to find buddies where partnerId = userId
     const allBuddiesWithMeAsPartner = await db.buddy.findMany({
       where: { partnerId: userId },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     })
 
-    // For incoming, we need to get the requester's info
     const incomingRequesterIds = allBuddiesWithMeAsPartner.map(b => b.userId)
     const requesters = await db.appUser.findMany({
       where: { id: { in: incomingRequesterIds } },
@@ -38,27 +59,21 @@ export async function GET(request: NextRequest) {
         firstName: true,
         lastName: true,
         photoUrl: true,
-        username: true
-      }
+        username: true,
+      },
     })
 
-    const requestersMap = new Map(requesters.map(r => [r.id, r]))
+    const requestersMap = new Map<string, BuddyRequester>(requesters.map(r => [r.id, r]))
 
     const incoming = allBuddiesWithMeAsPartner.map(b => {
       const requester = requestersMap.get(b.userId)
       return {
         id: b.id,
         partnerId: b.userId,
-        partnerName: requester 
-          ? (requester.telegramFirstName 
-              ? `${requester.telegramFirstName}${requester.telegramLastName ? ` ${requester.telegramLastName}` : ''}`
-              : requester.firstName 
-                ? `${requester.firstName}${requester.lastName ? ` ${requester.lastName}` : ''}`
-                : requester.telegramUsername || requester.username || 'Пользователь')
-          : b.partnerName,
+        partnerName: formatBuddyName(requester, b.partnerName || 'Пользователь'),
         partnerPhoto: requester?.telegramPhotoUrl || requester?.photoUrl || b.partnerPhoto,
         status: b.status,
-        createdAt: b.createdAt
+        createdAt: b.createdAt,
       }
     })
 
@@ -81,16 +96,17 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { userId, partnerId, partnerName, partnerPhoto } = body
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
-    if (!userId || !partnerId || !partnerName) {
+    if (!partnerId || !partnerName) {
       return NextResponse.json({ error: 'userId, partnerId, and partnerName required' }, { status: 400 })
     }
 
-    // Check if buddy already exists
     const existing = await db.buddy.findUnique({
       where: {
-        userId_partnerId: { userId, partnerId }
-      }
+        userId_partnerId: { userId, partnerId },
+      },
     })
 
     if (existing) {
@@ -103,8 +119,8 @@ export async function POST(request: NextRequest) {
         partnerId,
         partnerName,
         partnerPhoto,
-        status: 'pending'
-      }
+        status: 'pending',
+      },
     })
 
     return NextResponse.json({ buddy })
@@ -124,35 +140,41 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'buddyId and status required' }, { status: 400 })
     }
 
-    // Get the buddy request
     const existingBuddy = await db.buddy.findUnique({
-      where: { id: buddyId }
+      where: { id: buddyId },
     })
 
     if (!existingBuddy) {
       return NextResponse.json({ error: 'Buddy request not found' }, { status: 404 })
     }
 
-    // Update the status
+    const auth = requireSelf(request, existingBuddy.partnerId)
+    if ('error' in auth) return auth.error
+
+    if (currentUserId && currentUserId !== existingBuddy.partnerId) {
+      return NextResponse.json(
+        { error: 'Forbidden', hint: 'currentUserId must match the authenticated user' },
+        { status: 403 },
+      )
+    }
+
+    const receiverUserId = existingBuddy.partnerId
     const buddy = await db.buddy.update({
       where: { id: buddyId },
-      data: { status }
+      data: { status },
     })
 
-    // If accepted, create reverse buddy relationship
-    if (status === 'accepted' && currentUserId) {
-      // Check if reverse already exists
+    if (status === 'accepted') {
       const reverse = await db.buddy.findUnique({
         where: {
-          userId_partnerId: { 
-            userId: currentUserId, 
-            partnerId: existingBuddy.userId 
-          }
-        }
+          userId_partnerId: {
+            userId: receiverUserId,
+            partnerId: existingBuddy.userId,
+          },
+        },
       })
 
       if (!reverse) {
-        // Get requester info for name/photo
         const requester = await db.appUser.findUnique({
           where: { id: existingBuddy.userId },
           select: {
@@ -163,32 +185,25 @@ export async function PATCH(request: NextRequest) {
             firstName: true,
             lastName: true,
             photoUrl: true,
-            username: true
-          }
+            username: true,
+          },
         })
 
-        const requesterName = requester 
-          ? (requester.telegramFirstName 
-              ? `${requester.telegramFirstName}${requester.telegramLastName ? ` ${requester.telegramLastName}` : ''}`
-              : requester.firstName 
-                ? `${requester.firstName}${requester.lastName ? ` ${requester.lastName}` : ''}`
-                : requester.telegramUsername || requester.username || 'Пользователь')
-          : existingBuddy.partnerName
+        const requesterName = formatBuddyName(requester, existingBuddy.partnerName || 'Пользователь')
 
         await db.buddy.create({
           data: {
-            userId: currentUserId,
+            userId: receiverUserId,
             partnerId: existingBuddy.userId,
             partnerName: requesterName,
             partnerPhoto: requester?.telegramPhotoUrl || requester?.photoUrl || existingBuddy.partnerPhoto,
-            status: 'accepted'
-          }
+            status: 'accepted',
+          },
         })
       } else if (reverse.status !== 'accepted') {
-        // Update existing reverse to accepted
         await db.buddy.update({
           where: { id: reverse.id },
-          data: { status: 'accepted' }
+          data: { status: 'accepted' },
         })
       }
     }
@@ -208,6 +223,21 @@ export async function DELETE(request: NextRequest) {
 
     if (!buddyId) {
       return NextResponse.json({ error: 'buddyId required' }, { status: 400 })
+    }
+
+    const buddy = await db.buddy.findUnique({
+      where: { id: buddyId },
+      select: { id: true, userId: true, partnerId: true },
+    })
+
+    if (!buddy) {
+      return NextResponse.json({ error: 'Buddy not found' }, { status: 404 })
+    }
+
+    const isOwner = requireSelf(request, buddy.userId)
+    const isPartner = requireSelf(request, buddy.partnerId)
+    if ('error' in isOwner && 'error' in isPartner) {
+      return isOwner.error
     }
 
     await db.buddy.delete({ where: { id: buddyId } })
