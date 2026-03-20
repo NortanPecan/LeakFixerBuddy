@@ -3523,6 +3523,7 @@ export function LeaksScreen() {
                               const worked = recent.filter((item) => item.result === 'worked').length
                               const partial = recent.filter((item) => item.result === 'partially').length
                               const failed = recent.filter((item) => item.result === 'not_worked').length
+                              const latestProblem = recent.find((item) => item.result !== 'worked') || null
                               return (
                                 <>
                                   <Badge className="bg-white/10 text-white/70 border-white/10">
@@ -3537,6 +3538,22 @@ export function LeaksScreen() {
                                   <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
                                     Не помогло: {failed}
                                   </Badge>
+                                  {latestProblem && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() =>
+                                        retryLeakPlanning(leak, {
+                                          action: planActionsById.get(latestProblem.actionId) || null,
+                                          failureReason: latestProblem.comment || null,
+                                        })
+                                      }
+                                      disabled={retryingLeakId === leak.id}
+                                      className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
+                                    >
+                                      {retryingLeakId === leak.id ? 'Обновляю...' : 'Retry по последнему проблемному'}
+                                    </Button>
+                                  )}
                                 </>
                               )
                             })()}
