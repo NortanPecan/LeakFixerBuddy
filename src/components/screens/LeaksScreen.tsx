@@ -1040,6 +1040,28 @@ function getLiveContextMetrics(contextSnapshot?: Record<string, unknown> | null)
   return metrics
 }
 
+function getRecentFeedbackTrend(contextSnapshot?: Record<string, unknown> | null) {
+  const metrics = getLiveContextMetrics(contextSnapshot)
+  if (!metrics) return null
+
+  const windowSize =
+    typeof metrics.recentFeedbackWindowSize === 'number'
+      ? metrics.recentFeedbackWindowSize
+      : null
+  const negativeShare =
+    typeof metrics.recentFeedbackNegativeShare === 'number'
+      ? metrics.recentFeedbackNegativeShare
+      : null
+
+  if (windowSize === null || windowSize <= 0 || negativeShare === null) return null
+
+  return {
+    windowSize,
+    negativeShare,
+    isRisky: windowSize >= 3 && negativeShare >= 67,
+  }
+}
+
 function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null) {
   const metrics = getLiveContextMetrics(contextSnapshot)
   if (!metrics) return []
@@ -2617,6 +2639,7 @@ export function LeaksScreen() {
                   ? feedbackTimeline.filter((item) => item.result !== 'worked')
                   : feedbackTimeline
               const latestWorkedOutcome = getLatestWorkedOutcome(leak, leakPlans)
+              const recentFeedbackTrend = getRecentFeedbackTrend(leak.contextSnapshot)
               const contextHypotheses = buildContextHypotheses(leak.contextSnapshot)
               const retryFocus = getRetryFocus(leak.contextSnapshot)
               const matchedPattern = getBestPatternForLeak(patterns, leak)
@@ -2918,6 +2941,21 @@ export function LeaksScreen() {
                             )}
                           </div>
                         )}
+                        {recentFeedbackTrend && (
+                          <div
+                            className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
+                              recentFeedbackTrend.isRisky
+                                ? 'border-amber-500/25 bg-amber-500/10 text-amber-100'
+                                : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-100'
+                            }`}
+                          >
+                            Свежий тренд feedback: {recentFeedbackTrend.windowSize} событий, негативных{' '}
+                            {recentFeedbackTrend.negativeShare}%.
+                            {recentFeedbackTrend.isRisky
+                              ? ' Режим можно упростить до minimum.'
+                              : ' Динамика пока стабильная.'}
+                          </div>
+                        )}
                         {guidance.action && (
                           <div className="mt-3 flex flex-wrap gap-2">
                             <Button
@@ -2934,6 +2972,19 @@ export function LeaksScreen() {
                               {retryingLeakId === leak.id && guidance.action === 'retry'
                                 ? 'Обновляю...'
                                 : guidance.actionLabel}
+                            </Button>
+                          </div>
+                        )}
+                        {recentFeedbackTrend?.isRisky && selectedPlan?.mode !== 'minimum' && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => selectPlanMode(leak.id, 'minimum')}
+                              disabled={selectingPlanLeakId === leak.id}
+                              className="border-amber-500/25 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
+                            >
+                              {selectingPlanLeakId === leak.id ? 'Переключаю...' : 'Переключить на минимум'}
                             </Button>
                           </div>
                         )}
