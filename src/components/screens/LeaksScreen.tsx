@@ -3767,6 +3767,8 @@ export function LeaksScreen() {
                             ? 'exact'
                             : 'fuzzy',
                         }))
+                const exactLinkedCount = activeLinkedLeaks.filter((leak) => leak.matchType === 'exact').length
+                const fuzzyLinkedCount = activeLinkedLeaks.filter((leak) => leak.matchType === 'fuzzy').length
 
                 return (
                   <Card key={pattern.leakType} style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -3789,6 +3791,16 @@ export function LeaksScreen() {
                         {typeof pattern.activeLeakCount === 'number' && pattern.activeLeakCount > 0 && (
                           <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
                             Активных leaks: {pattern.activeLeakCount}
+                          </Badge>
+                        )}
+                        {exactLinkedCount > 0 && (
+                          <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                            Exact: {exactLinkedCount}
+                          </Badge>
+                        )}
+                        {fuzzyLinkedCount > 0 && (
+                          <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
+                            Fuzzy: {fuzzyLinkedCount}
                           </Badge>
                         )}
                       </div>
