@@ -3699,6 +3699,22 @@ export function LeaksScreen() {
                 if (!sourceActionId) return true
                 return !feedbackByActionId.has(sourceActionId)
               }).length
+              const firstPolicyLinkedWithoutFeedbackMetadata = leak.actions
+                .map((item) => getLeakActionMetadata(item))
+                .find((metadata) => {
+                  if (!metadata) return false
+                  const policyCorrelationId =
+                    typeof metadata.policyCorrelationId === 'string' ? metadata.policyCorrelationId : null
+                  if (!policyCorrelationId) return false
+                  const sourceActionId =
+                    typeof metadata.sourceActionId === 'string' ? metadata.sourceActionId : null
+                  return Boolean(sourceActionId && !feedbackByActionId.has(sourceActionId))
+                })
+              const firstPolicyLinkedWithoutFeedbackActionId =
+                firstPolicyLinkedWithoutFeedbackMetadata &&
+                typeof firstPolicyLinkedWithoutFeedbackMetadata.sourceActionId === 'string'
+                  ? firstPolicyLinkedWithoutFeedbackMetadata.sourceActionId
+                  : null
               const latestPolicyFailedOutcome = policyEvents.find(
                 (event) => event.type === 'policy_outcome' && event.result === 'not_worked',
               ) || null
@@ -4083,6 +4099,16 @@ export function LeaksScreen() {
                                   Без feedback: {policyLinkedCreatedWithoutFeedback}
                                 </div>
                               )}
+                              {firstPolicyLinkedWithoutFeedbackActionId && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => focusPlanAction(leak.id, firstPolicyLinkedWithoutFeedbackActionId)}
+                                  className="mt-1 h-6 border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 px-2 text-[11px] text-amber-200"
+                                >
+                                  К первому без feedback
+                                </Button>
+                              )}
                             </div>
                             <div className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5">
                               <div className="text-[11px] text-white/50">Feedback</div>
@@ -4357,6 +4383,20 @@ export function LeaksScreen() {
                                       )}%`,
                                     }}
                                   />
+                                </div>
+                                <div className="mt-2 grid gap-1 md:grid-cols-2">
+                                  <div className="text-[11px] text-white/55">
+                                    Suggested: {policy.summary.currentFunnel.suggestedAt ? formatDate(policy.summary.currentFunnel.suggestedAt) : '—'}
+                                  </div>
+                                  <div className="text-[11px] text-white/55">
+                                    Accepted: {policy.summary.currentFunnel.acceptedAt ? formatDate(policy.summary.currentFunnel.acceptedAt) : '—'}
+                                  </div>
+                                  <div className="text-[11px] text-white/55">
+                                    Rejected: {policy.summary.currentFunnel.rejectedAt ? formatDate(policy.summary.currentFunnel.rejectedAt) : '—'}
+                                  </div>
+                                  <div className="text-[11px] text-white/55">
+                                    Last outcome: {policy.summary.currentFunnel.lastOutcomeAt ? formatDate(policy.summary.currentFunnel.lastOutcomeAt) : '—'}
+                                  </div>
                                 </div>
                               </div>
                             )}
