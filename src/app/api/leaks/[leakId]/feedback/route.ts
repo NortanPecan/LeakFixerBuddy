@@ -201,6 +201,55 @@ export async function POST(
         }
       }
 
+      const leakSnapshotSource = await tx.leak.findUnique({
+        where: { id: leakId },
+        select: {
+          contextSnapshot: true,
+        },
+      })
+      const snapshot =
+        leakSnapshotSource?.contextSnapshot &&
+        typeof leakSnapshotSource.contextSnapshot === 'object' &&
+        !Array.isArray(leakSnapshotSource.contextSnapshot)
+          ? ({ ...(leakSnapshotSource.contextSnapshot as Record<string, unknown>) } as Record<string, unknown>)
+          : {}
+      const retryCurrent =
+        snapshot.retry && typeof snapshot.retry === 'object' && !Array.isArray(snapshot.retry)
+          ? (snapshot.retry as Record<string, unknown>)
+          : null
+      const retryActionId = typeof retryCurrent?.actionId === 'string' ? retryCurrent.actionId : null
+      const retryActionTitle = typeof retryCurrent?.actionTitle === 'string' ? retryCurrent.actionTitle : null
+      const isSameRetryAction =
+        retryActionId === action.id ||
+        (!retryActionId &&
+          typeof retryActionTitle === 'string' &&
+          retryActionTitle.trim().toLowerCase() === action.title.trim().toLowerCase())
+
+      if (result === 'worked' && isSameRetryAction) {
+        snapshot.retry = null
+        snapshot.retryResolvedAt = new Date().toISOString()
+        await tx.leak.update({
+          where: { id: leakId },
+          data: {
+            contextSnapshot: snapshot,
+          },
+        })
+      } else if (result !== 'worked') {
+        snapshot.retry = {
+          actionId: action.id,
+          actionTitle: action.title,
+          actionKind: action.kind,
+          failureReason: comment?.trim() || null,
+          requestedAt: new Date().toISOString(),
+        }
+        await tx.leak.update({
+          where: { id: leakId },
+          data: {
+            contextSnapshot: snapshot,
+          },
+        })
+      }
+
       const existingPattern = await tx.userAiPattern.findUnique({
         where: { userId_leakType: { userId, leakType: leak.title } },
         select: {

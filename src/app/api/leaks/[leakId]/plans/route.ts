@@ -339,6 +339,60 @@ async function getLeakForUser(leakId: string, userId: string) {
   return { leak }
 }
 
+async function resolveRetryFocus(
+  leakId: string,
+  input: {
+    retryActionId?: string
+    retryActionTitle?: string
+    retryActionKind?: string
+    retryFailureReason?: string
+  },
+) {
+  const fallback =
+    input.retryActionTitle && input.retryActionTitle.trim().length > 0
+      ? {
+          actionId: input.retryActionId || null,
+          actionTitle: input.retryActionTitle.trim(),
+          actionKind: input.retryActionKind || null,
+          failureReason: input.retryFailureReason || null,
+        }
+      : null
+
+  if (!input.retryActionId) return fallback
+
+  const action = await db.leakSolutionAction.findUnique({
+    where: { id: input.retryActionId },
+    include: {
+      plan: {
+        select: {
+          leakId: true,
+          mode: true,
+        },
+      },
+      feedbacks: {
+        where: { leakId },
+        orderBy: [
+          { updatedAt: 'desc' },
+          { createdAt: 'desc' },
+        ],
+        take: 1,
+        select: {
+          comment: true,
+        },
+      },
+    },
+  })
+
+  if (!action || action.plan.leakId !== leakId) return fallback
+
+  return {
+    actionId: action.id,
+    actionTitle: action.title,
+    actionKind: action.kind,
+    failureReason: input.retryFailureReason || action.feedbacks[0]?.comment || null,
+  }
+}
+
 async function loadPlans(leakId: string) {
   return db.leakSolutionPlan.findMany({
     where: { leakId },
@@ -434,6 +488,13 @@ export async function POST(
       }
     }
 
+    const retryFocus = await resolveRetryFocus(leakId, {
+      retryActionId,
+      retryActionTitle,
+      retryActionKind,
+      retryFailureReason,
+    })
+
     const previousSnapshot =
       target.leak.contextSnapshot &&
       typeof target.leak.contextSnapshot === 'object' &&
@@ -445,12 +506,12 @@ export async function POST(
       ...previousSnapshot,
       live: liveContext,
       history: liveContext.history,
-      retry: retryActionTitle
+      retry: retryFocus
         ? {
-            actionId: retryActionId || null,
-            actionTitle: retryActionTitle,
-            actionKind: retryActionKind || null,
-            failureReason: retryFailureReason || null,
+            actionId: retryFocus.actionId || null,
+            actionTitle: retryFocus.actionTitle,
+            actionKind: retryFocus.actionKind || null,
+            failureReason: retryFocus.failureReason || null,
             requestedAt: new Date().toISOString(),
           }
         : null,
@@ -470,14 +531,7 @@ export async function POST(
         ...target.leak,
         contextSnapshot: mergedSnapshot,
       },
-      retryFocus: retryActionTitle
-        ? {
-            actionId: retryActionId || null,
-            actionTitle: retryActionTitle,
-            actionKind: retryActionKind || null,
-            failureReason: retryFailureReason || null,
-          }
-        : null,
+      retryFocus,
     })
 
     await db.$transaction(async (tx) => {
