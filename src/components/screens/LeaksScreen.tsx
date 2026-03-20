@@ -3533,6 +3533,10 @@ export function LeaksScreen() {
                                   typeof metadata?.sourcePlanConfidenceReason === 'string'
                                     ? metadata.sourcePlanConfidenceReason
                                     : null
+                                const sourcePlanSummary =
+                                  typeof metadata?.sourcePlanSummary === 'string'
+                                    ? metadata.sourcePlanSummary
+                                    : null
                                 const feedback = sourceActionId ? feedbackByActionId.get(sourceActionId) : null
                                 const sourcePlanAction = sourceActionId ? planActionsById.get(sourceActionId) || null : null
 
@@ -3592,6 +3596,9 @@ export function LeaksScreen() {
                                       {sourcePlanConfidenceReason && (
                                         <div className="text-xs text-white/55">{sourcePlanConfidenceReason}</div>
                                       )}
+                                      {sourcePlanSummary && (
+                                        <div className="text-xs text-white/55">План: {sourcePlanSummary}</div>
+                                      )}
                                     </div>
                                     <div className="flex flex-wrap gap-2">
                                       <Button
@@ -3602,6 +3609,16 @@ export function LeaksScreen() {
                                       >
                                         Открыть
                                       </Button>
+                                      {sourceActionId && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => focusPlanAction(leak.id, sourceActionId)}
+                                          className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                        >
+                                          К шагу
+                                        </Button>
+                                      )}
                                       {sourceActionId && !feedback && (
                                         <>
                                           {(['worked', 'partially', 'not_worked'] as const).map((result) => (

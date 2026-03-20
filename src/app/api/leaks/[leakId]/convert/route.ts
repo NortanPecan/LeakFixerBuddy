@@ -198,6 +198,7 @@ export async function POST(
           ...(payload || {}),
           sourcePlanId: selectedPlan.id,
           sourcePlanMode: selectedPlan.mode,
+          sourcePlanSummary: selectedPlan.summary,
           sourcePlanConfidenceLabel: selectedPlan.confidenceLabel,
           sourcePlanConfidenceReason: selectedPlan.confidenceReason || null,
           sourceActionId: action.id,
