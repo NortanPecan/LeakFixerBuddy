@@ -97,6 +97,7 @@ interface LeakDraft {
 }
 
 type LeakStatusFilter = 'all' | 'new' | 'in_progress' | 'resolved' | 'archived'
+type LeakSourceFilter = 'all' | 'manual' | 'signal' | 'imported' | 'ai_suggested'
 
 const SEVERITY_OPTIONS: Array<{
   id: 'info' | 'warning' | 'critical'
@@ -114,6 +115,14 @@ const STATUS_OPTIONS: Array<{ id: LeakStatusFilter; label: string }> = [
   { id: 'in_progress', label: 'В работе' },
   { id: 'resolved', label: 'Решённые' },
   { id: 'archived', label: 'Архив' },
+]
+
+const SOURCE_OPTIONS: Array<{ id: LeakSourceFilter; label: string }> = [
+  { id: 'all', label: 'Все источники' },
+  { id: 'manual', label: 'Ручные' },
+  { id: 'signal', label: 'Сигналы' },
+  { id: 'ai_suggested', label: 'AI' },
+  { id: 'imported', label: 'Импорт' },
 ]
 
 const STATUS_LABELS: Record<Exclude<LeakStatusFilter, 'all'>, string> = {
@@ -319,6 +328,8 @@ export function LeaksScreen() {
   const [patterns, setPatterns] = useState<LeakPattern[]>([])
   const [activeTab, setActiveTab] = useState('inbox')
   const [statusFilter, setStatusFilter] = useState<LeakStatusFilter>('all')
+  const [sourceFilter, setSourceFilter] = useState<LeakSourceFilter>('all')
+  const [searchQuery, setSearchQuery] = useState('')
   const [title, setTitle] = useState('')
   const [details, setDetails] = useState('')
   const [severity, setSeverity] = useState<'info' | 'warning' | 'critical'>('warning')
@@ -378,9 +389,20 @@ export function LeaksScreen() {
   }, [user?.id])
 
   const filteredLeaks = useMemo(() => {
-    if (statusFilter === 'all') return leaks
-    return leaks.filter((leak) => leak.status === statusFilter)
-  }, [leaks, statusFilter])
+    return leaks.filter((leak) => {
+      if (statusFilter !== 'all' && leak.status !== statusFilter) return false
+      if (sourceFilter !== 'all' && leak.source !== sourceFilter) return false
+
+      if (!searchQuery.trim()) return true
+
+      const normalizedQuery = searchQuery.trim().toLowerCase()
+      return (
+        normalizeLookupValue(leak.title).includes(normalizedQuery) ||
+        normalizeLookupValue(leak.description).includes(normalizedQuery) ||
+        normalizeLookupValue(leak.sphere).includes(normalizedQuery)
+      )
+    })
+  }, [leaks, searchQuery, sourceFilter, statusFilter])
 
   const leakCounts = useMemo(() => {
     return leaks.reduce(
@@ -1259,6 +1281,30 @@ export function LeaksScreen() {
               </button>
             ))}
           </div>
+
+          <div className="flex flex-wrap gap-2">
+            {SOURCE_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setSourceFilter(option.id)}
+                className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                  sourceFilter === option.id
+                    ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
+                    : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <Input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Поиск по ликам, описанию или сфере"
+            className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
+          />
 
           {filteredLeaks.length === 0 ? (
             <Card style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
