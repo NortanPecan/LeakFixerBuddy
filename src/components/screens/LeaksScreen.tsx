@@ -295,6 +295,14 @@ interface LeakPolicyHint {
         lastUpdatedAt: string | null
       }>
     }
+    stuckOverview?: {
+      totalFunnels: number
+      high: number
+      medium: number
+      low: number
+      blockedFunnels: number
+      maxStuckScore: number
+    }
   }
 }
 
@@ -2083,6 +2091,32 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
                       dominantFailureBucket: 'unknown',
                       repeatedActions: [],
                       unstableActions: [],
+                    },
+              stuckOverview:
+                summary.stuckOverview &&
+                typeof summary.stuckOverview === 'object' &&
+                !Array.isArray(summary.stuckOverview)
+                  ? (() => {
+                      const overview = summary.stuckOverview as Record<string, unknown>
+                      return {
+                        totalFunnels:
+                          typeof overview.totalFunnels === 'number' ? Math.round(overview.totalFunnels) : 0,
+                        high: typeof overview.high === 'number' ? Math.round(overview.high) : 0,
+                        medium: typeof overview.medium === 'number' ? Math.round(overview.medium) : 0,
+                        low: typeof overview.low === 'number' ? Math.round(overview.low) : 0,
+                        blockedFunnels:
+                          typeof overview.blockedFunnels === 'number' ? Math.round(overview.blockedFunnels) : 0,
+                        maxStuckScore:
+                          typeof overview.maxStuckScore === 'number' ? Math.round(overview.maxStuckScore) : 0,
+                      }
+                    })()
+                  : {
+                      totalFunnels: 0,
+                      high: 0,
+                      medium: 0,
+                      low: 0,
+                      blockedFunnels: 0,
+                      maxStuckScore: 0,
                     },
               accepted: typeof summary.accepted === 'number' ? summary.accepted : 0,
               rejected: typeof summary.rejected === 'number' ? summary.rejected : 0,
@@ -3968,6 +4002,14 @@ export function LeaksScreen() {
                 repeatedActions: [],
                 unstableActions: [],
               }
+              const policyStuckOverview = policy?.summary?.stuckOverview || {
+                totalFunnels: 0,
+                high: 0,
+                medium: 0,
+                low: 0,
+                blockedFunnels: 0,
+                maxStuckScore: 0,
+              }
               const contextDriftHint = policy?.contextDrift || null
               const executionScore = policy?.executionScore || {
                 value: 0,
@@ -4053,6 +4095,20 @@ export function LeaksScreen() {
                   return (b.stuckScore || 0) - (a.stuckScore || 0)
                 })
                 .slice(0, 3)
+              const priorityPendingQueue = [currentFunnel, ...recentFunnels]
+                .filter((item): item is NonNullable<typeof currentFunnel> => Boolean(item))
+                .filter((item) => Boolean(item.nextPendingOutcomeActionId))
+                .sort((a, b) => {
+                  const urgencyRank = (value: 'low' | 'medium' | 'high') =>
+                    value === 'high' ? 3 : value === 'medium' ? 2 : 1
+                  const rankDiff = urgencyRank(b.urgency) - urgencyRank(a.urgency)
+                  if (rankDiff !== 0) return rankDiff
+                  const ageA = a.maxPendingOutcomeAgeMinutes || 0
+                  const ageB = b.maxPendingOutcomeAgeMinutes || 0
+                  if (ageB !== ageA) return ageB - ageA
+                  return b.stuckScore - a.stuckScore
+                })
+                .slice(0, 5)
               const contextPulse = {
                 energyAvg: getContextMetricNumber(leak.contextSnapshot, 'energyAvg'),
                 stressAvg: getContextMetricNumber(leak.contextSnapshot, 'stressAvg'),
@@ -4995,6 +5051,87 @@ export function LeaksScreen() {
                                     </div>
                                   )
                                 })}
+                              </div>
+                            )}
+                            {policyStuckOverview.totalFunnels > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <Badge className="bg-white/10 text-white/70 border-white/10">
+                                  Funnels: {policyStuckOverview.totalFunnels}
+                                </Badge>
+                                <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
+                                  High: {policyStuckOverview.high}
+                                </Badge>
+                                <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
+                                  Medium: {policyStuckOverview.medium}
+                                </Badge>
+                                <Badge className="bg-white/10 text-white/65 border-white/10">
+                                  Low: {policyStuckOverview.low}
+                                </Badge>
+                                <Badge className="bg-white/10 text-white/65 border-white/10">
+                                  Blocked: {policyStuckOverview.blockedFunnels}
+                                </Badge>
+                                <Badge className="bg-white/10 text-white/65 border-white/10">
+                                  Max score: {policyStuckOverview.maxStuckScore}
+                                </Badge>
+                              </div>
+                            )}
+                            {priorityPendingQueue.length > 0 && (
+                              <div className="mt-2 rounded-xl border border-white/10 bg-black/10 px-2 py-2 space-y-1">
+                                <div className="text-[11px] text-white/55">Priority pending queue</div>
+                                {priorityPendingQueue.slice(0, 3).map((item) => (
+                                  <div
+                                    key={`priority-${item.correlationId}`}
+                                    className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5"
+                                  >
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge className="bg-white/10 text-white/65 border-white/10">
+                                        {item.correlationId}
+                                      </Badge>
+                                      <Badge
+                                        className={
+                                          item.urgency === 'high'
+                                            ? 'bg-rose-500/10 text-rose-200 border-rose-500/20'
+                                            : item.urgency === 'medium'
+                                              ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                                              : 'bg-white/10 text-white/60 border-white/10'
+                                        }
+                                      >
+                                        {item.urgency} • {item.stuckScore}
+                                      </Badge>
+                                      {item.maxPendingOutcomeAgeMinutes !== null && (
+                                        <Badge className="bg-white/10 text-white/60 border-white/10">
+                                          {item.maxPendingOutcomeAgeMinutes}m
+                                        </Badge>
+                                      )}
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => focusPlanAction(leak.id, item.nextPendingOutcomeActionId || '')}
+                                        className="h-6 border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 px-2 text-[11px] text-amber-200"
+                                      >
+                                        Фокус
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() =>
+                                          sendPlanActionFeedback(
+                                            leak.id,
+                                            item.nextPendingOutcomeActionId || '',
+                                            'partially',
+                                            getFeedbackCommentDraft(
+                                              planActionsById.get(item.nextPendingOutcomeActionId || '') || null,
+                                            ),
+                                          )
+                                        }
+                                        disabled={savingFeedbackActionId === item.nextPendingOutcomeActionId}
+                                        className="h-6 border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 px-2 text-[11px] text-indigo-200"
+                                      >
+                                        Outcome
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             )}
                             <div className="mt-2 flex flex-wrap gap-2">

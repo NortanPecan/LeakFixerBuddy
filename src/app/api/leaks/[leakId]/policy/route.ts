@@ -456,6 +456,37 @@ function summarizeLearningSignals(snapshot: Record<string, unknown>) {
   }
 }
 
+function summarizeStuckOverview(
+  currentFunnel: ReturnType<typeof summarizeCurrentFunnel>,
+  recentFunnels: Array<Record<string, unknown>>,
+) {
+  const list = [
+    ...(currentFunnel ? [currentFunnel as Record<string, unknown>] : []),
+    ...recentFunnels,
+  ]
+  const urgencyOf = (item: Record<string, unknown>) =>
+    item.urgency === 'high' || item.urgency === 'medium' || item.urgency === 'low'
+      ? item.urgency
+      : 'low'
+  const scoreOf = (item: Record<string, unknown>) =>
+    typeof item.stuckScore === 'number' ? item.stuckScore : 0
+  const nudgeOf = (item: Record<string, unknown>) =>
+    typeof item.recommendedNudge === 'string' ? item.recommendedNudge : 'none'
+  const high = list.filter((item) => urgencyOf(item) === 'high').length
+  const medium = list.filter((item) => urgencyOf(item) === 'medium').length
+  const low = list.filter((item) => urgencyOf(item) === 'low').length
+  const maxStuckScore = list.length > 0 ? Math.max(...list.map((item) => scoreOf(item))) : 0
+  const blockedFunnels = list.filter((item) => nudgeOf(item) !== 'none').length
+  return {
+    totalFunnels: list.length,
+    high,
+    medium,
+    low,
+    blockedFunnels,
+    maxStuckScore,
+  }
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ leakId: string }> },
@@ -515,14 +546,18 @@ export async function GET(
 
     const currentCorrelationId = policy.nextBestAction?.correlationId || null
 
+    const currentFunnel = summarizeCurrentFunnel(nextSnapshot, currentCorrelationId)
+    const recentFunnels = summarizeRecentFunnels(nextSnapshot, currentCorrelationId, 5)
+
     return NextResponse.json({
       success: true,
       policy,
       summary: {
         ...summarizePolicyJournal(nextSnapshot),
-        currentFunnel: summarizeCurrentFunnel(nextSnapshot, currentCorrelationId),
-        recentFunnels: summarizeRecentFunnels(nextSnapshot, currentCorrelationId, 5),
+        currentFunnel,
+        recentFunnels,
         learningSignals: summarizeLearningSignals(nextSnapshot),
+        stuckOverview: summarizeStuckOverview(currentFunnel, recentFunnels),
       },
       runJournal: Array.isArray(nextSnapshot.runJournal) ? nextSnapshot.runJournal.slice(0, 20) : [],
     })
