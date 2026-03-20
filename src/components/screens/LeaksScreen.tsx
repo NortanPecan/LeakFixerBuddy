@@ -203,6 +203,18 @@ interface LeakPolicyHint {
     outcomePartial: number
     outcomeFailed: number
     rejectReasons: Record<string, number>
+    currentFunnel?: {
+      correlationId: string
+      suggestedAt: string | null
+      acceptedAt: string | null
+      rejectedAt: string | null
+      entityCreatedCount: number
+      outcomeCount: number
+      outcomeWorked: number
+      outcomePartial: number
+      outcomeFailed: number
+      lastOutcomeAt: string | null
+    } | null
   }
 }
 
@@ -1735,6 +1747,28 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
                   )
                 : {}
             return {
+              currentFunnel:
+                summary.currentFunnel &&
+                typeof summary.currentFunnel === 'object' &&
+                !Array.isArray(summary.currentFunnel)
+                  ? (() => {
+                      const funnel = summary.currentFunnel as Record<string, unknown>
+                      if (typeof funnel.correlationId !== 'string') return null
+                      return {
+                        correlationId: funnel.correlationId,
+                        suggestedAt: typeof funnel.suggestedAt === 'string' ? funnel.suggestedAt : null,
+                        acceptedAt: typeof funnel.acceptedAt === 'string' ? funnel.acceptedAt : null,
+                        rejectedAt: typeof funnel.rejectedAt === 'string' ? funnel.rejectedAt : null,
+                        entityCreatedCount:
+                          typeof funnel.entityCreatedCount === 'number' ? funnel.entityCreatedCount : 0,
+                        outcomeCount: typeof funnel.outcomeCount === 'number' ? funnel.outcomeCount : 0,
+                        outcomeWorked: typeof funnel.outcomeWorked === 'number' ? funnel.outcomeWorked : 0,
+                        outcomePartial: typeof funnel.outcomePartial === 'number' ? funnel.outcomePartial : 0,
+                        outcomeFailed: typeof funnel.outcomeFailed === 'number' ? funnel.outcomeFailed : 0,
+                        lastOutcomeAt: typeof funnel.lastOutcomeAt === 'string' ? funnel.lastOutcomeAt : null,
+                      }
+                    })()
+                  : null,
               accepted: typeof summary.accepted === 'number' ? summary.accepted : 0,
               rejected: typeof summary.rejected === 'number' ? summary.rejected : 0,
               outcomes: typeof summary.outcomes === 'number' ? summary.outcomes : 0,
@@ -2458,6 +2492,82 @@ export function LeaksScreen() {
     } catch (error) {
       showErrorToast(error, 'execute leak policy action')
       return false
+    }
+  }
+
+  const executeSuggestedPolicyAction = async (
+    leak: LeakEntity,
+    nextBestActionHint: NextBestActionHint,
+    selectedPlan: LeakSolutionPlan | null,
+    planActionsById: Map<string, LeakPlanAction>,
+  ) => {
+    if (nextBestActionHint.type === 'switch_mode' && nextBestActionHint.targetMode) {
+      await executePolicyAction(leak, {
+        actionType: 'switch_mode',
+        correlationId: nextBestActionHint.correlationId || null,
+        targetMode: nextBestActionHint.targetMode,
+        factors: nextBestActionHint.factors || [],
+      })
+      return
+    }
+
+    if (nextBestActionHint.type === 'create_entity' && nextBestActionHint.actionId && selectedPlan) {
+      const action = selectedPlan.actions.find((item) => item.id === nextBestActionHint.actionId)
+      if (!action) return
+      await executePolicyAction(leak, {
+        actionType: 'focus_action',
+        correlationId: nextBestActionHint.correlationId || null,
+        actionId: action.id,
+        actionTitle: action.title,
+        actionKind: action.kind,
+        factors: nextBestActionHint.factors || [],
+      })
+      await applySinglePlanAction(leak, selectedPlan.mode, action)
+      return
+    }
+
+    if (nextBestActionHint.type === 'give_feedback' && nextBestActionHint.actionId) {
+      const action = planActionsById.get(nextBestActionHint.actionId || '')
+      await executePolicyAction(leak, {
+        actionType: 'focus_action',
+        correlationId: nextBestActionHint.correlationId || null,
+        actionId: nextBestActionHint.actionId || null,
+        actionTitle: action?.title || null,
+        actionKind: action?.kind || null,
+        factors: nextBestActionHint.factors || [],
+      })
+      focusPlanAction(leak.id, nextBestActionHint.actionId || '')
+      return
+    }
+
+    if (nextBestActionHint.type === 'retry' && nextBestActionHint.actionId) {
+      const action = planActionsById.get(nextBestActionHint.actionId || '') || null
+      await executePolicyAction(leak, {
+        actionType: 'retry',
+        correlationId: nextBestActionHint.correlationId || null,
+        actionId: action?.id || nextBestActionHint.actionId || null,
+        actionTitle: action?.title || null,
+        actionKind: action?.kind || null,
+        factors: nextBestActionHint.factors || [],
+      })
+      await retryLeakPlanning(leak, {
+        action,
+        failureReason: null,
+      })
+      return
+    }
+
+    if (nextBestActionHint.type === 'regenerate_context') {
+      await executePolicyAction(leak, {
+        actionType: 'regenerate_context',
+        correlationId: nextBestActionHint.correlationId || null,
+        factors: nextBestActionHint.factors || [],
+      })
+      return
+    }
+
+    if (nextBestActionHint.type === 'generate') {
+      await generatePlansForLeak(leak.id, true)
     }
   }
 
@@ -3951,14 +4061,7 @@ export function LeaksScreen() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() =>
-                                    executePolicyAction(leak, {
-                                      actionType: 'switch_mode',
-                                      correlationId: nextBestActionHint.correlationId || null,
-                                      targetMode: nextBestActionHint.targetMode,
-                                      factors: nextBestActionHint.factors || [],
-                                    })
-                                  }
+                                  onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan || null, planActionsById)}
                                   disabled={selectingPlanLeakId === leak.id}
                                   className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
                                 >
@@ -3971,20 +4074,7 @@ export function LeaksScreen() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={async () => {
-                                    const action = selectedPlan.actions.find((item) => item.id === nextBestActionHint.actionId)
-                                    if (action) {
-                                      await executePolicyAction(leak, {
-                                        actionType: 'focus_action',
-                                        correlationId: nextBestActionHint.correlationId || null,
-                                        actionId: action.id,
-                                        actionTitle: action.title,
-                                        actionKind: action.kind,
-                                        factors: nextBestActionHint.factors || [],
-                                      })
-                                      applySinglePlanAction(leak, selectedPlan.mode, action)
-                                    }
-                                  }}
+                                  onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan || null, planActionsById)}
                                   className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
                                 >
                                   Создать рекомендуемый шаг
@@ -3994,18 +4084,7 @@ export function LeaksScreen() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={async () => {
-                                    const action = planActionsById.get(nextBestActionHint.actionId || '')
-                                    await executePolicyAction(leak, {
-                                      actionType: 'focus_action',
-                                      correlationId: nextBestActionHint.correlationId || null,
-                                      actionId: nextBestActionHint.actionId || null,
-                                      actionTitle: action?.title || null,
-                                      actionKind: action?.kind || null,
-                                      factors: nextBestActionHint.factors || [],
-                                    })
-                                    focusPlanAction(leak.id, nextBestActionHint.actionId || '')
-                                  }}
+                                  onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan || null, planActionsById)}
                                   className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
                                 >
                                   Перейти к feedback
@@ -4015,21 +4094,7 @@ export function LeaksScreen() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={async () => {
-                                    const action = planActionsById.get(nextBestActionHint.actionId || '') || null
-                                    await executePolicyAction(leak, {
-                                      actionType: 'retry',
-                                      correlationId: nextBestActionHint.correlationId || null,
-                                      actionId: action?.id || nextBestActionHint.actionId || null,
-                                      actionTitle: action?.title || null,
-                                      actionKind: action?.kind || null,
-                                      factors: nextBestActionHint.factors || [],
-                                    })
-                                    await retryLeakPlanning(leak, {
-                                      action: planActionsById.get(nextBestActionHint.actionId || '') || null,
-                                      failureReason: null,
-                                    })
-                                  }}
+                                  onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan || null, planActionsById)}
                                   disabled={retryingLeakId === leak.id}
                                   className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
                                 >
@@ -4040,23 +4105,21 @@ export function LeaksScreen() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={async () => {
-                                    if (nextBestActionHint.type === 'regenerate_context') {
-                                      await executePolicyAction(leak, {
-                                        actionType: 'regenerate_context',
-                                        correlationId: nextBestActionHint.correlationId || null,
-                                        factors: nextBestActionHint.factors || [],
-                                      })
-                                      return
-                                    }
-                                    await generatePlansForLeak(leak.id, true)
-                                  }}
+                                  onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan || null, planActionsById)}
                                   disabled={generatingPlansLeakId === leak.id}
                                   className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
                                 >
                                   {generatingPlansLeakId === leak.id ? 'Собираю...' : 'Пересобрать планы'}
                                 </Button>
                               )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan || null, planActionsById)}
+                                className="border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-200"
+                              >
+                                Принять совет
+                              </Button>
                               {[
                                 { key: 'not_now', label: 'Не сейчас' },
                                 { key: 'too_hard', label: 'Сложно сейчас' },
@@ -4099,6 +4162,48 @@ export function LeaksScreen() {
                               {policy.computedAt ? ` • ${formatDate(policy.computedAt)}` : ''}
                               {policyComputedMinutes !== null ? ` • ${policyComputedMinutes}м назад` : ''}
                             </div>
+                            {policy.summary?.currentFunnel && (
+                              <div className="mt-2 rounded-xl border border-white/10 bg-black/10 px-2 py-2">
+                                <div className="text-[11px] text-white/55">
+                                  Current funnel: {policy.summary.currentFunnel.correlationId}
+                                </div>
+                                <div className="mt-1 flex flex-wrap gap-2">
+                                  <Badge
+                                    className={
+                                      policy.summary.currentFunnel.suggestedAt
+                                        ? 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20'
+                                        : 'bg-white/10 text-white/60 border-white/10'
+                                    }
+                                  >
+                                    Suggested
+                                  </Badge>
+                                  <Badge
+                                    className={
+                                      policy.summary.currentFunnel.acceptedAt
+                                        ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
+                                        : 'bg-white/10 text-white/60 border-white/10'
+                                    }
+                                  >
+                                    Accepted
+                                  </Badge>
+                                  <Badge
+                                    className={
+                                      policy.summary.currentFunnel.rejectedAt
+                                        ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                                        : 'bg-white/10 text-white/60 border-white/10'
+                                    }
+                                  >
+                                    Rejected
+                                  </Badge>
+                                  <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                                    Entities: {policy.summary.currentFunnel.entityCreatedCount}
+                                  </Badge>
+                                  <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
+                                    Outcomes: {policy.summary.currentFunnel.outcomeCount}
+                                  </Badge>
+                                </div>
+                              </div>
+                            )}
                             <div className="mt-2 flex flex-wrap gap-2">
                               <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
                                 Принято: {policyAcceptedCount}

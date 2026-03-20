@@ -101,6 +101,58 @@ function summarizePolicyJournal(snapshot: Record<string, unknown>) {
   }
 }
 
+function summarizeCurrentFunnel(
+  snapshot: Record<string, unknown>,
+  correlationId: string | null,
+) {
+  if (!correlationId) {
+    return null
+  }
+  const journal = Array.isArray(snapshot.runJournal) ? snapshot.runJournal : []
+  let suggestedAt: string | null = null
+  let acceptedAt: string | null = null
+  let rejectedAt: string | null = null
+  let entityCreatedCount = 0
+  let outcomeCount = 0
+  let outcomeWorked = 0
+  let outcomePartial = 0
+  let outcomeFailed = 0
+  let lastOutcomeAt: string | null = null
+
+  journal.forEach((item) => {
+    if (!item || typeof item !== 'object') return
+    const event = item as Record<string, unknown>
+    if (event.policyCorrelationId !== correlationId) return
+    const at = typeof event.at === 'string' ? event.at : null
+    if (event.type === 'policy_suggested' && !suggestedAt) suggestedAt = at
+    if (event.type === 'policy_accepted' && !acceptedAt) acceptedAt = at
+    if (event.type === 'policy_rejected' && !rejectedAt) rejectedAt = at
+    if (event.type === 'action_created') entityCreatedCount += 1
+    if (event.type === 'policy_outcome') {
+      outcomeCount += 1
+      if (event.result === 'worked') outcomeWorked += 1
+      if (event.result === 'partially') outcomePartial += 1
+      if (event.result === 'not_worked') outcomeFailed += 1
+      if (at && (!lastOutcomeAt || new Date(at).getTime() > new Date(lastOutcomeAt).getTime())) {
+        lastOutcomeAt = at
+      }
+    }
+  })
+
+  return {
+    correlationId,
+    suggestedAt,
+    acceptedAt,
+    rejectedAt,
+    entityCreatedCount,
+    outcomeCount,
+    outcomeWorked,
+    outcomePartial,
+    outcomeFailed,
+    lastOutcomeAt,
+  }
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ leakId: string }> },
@@ -161,7 +213,10 @@ export async function GET(
     return NextResponse.json({
       success: true,
       policy,
-      summary: summarizePolicyJournal(nextSnapshot),
+      summary: {
+        ...summarizePolicyJournal(nextSnapshot),
+        currentFunnel: summarizeCurrentFunnel(nextSnapshot, policy.nextBestAction?.correlationId || null),
+      },
       runJournal: Array.isArray(nextSnapshot.runJournal) ? nextSnapshot.runJournal.slice(0, 10) : [],
     })
   } catch (error) {
