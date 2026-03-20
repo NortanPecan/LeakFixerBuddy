@@ -926,6 +926,34 @@ function getLeakFeedbackTimeline(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
   return rows.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
 }
 
+function getLatestWorkedOutcome(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
+  const workedRows: Array<{
+    actionTitle: string
+    actionKind: LeakPlanAction['kind']
+    mode: LeakSolutionPlan['mode']
+    updatedAt: string
+    linkedEntity: LeakActionLink | null
+  }> = []
+
+  plans?.forEach((plan) => {
+    plan.actions.forEach((action) => {
+      const feedback = getLatestPlanFeedback(action)
+      if (!feedback || feedback.result !== 'worked') return
+
+      workedRows.push({
+        actionTitle: action.title,
+        actionKind: action.kind,
+        mode: plan.mode,
+        updatedAt: feedback.updatedAt,
+        linkedEntity: getLinkedEntityForPlanAction(leak, action),
+      })
+    })
+  })
+
+  workedRows.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  return workedRows[0] || null
+}
+
 function getLeakGroupKey(leak: LeakEntity, groupBy: LeakGroupOption) {
   if (groupBy === 'sphere') {
     return leak.sphere || '__no_sphere__'
@@ -2505,6 +2533,7 @@ export function LeaksScreen() {
               const feedbackByActionId = getFeedbackByActionId(leakPlans)
               const planActionsById = getPlanActionById(leakPlans)
               const feedbackTimeline = getLeakFeedbackTimeline(leak, leakPlans)
+              const latestWorkedOutcome = getLatestWorkedOutcome(leak, leakPlans)
               const contextHypotheses = buildContextHypotheses(leak.contextSnapshot)
               const retryFocus = getRetryFocus(leak.contextSnapshot)
               const matchedPattern = getBestPatternForLeak(patterns, leak)
@@ -2687,6 +2716,29 @@ export function LeaksScreen() {
                                 Последний retry: {formatDate(retryFocus.requestedAt)}
                               </div>
                             )}
+                          </div>
+                        )}
+                        {latestWorkedOutcome && (
+                          <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                            <div className="text-xs text-emerald-100">
+                              Последний сработавший шаг: {latestWorkedOutcome.actionTitle}
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-2">
+                              <Badge className={PLAN_MODE_STYLES[latestWorkedOutcome.mode]}>
+                                {PLAN_MODE_LABELS[latestWorkedOutcome.mode]}
+                              </Badge>
+                              <Badge variant="outline" className="border-emerald-400/30 text-emerald-100">
+                                {PLAN_KIND_LABELS[latestWorkedOutcome.actionKind]}
+                              </Badge>
+                              {latestWorkedOutcome.linkedEntity && (
+                                <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                                  Сущность: {getActionLabel(latestWorkedOutcome.linkedEntity.entityType)} • {latestWorkedOutcome.linkedEntity.label}
+                                </Badge>
+                              )}
+                              <Badge className="bg-white/10 text-white/70 border-white/10">
+                                Feedback: {formatDate(latestWorkedOutcome.updatedAt)}
+                              </Badge>
+                            </div>
                           </div>
                         )}
                         {guidance.selectedPlan && (
