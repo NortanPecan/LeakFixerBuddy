@@ -400,6 +400,7 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       failedActions: 0,
       pendingActions: 0,
       feedbackActions: 0,
+      bottleneckText: 'Нет выбранного режима: сначала собери минимум/base/maximum.',
     }
   }
 
@@ -416,6 +417,11 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
   ).length
   const feedbackActions = workedActions + partialActions + failedActions
   const pendingActions = Math.max(totalActions - createdActions, 0)
+  const firstPendingAction = selectedPlan.actions.find((action) => !isConvertedPlanAction(action)) || null
+  const firstNoFeedbackAction =
+    selectedPlan.actions.find((action) => isConvertedPlanAction(action) && !getLatestPlanFeedback(action)) || null
+  const firstFailedAction =
+    selectedPlan.actions.find((action) => getLatestPlanFeedback(action)?.result === 'not_worked') || null
 
   if (leak.status === 'resolved' || leak.status === 'archived') {
     return {
@@ -435,6 +441,11 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       failedActions,
       pendingActions,
       feedbackActions,
+      bottleneckText:
+        firstFailedAction?.title ||
+        firstNoFeedbackAction?.title ||
+        firstPendingAction?.title ||
+        'Leak закрыт, но можно вернуть в работу при повторении симптома.',
     }
   }
 
@@ -453,6 +464,9 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       failedActions,
       pendingActions,
       feedbackActions,
+      bottleneckText: firstFailedAction
+        ? `Сбойный шаг: ${firstFailedAction.title}`
+        : 'Есть неуспешные шаги, лучше пересобрать подход.',
     }
   }
 
@@ -471,6 +485,9 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       failedActions,
       pendingActions,
       feedbackActions,
+      bottleneckText: firstPendingAction
+        ? `Не создано: ${firstPendingAction.title}`
+        : 'Есть неприменённые шаги в выбранном режиме.',
     }
   }
 
@@ -489,6 +506,9 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       failedActions,
       pendingActions,
       feedbackActions,
+      bottleneckText: firstNoFeedbackAction
+        ? `Нет feedback: ${firstNoFeedbackAction.title}`
+        : 'Не по всем созданным шагам есть feedback.',
     }
   }
 
@@ -507,6 +527,7 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       failedActions,
       pendingActions,
       feedbackActions,
+      bottleneckText: 'Есть рабочие шаги: зафиксируй результат и закрой leak, если симптом ушёл.',
     }
   }
 
@@ -525,6 +546,7 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       failedActions,
       pendingActions,
       feedbackActions,
+      bottleneckText: 'Есть частично успешные шаги: стоит усилить режим или сменить сценарий.',
     }
   }
 
@@ -542,6 +564,7 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
     failedActions,
     pendingActions,
     feedbackActions,
+    bottleneckText: 'Критичных блокеров нет: можно тестировать следующий шаг или уточнять контекст.',
   }
 }
 
@@ -2572,6 +2595,11 @@ export function LeaksScreen() {
                         </div>
                         <div className="mt-1 text-sm font-medium text-white">{guidance.title}</div>
                         <p className="mt-1 text-sm text-white/70">{guidance.description}</p>
+                        {guidance.bottleneckText && (
+                          <div className="mt-2 rounded-xl border border-white/10 bg-black/10 px-3 py-2 text-xs text-white/75">
+                            Узкое место: {guidance.bottleneckText}
+                          </div>
+                        )}
                         {retryFocus?.actionTitle && (
                           <div className="mt-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
                             <div className="text-xs text-amber-200">
