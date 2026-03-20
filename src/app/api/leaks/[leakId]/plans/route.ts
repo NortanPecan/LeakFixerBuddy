@@ -242,6 +242,7 @@ async function buildLiveLeakContext(userId: string, leakId: string) {
     totalPlanActionsCount > 0
       ? Number(((totalFeedbackCount / totalPlanActionsCount) * 100).toFixed(0))
       : null
+  const latestFeedback = feedbackRows[0] || null
 
   return {
     generatedAt: new Date().toISOString(),
@@ -283,6 +284,9 @@ async function buildLiveLeakContext(userId: string, leakId: string) {
       feedbackWorkedCount: workedFeedbackCount,
       feedbackPartiallyCount: partialFeedbackCount,
       feedbackFailedCount: failedFeedbackCount,
+      latestFeedbackResult: latestFeedback?.result || null,
+      latestFeedbackAt: latestFeedback?.updatedAt.toISOString() || null,
+      latestFeedbackActionTitle: latestFeedback?.solutionAction.title || null,
     },
     history: {
       linkedEntities: linkedEntities.map((item) => {

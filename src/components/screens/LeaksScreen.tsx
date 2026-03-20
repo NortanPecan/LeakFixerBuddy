@@ -627,6 +627,9 @@ function getContextSnapshotItems(contextSnapshot?: Record<string, unknown> | nul
     feedbackWorkedCount: 'Сработало (count)',
     feedbackPartiallyCount: 'Частично (count)',
     feedbackFailedCount: 'Не помогло (count)',
+    latestFeedbackResult: 'Последний feedback',
+    latestFeedbackAt: 'Последний feedback (дата)',
+    latestFeedbackActionTitle: 'Последний feedback (шаг)',
     retryResolvedAt: 'Retry закрыт',
   }
 
