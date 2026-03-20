@@ -2804,6 +2804,34 @@ export function LeaksScreen() {
                                 Feedback: {formatDate(latestWorkedOutcome.updatedAt)}
                               </Badge>
                             </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {latestWorkedOutcome.linkedEntity ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setScreen(getActionScreen(latestWorkedOutcome.linkedEntity!.entityType))}
+                                  className="border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-100"
+                                >
+                                  Открыть последний сработавший
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    const matchedAction = selectedPlan?.actions.find(
+                                      (action) => action.title === latestWorkedOutcome.actionTitle,
+                                    )
+                                    if (matchedAction) {
+                                      focusPlanAction(leak.id, matchedAction.id)
+                                    }
+                                  }}
+                                  className="border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-100"
+                                >
+                                  Перейти к шагу
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         )}
                         {guidance.selectedPlan && (
