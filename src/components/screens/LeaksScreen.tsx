@@ -1738,6 +1738,26 @@ function getPolicyResultLabel(result: string | null | undefined) {
   return result
 }
 
+function getPolicyUrgencyLabel(value: 'low' | 'medium' | 'high') {
+  if (value === 'high') return 'Высокая'
+  if (value === 'medium') return 'Средняя'
+  return 'Низкая'
+}
+
+function getPolicyNudgeLabel(value: 'accept_or_reject' | 'create_entity' | 'collect_feedback' | 'none') {
+  if (value === 'accept_or_reject') return 'Принять/отклонить совет'
+  if (value === 'create_entity') return 'Создать сущность'
+  if (value === 'collect_feedback') return 'Собрать outcome'
+  return 'Без срочного nudge'
+}
+
+function getPolicyStuckSignalLabel(value: 'pending_feedback' | 'no_entity_after_accept' | 'no_decision' | 'none') {
+  if (value === 'pending_feedback') return 'Долго нет feedback'
+  if (value === 'no_entity_after_accept') return 'Принято, но не запущено'
+  if (value === 'no_decision') return 'Нет решения по совету'
+  return 'Нет блокировок'
+}
+
 function normalizeContextDrift(value: unknown): ContextDriftHint | null {
   if (!value || typeof value !== 'object') return null
   const candidate = value as Record<string, unknown>
@@ -4116,8 +4136,12 @@ export function LeaksScreen() {
                           : currentFunnel?.stage === 'rejected'
                             ? 'Совет отклонён'
                             : 'Нет этапа'
-              const nextPendingFunnelActionId = currentFunnel?.nextPendingOutcomeActionId || null
+              const nextPendingFunnelActionId =
+                currentFunnel?.oldestPendingOutcomeActionId ||
+                currentFunnel?.nextPendingOutcomeActionId ||
+                null
               const nextPendingFunnelActionTitle =
+                currentFunnel?.oldestPendingOutcomeActionTitle ||
                 currentFunnel?.nextPendingOutcomeActionTitle ||
                 currentFunnel?.pendingOutcomeActionTitles?.[0] ||
                 null
@@ -4133,7 +4157,9 @@ export function LeaksScreen() {
                 .slice(0, 3)
               const priorityPendingQueue = [currentFunnel, ...recentFunnels]
                 .filter((item): item is NonNullable<typeof currentFunnel> => Boolean(item))
-                .filter((item) => Boolean(item.nextPendingOutcomeActionId))
+                .filter((item) =>
+                  Boolean(item.oldestPendingOutcomeActionId || item.nextPendingOutcomeActionId),
+                )
                 .sort((a, b) => {
                   const urgencyRank = (value: 'low' | 'medium' | 'high') =>
                     value === 'high' ? 3 : value === 'medium' ? 2 : 1
@@ -4808,17 +4834,17 @@ export function LeaksScreen() {
                                           : 'bg-white/10 text-white/65 border-white/10'
                                     }
                                   >
-                                    Urgency: {currentFunnel.urgency}
+                                    Срочность: {getPolicyUrgencyLabel(currentFunnel.urgency)}
                                   </Badge>
                                   <Badge className="bg-white/10 text-white/65 border-white/10">
                                     Stuck score: {currentFunnel.stuckScore}
                                   </Badge>
                                   <Badge className="bg-white/10 text-white/60 border-white/10">
-                                    Signal: {currentFunnel.primaryStuckSignal}
+                                    Сигнал: {getPolicyStuckSignalLabel(currentFunnel.primaryStuckSignal)}
                                   </Badge>
                                   {currentFunnel.recommendedNudge !== 'none' && (
                                     <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
-                                      Stuck: {currentFunnel.recommendedNudge}
+                                      Nudge: {getPolicyNudgeLabel(currentFunnel.recommendedNudge)}
                                     </Badge>
                                   )}
                                   {currentFunnel.pendingOutcomeActionIds.length > 0 && (
@@ -5044,10 +5070,10 @@ export function LeaksScreen() {
                                                 : 'bg-white/10 text-white/60 border-white/10'
                                           }
                                         >
-                                          {funnel.urgency}
+                                          Срочность: {getPolicyUrgencyLabel(funnel.urgency)}
                                         </Badge>
                                         <Badge className="bg-white/10 text-white/60 border-white/10">
-                                          score {funnel.stuckScore}
+                                          Stuck score: {funnel.stuckScore}
                                         </Badge>
                                         <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
                                           E:{funnel.entityCreatedCount}
@@ -5067,38 +5093,54 @@ export function LeaksScreen() {
                                         )}
                                         {funnel.recommendedNudge !== 'none' && (
                                           <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
-                                            {funnel.recommendedNudge}
+                                            Nudge: {getPolicyNudgeLabel(funnel.recommendedNudge)}
                                           </Badge>
                                         )}
                                         <Badge className="bg-white/10 text-white/60 border-white/10">
-                                          {funnel.primaryStuckSignal}
+                                          Сигнал: {getPolicyStuckSignalLabel(funnel.primaryStuckSignal)}
                                         </Badge>
-                                        {funnel.nextPendingOutcomeActionId && (
+                                        {(funnel.oldestPendingOutcomeActionId || funnel.nextPendingOutcomeActionId) && (
                                           <Button
                                             size="sm"
                                             variant="outline"
-                                            onClick={() => focusPlanAction(leak.id, funnel.nextPendingOutcomeActionId || '')}
+                                            onClick={() =>
+                                              focusPlanAction(
+                                                leak.id,
+                                                funnel.oldestPendingOutcomeActionId ||
+                                                  funnel.nextPendingOutcomeActionId ||
+                                                  '',
+                                              )
+                                            }
                                             className="h-6 border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 px-2 text-[11px] text-amber-200"
                                           >
                                             К pending
                                           </Button>
                                         )}
                                         {funnel.recommendedNudge === 'collect_feedback' &&
-                                          funnel.nextPendingOutcomeActionId && (
+                                          (funnel.oldestPendingOutcomeActionId ||
+                                            funnel.nextPendingOutcomeActionId) && (
                                             <Button
                                               size="sm"
                                               variant="outline"
-                                              onClick={() =>
+                                              onClick={() => {
+                                                const targetActionId =
+                                                  funnel.oldestPendingOutcomeActionId ||
+                                                  funnel.nextPendingOutcomeActionId ||
+                                                  ''
                                                 sendPlanActionFeedback(
                                                   leak.id,
-                                                  funnel.nextPendingOutcomeActionId || '',
+                                                  targetActionId,
                                                   'partially',
                                                   getFeedbackCommentDraft(
-                                                    planActionsById.get(funnel.nextPendingOutcomeActionId || '') || null,
+                                                    planActionsById.get(targetActionId) || null,
                                                   ),
                                                 )
+                                              }}
+                                              disabled={
+                                                savingFeedbackActionId ===
+                                                (funnel.oldestPendingOutcomeActionId ||
+                                                  funnel.nextPendingOutcomeActionId)
                                               }
-                                              disabled={savingFeedbackActionId === funnel.nextPendingOutcomeActionId}
                                               className="h-6 border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 px-2 text-[11px] text-indigo-200"
                                             >
                                               Quick outcome
@@ -5156,7 +5198,7 @@ export function LeaksScreen() {
                                               : 'bg-white/10 text-white/60 border-white/10'
                                         }
                                       >
-                                        {item.urgency} • {item.stuckScore}
+                                        {getPolicyUrgencyLabel(item.urgency)} • {item.stuckScore}
                                       </Badge>
                                       {item.maxPendingOutcomeAgeMinutes !== null && (
                                         <Badge className="bg-white/10 text-white/60 border-white/10">
@@ -5164,7 +5206,7 @@ export function LeaksScreen() {
                                         </Badge>
                                       )}
                                       <Badge className="bg-white/10 text-white/60 border-white/10">
-                                        {item.primaryStuckSignal}
+                                        {getPolicyStuckSignalLabel(item.primaryStuckSignal)}
                                       </Badge>
                                       <Button
                                         size="sm"
@@ -5182,17 +5224,25 @@ export function LeaksScreen() {
                                       <Button
                                         size="sm"
                                         variant="outline"
-                                        onClick={() =>
+                                        onClick={() => {
+                                          const targetActionId =
+                                            item.oldestPendingOutcomeActionId ||
+                                            item.nextPendingOutcomeActionId ||
+                                            ''
                                           sendPlanActionFeedback(
                                             leak.id,
-                                            item.nextPendingOutcomeActionId || '',
+                                            targetActionId,
                                             'partially',
                                             getFeedbackCommentDraft(
-                                              planActionsById.get(item.nextPendingOutcomeActionId || '') || null,
+                                              planActionsById.get(targetActionId) || null,
                                             ),
                                           )
+                                        }}
+                                        disabled={
+                                          savingFeedbackActionId ===
+                                          (item.oldestPendingOutcomeActionId ||
+                                            item.nextPendingOutcomeActionId)
                                         }
-                                        disabled={savingFeedbackActionId === item.nextPendingOutcomeActionId}
                                         className="h-6 border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 px-2 text-[11px] text-indigo-200"
                                       >
                                         Outcome
