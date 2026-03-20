@@ -1196,7 +1196,9 @@ export function LeaksScreen() {
   const [savingPatternLeakType, setSavingPatternLeakType] = useState<string | null>(null)
   const [retryingLeakId, setRetryingLeakId] = useState<string | null>(null)
   const [focusedPlanActionId, setFocusedPlanActionId] = useState<string | null>(null)
-  const [feedbackHistoryFilter, setFeedbackHistoryFilter] = useState<FeedbackHistoryFilter>('all')
+  const [feedbackHistoryFilterByLeak, setFeedbackHistoryFilterByLeak] = useState<
+    Record<string, FeedbackHistoryFilter>
+  >({})
 
   useEffect(() => {
     if (!focusedPlanActionId) return
@@ -1215,15 +1217,22 @@ export function LeaksScreen() {
     if (!expandedLeak) return
     const guidance = buildLeakGuidance(expandedLeak, leakPlans)
 
-    if (guidance?.failedActions && guidance.failedActions > 0 && feedbackHistoryFilter !== 'problem') {
-      setFeedbackHistoryFilter('problem')
+    const currentFilter = feedbackHistoryFilterByLeak[expandedLeakId] || 'all'
+    if (guidance?.failedActions && guidance.failedActions > 0 && currentFilter !== 'problem') {
+      setFeedbackHistoryFilterByLeak((current) => ({
+        ...current,
+        [expandedLeakId]: 'problem',
+      }))
       return
     }
 
-    if ((!guidance?.failedActions || guidance.failedActions === 0) && feedbackHistoryFilter === 'problem') {
-      setFeedbackHistoryFilter('all')
+    if ((!guidance?.failedActions || guidance.failedActions === 0) && currentFilter === 'problem') {
+      setFeedbackHistoryFilterByLeak((current) => ({
+        ...current,
+        [expandedLeakId]: 'all',
+      }))
     }
-  }, [expandedLeakId, plansByLeak, leaks, feedbackHistoryFilter])
+  }, [expandedLeakId, plansByLeak, leaks, feedbackHistoryFilterByLeak])
 
   const hasDraft = title.trim().length > 0 || details.trim().length > 0
 
@@ -2639,6 +2648,7 @@ export function LeaksScreen() {
               const feedbackByActionId = getFeedbackByActionId(leakPlans)
               const planActionsById = getPlanActionById(leakPlans)
               const feedbackTimeline = getLeakFeedbackTimeline(leak, leakPlans)
+              const feedbackHistoryFilter = feedbackHistoryFilterByLeak[leak.id] || 'all'
               const visibleFeedbackTimeline =
                 feedbackHistoryFilter === 'problem'
                   ? feedbackTimeline.filter((item) => item.result !== 'worked')
@@ -3475,7 +3485,12 @@ export function LeaksScreen() {
                             <div className="flex flex-wrap gap-2">
                               <button
                                 type="button"
-                                onClick={() => setFeedbackHistoryFilter('all')}
+                                onClick={() =>
+                                  setFeedbackHistoryFilterByLeak((current) => ({
+                                    ...current,
+                                    [leak.id]: 'all',
+                                  }))
+                                }
                                 className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
                                   feedbackHistoryFilter === 'all'
                                     ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
@@ -3486,7 +3501,12 @@ export function LeaksScreen() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => setFeedbackHistoryFilter('problem')}
+                                onClick={() =>
+                                  setFeedbackHistoryFilterByLeak((current) => ({
+                                    ...current,
+                                    [leak.id]: 'problem',
+                                  }))
+                                }
                                 className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
                                   feedbackHistoryFilter === 'problem'
                                     ? 'border-amber-400/30 bg-amber-500/10 text-amber-200'
