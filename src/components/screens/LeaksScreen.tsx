@@ -339,6 +339,7 @@ export function LeaksScreen() {
   const [applyingPlanLeakId, setApplyingPlanLeakId] = useState<string | null>(null)
   const [applyingPlanActionId, setApplyingPlanActionId] = useState<string | null>(null)
   const [savingFeedbackActionId, setSavingFeedbackActionId] = useState<string | null>(null)
+  const [feedbackCommentByAction, setFeedbackCommentByAction] = useState<Record<string, string>>({})
   const [savingPatternLeakType, setSavingPatternLeakType] = useState<string | null>(null)
 
   const hasDraft = title.trim().length > 0 || details.trim().length > 0
@@ -699,6 +700,14 @@ export function LeaksScreen() {
 
   const getActionFeedback = (action: LeakPlanAction) => action.feedbacks?.[0] || null
 
+  const getFeedbackCommentDraft = (action: LeakPlanAction) => {
+    if (feedbackCommentByAction[action.id] !== undefined) {
+      return feedbackCommentByAction[action.id]
+    }
+
+    return action.feedbacks?.[0]?.comment || ''
+  }
+
   const applySelectedPlan = async (leak: LeakEntity, mode?: LeakSolutionPlan['mode']) => {
     if (!user?.id) return
 
@@ -793,6 +802,7 @@ export function LeaksScreen() {
     leakId: string,
     actionId: string,
     result: LeakPlanFeedback['result'],
+    comment?: string,
   ) => {
     if (!user?.id) return
 
@@ -805,6 +815,7 @@ export function LeaksScreen() {
           userId: user.id,
           solutionActionId: actionId,
           result,
+          comment: comment?.trim() || null,
         }),
       })
 
@@ -835,6 +846,10 @@ export function LeaksScreen() {
         })
       }
       showSuccessToast('Фидбек по действию сохранён')
+      setFeedbackCommentByAction((current) => ({
+        ...current,
+        [actionId]: comment?.trim() || '',
+      }))
     } catch (error) {
       showErrorToast(error, 'save plan feedback')
     } finally {
@@ -1694,6 +1709,17 @@ export function LeaksScreen() {
                                       )}
                                       {isPlanActionConverted(action) && (
                                         <div className="mt-2 flex flex-wrap gap-2">
+                                          <Input
+                                            value={getFeedbackCommentDraft(action)}
+                                            onChange={(event) =>
+                                              setFeedbackCommentByAction((current) => ({
+                                                ...current,
+                                                [action.id]: event.target.value,
+                                              }))
+                                            }
+                                            placeholder="Почему это сработало или не помогло"
+                                            className="h-9 min-w-[240px] bg-white/5 border-white/10 text-white placeholder:text-white/30"
+                                          />
                                           {(['worked', 'partially', 'not_worked'] as const).map((result) => {
                                             const feedback = getActionFeedback(action)
                                             const isActive = feedback?.result === result
@@ -1709,7 +1735,14 @@ export function LeaksScreen() {
                                                 key={result}
                                                 size="sm"
                                                 variant="outline"
-                                                onClick={() => sendPlanActionFeedback(leak.id, action.id, result)}
+                                                onClick={() =>
+                                                  sendPlanActionFeedback(
+                                                    leak.id,
+                                                    action.id,
+                                                    result,
+                                                    getFeedbackCommentDraft(action),
+                                                  )
+                                                }
                                                 disabled={savingFeedbackActionId === action.id}
                                                 className={
                                                   isActive

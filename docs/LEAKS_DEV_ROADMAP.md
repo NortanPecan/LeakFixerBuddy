@@ -453,3 +453,4 @@
   - leaks now support fast sphere classification during capture and quick sphere reassignment in details
   - leak title and description can now be refined directly inside the leak card
   - signals and learned patterns now reopen an existing active leak instead of creating silent duplicates
+  - action feedback now supports a short comment, not only `worked / partially / not_worked`
