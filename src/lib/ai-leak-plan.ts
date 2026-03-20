@@ -470,6 +470,25 @@ export async function generateLeakPlans(input: LeakPlanInput): Promise<{
           .filter(Boolean)
           .join(' | ')
       : null
+  const retryFocusKey = retryFocus?.actionTitle?.trim().toLowerCase() || null
+  const successfulAntiExamples = mergedHistory.actionFeedback
+    .filter(
+      (item) =>
+        item.result === 'worked' &&
+        (!retryFocusKey || item.actionTitle.trim().toLowerCase() !== retryFocusKey),
+    )
+    .slice(0, 5)
+    .map((item) => `${item.actionKind}:${item.actionTitle}`)
+  const failedRetryExamples =
+    retryFocusKey
+      ? mergedHistory.actionFeedback
+          .filter(
+            (item) =>
+              item.result === 'not_worked' && item.actionTitle.trim().toLowerCase() === retryFocusKey,
+          )
+          .slice(0, 3)
+          .map((item) => `${item.actionTitle}${item.comment ? ` (${item.comment})` : ''}`)
+      : []
 
   const userMessage = [
     retryFocusLine,
@@ -482,6 +501,12 @@ export async function generateLeakPlans(input: LeakPlanInput): Promise<{
     triedSolutions.length > 0 ? `Что уже пробовали: ${triedSolutions.join('; ')}` : null,
     entitySummary ? `Что уже создавали из этого leak: ${entitySummary}` : null,
     feedbackSummary ? `Фидбек по действиям: ${feedbackSummary}` : null,
+    successfulAntiExamples.length > 0
+      ? `Успешные анти-примеры (не заменять retry-целью): ${successfulAntiExamples.join('; ')}`
+      : null,
+    failedRetryExamples.length > 0
+      ? `Что уже не сработало у retry-цели: ${failedRetryExamples.join('; ')}`
+      : null,
     'Требование к confidenceReason: укажи конкретный фактор из контекста и формулируй это как гипотезу, не как доказанный факт.',
   ]
     .filter(Boolean)

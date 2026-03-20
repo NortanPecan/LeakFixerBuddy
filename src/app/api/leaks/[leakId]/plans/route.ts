@@ -21,6 +21,21 @@ const GeneratePlansSchema = z.object({
 })
 
 const CONTEXT_LOOKBACK_DAYS = 7
+const PLAN_MODE_SET = new Set<LeakPlanMode>(PLAN_MODE_ORDER)
+
+function normalizeSnapshot(snapshot: unknown): Record<string, unknown> {
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+    return {}
+  }
+
+  return snapshot as Record<string, unknown>
+}
+
+function getSnapshotMode(snapshot: Record<string, unknown>, key: string): LeakPlanMode | null {
+  const raw = snapshot[key]
+  if (typeof raw !== 'string') return null
+  return PLAN_MODE_SET.has(raw as LeakPlanMode) ? (raw as LeakPlanMode) : null
+}
 
 function toNumber(value: unknown): number | null {
   if (typeof value !== 'number' || Number.isNaN(value)) return null
@@ -523,17 +538,14 @@ export async function POST(
       retryFailureReason,
     })
 
-    const previousSnapshot =
-      target.leak.contextSnapshot &&
-      typeof target.leak.contextSnapshot === 'object' &&
-      !Array.isArray(target.leak.contextSnapshot)
-        ? (target.leak.contextSnapshot as Record<string, unknown>)
-        : {}
+    const previousSnapshot = normalizeSnapshot(target.leak.contextSnapshot)
     const liveContext = await buildLiveLeakContext(userId, leakId)
+    const selectedPlanMode = getSnapshotMode(previousSnapshot, 'selectedPlanMode') || 'base'
     const mergedSnapshot = {
       ...previousSnapshot,
       live: liveContext,
       history: liveContext.history,
+      selectedPlanMode,
       retry: retryFocus
         ? {
             actionId: retryFocus.actionId || null,
@@ -588,7 +600,7 @@ export async function POST(
             summary: plan.summary,
             confidenceLabel: plan.confidenceLabel,
             confidenceReason: plan.confidenceReason,
-            isSelected: plan.mode === 'base',
+            isSelected: plan.mode === selectedPlanMode,
             source: provider,
             actions: {
               create: plan.actions.map((action, index) => ({
@@ -645,6 +657,20 @@ export async function PATCH(
       await tx.leakSolutionPlan.updateMany({
         where: { leakId, mode },
         data: { isSelected: true },
+      })
+
+      const leakSnapshotSource = await tx.leak.findUnique({
+        where: { id: leakId },
+        select: { contextSnapshot: true },
+      })
+      const snapshot = normalizeSnapshot(leakSnapshotSource?.contextSnapshot)
+      snapshot.selectedPlanMode = mode
+      snapshot.contextUpdatedAt = new Date().toISOString()
+      await tx.leak.update({
+        where: { id: leakId },
+        data: {
+          contextSnapshot: snapshot,
+        },
       })
     })
 

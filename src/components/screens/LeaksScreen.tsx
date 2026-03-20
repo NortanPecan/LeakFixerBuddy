@@ -137,6 +137,15 @@ type LeakFocusFilter = 'all' | 'focus'
 type LeakGroupOption = 'none' | 'sphere' | 'source'
 type PatternFilter = 'all' | 'linked'
 type FeedbackHistoryFilter = 'all' | 'problem'
+type FeedbackLogItem = {
+  actionId: string | null
+  actionTitle: string
+  actionKind: string
+  mode: string | null
+  result: LeakPlanFeedback['result']
+  comment: string | null
+  updatedAt: string
+}
 
 const SEVERITY_OPTIONS: Array<{
   id: 'info' | 'warning' | 'critical'
@@ -635,6 +644,9 @@ function getContextSnapshotItems(contextSnapshot?: Record<string, unknown> | nul
     recentFeedbackNegativeShare: 'Негативный feedback (%)',
     recentFeedbackWorkedShare: 'Рабочий feedback (%)',
     retryResolvedAt: 'Retry закрыт',
+    selectedPlanMode: 'Выбранный режим',
+    lastStableMode: 'Последний стабильный режим',
+    lastStableAt: 'Режим стабилизировался',
   }
 
   const lines: string[] = []
@@ -972,6 +984,132 @@ function getLeakFeedbackTimeline(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
   return rows.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
 }
 
+function getFeedbackLogFromSnapshot(contextSnapshot?: Record<string, unknown> | null): FeedbackLogItem[] {
+  if (!contextSnapshot || typeof contextSnapshot !== 'object' || Array.isArray(contextSnapshot)) {
+    return []
+  }
+
+  const raw = contextSnapshot.feedbackLog
+  if (!Array.isArray(raw)) return []
+
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null
+      const candidate = item as Record<string, unknown>
+      if (
+        typeof candidate.actionTitle !== 'string' ||
+        typeof candidate.actionKind !== 'string' ||
+        typeof candidate.updatedAt !== 'string'
+      ) {
+        return null
+      }
+      if (
+        candidate.result !== 'worked' &&
+        candidate.result !== 'partially' &&
+        candidate.result !== 'not_worked'
+      ) {
+        return null
+      }
+      return {
+        actionId: typeof candidate.actionId === 'string' ? candidate.actionId : null,
+        actionTitle: candidate.actionTitle,
+        actionKind: candidate.actionKind,
+        mode: typeof candidate.mode === 'string' ? candidate.mode : null,
+        result: candidate.result as LeakPlanFeedback['result'],
+        comment: typeof candidate.comment === 'string' ? candidate.comment : null,
+        updatedAt: candidate.updatedAt,
+      }
+    })
+    .filter((item): item is FeedbackLogItem => Boolean(item))
+}
+
+function getLeakFeedbackByAction(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
+  const rawEvents = getFeedbackLogFromSnapshot(leak.contextSnapshot)
+  const grouped = new Map<string, {
+    actionId: string | null
+    actionTitle: string
+    actionKind: LeakPlanAction['kind']
+    mode: LeakSolutionPlan['mode'] | null
+    result: LeakPlanFeedback['result']
+    comment: string | null
+    updatedAt: string
+    attempts: number
+    linkedEntity: LeakActionLink | null
+  }>()
+
+  const planActionsById = new Map<string, { action: LeakPlanAction; mode: LeakSolutionPlan['mode'] }>()
+  plans?.forEach((plan) => {
+    plan.actions.forEach((action) => {
+      planActionsById.set(action.id, { action, mode: plan.mode })
+    })
+  })
+
+  rawEvents
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .forEach((item) => {
+      const fallbackKey = `${item.actionKind}|${normalizeLookupValue(item.actionTitle)}`
+      const key = item.actionId || fallbackKey
+      const existing = grouped.get(key)
+      const planAction = item.actionId ? planActionsById.get(item.actionId)?.action : null
+      const linkedEntity = planAction ? getLinkedEntityForPlanAction(leak, planAction) : null
+      if (!existing) {
+        grouped.set(key, {
+          actionId: item.actionId,
+          actionTitle: item.actionTitle,
+          actionKind: item.actionKind as LeakPlanAction['kind'],
+          mode:
+            item.mode && (item.mode === 'minimum' || item.mode === 'base' || item.mode === 'maximum')
+              ? item.mode
+              : (item.actionId ? planActionsById.get(item.actionId)?.mode || null : null),
+          result: item.result,
+          comment: item.comment,
+          updatedAt: item.updatedAt,
+          attempts: 1,
+          linkedEntity,
+        })
+        return
+      }
+      existing.attempts += 1
+    })
+
+  if (grouped.size === 0) {
+    getLeakFeedbackTimeline(leak, plans).forEach((item) => {
+      const key = item.actionId || `${item.actionKind}|${normalizeLookupValue(item.actionTitle)}`
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          actionId: item.actionId,
+          actionTitle: item.actionTitle,
+          actionKind: item.actionKind,
+          mode: item.mode,
+          result: item.result,
+          comment: item.comment,
+          updatedAt: item.updatedAt,
+          attempts: 1,
+          linkedEntity: item.linkedEntity,
+        })
+      }
+    })
+  }
+
+  return Array.from(grouped.values()).sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  )
+}
+
+function getSnapshotMode(
+  contextSnapshot: Record<string, unknown> | null | undefined,
+  key: 'selectedPlanMode' | 'lastStableMode',
+) {
+  if (!contextSnapshot || typeof contextSnapshot !== 'object' || Array.isArray(contextSnapshot)) {
+    return null
+  }
+  const value = contextSnapshot[key]
+  if (value !== 'minimum' && value !== 'base' && value !== 'maximum') {
+    return null
+  }
+  return value as LeakSolutionPlan['mode']
+}
+
 function getLatestWorkedOutcome(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
   const workedRows: Array<{
     actionTitle: string
@@ -1208,6 +1346,7 @@ export function LeaksScreen() {
   const [applyingPlanLeakId, setApplyingPlanLeakId] = useState<string | null>(null)
   const [applyingPlanActionId, setApplyingPlanActionId] = useState<string | null>(null)
   const [savingFeedbackActionId, setSavingFeedbackActionId] = useState<string | null>(null)
+  const [savingFeedbackLeakId, setSavingFeedbackLeakId] = useState<string | null>(null)
   const [feedbackCommentByAction, setFeedbackCommentByAction] = useState<Record<string, string>>({})
   const [savingPatternLeakType, setSavingPatternLeakType] = useState<string | null>(null)
   const [retryingLeakId, setRetryingLeakId] = useState<string | null>(null)
@@ -1765,6 +1904,21 @@ export function LeaksScreen() {
         ...current,
         [leakId]: normalizePlans(data.plans || []),
       }))
+      setLeaks((current) =>
+        current.map((leak) => {
+          if (leak.id !== leakId) return leak
+          const snapshot =
+            leak.contextSnapshot && typeof leak.contextSnapshot === 'object' && !Array.isArray(leak.contextSnapshot)
+              ? ({ ...leak.contextSnapshot } as Record<string, unknown>)
+              : {}
+          snapshot.selectedPlanMode = mode
+          snapshot.contextUpdatedAt = new Date().toISOString()
+          return {
+            ...leak,
+            contextSnapshot: snapshot,
+          }
+        }),
+      )
       showSuccessToast(`Выбран режим: ${PLAN_MODE_LABELS[mode]}`)
     } catch (error) {
       showErrorToast(error, 'select leak plan')
@@ -2024,9 +2178,16 @@ export function LeaksScreen() {
     actionId: string,
     result: LeakPlanFeedback['result'],
     comment?: string,
+    options?: {
+      additionalActionIds?: string[]
+      silent?: boolean
+    },
   ) => {
     if (!user?.id) return
     const normalizedComment = comment?.trim() || ''
+    const actionIds = Array.from(
+      new Set([actionId, ...(options?.additionalActionIds || [])].map((item) => item.trim()).filter(Boolean)),
+    )
 
     if (result === 'not_worked' && normalizedComment.length < 5) {
       showErrorToast(
@@ -2037,6 +2198,10 @@ export function LeaksScreen() {
     }
 
     setSavingFeedbackActionId(actionId)
+    if (actionIds.length > 1) {
+      const leakKey = leaks.find((item) => item.id === leakId)?.id || leakId
+      setSavingFeedbackLeakId(leakKey)
+    }
     try {
       const response = await fetch(`/api/leaks/${leakId}/feedback`, {
         method: 'POST',
@@ -2044,6 +2209,7 @@ export function LeaksScreen() {
         body: JSON.stringify({
           userId: user.id,
           solutionActionId: actionId,
+          solutionActionIds: actionIds.length > 1 ? actionIds : undefined,
           result,
           comment: normalizedComment || null,
         }),
@@ -2056,48 +2222,99 @@ export function LeaksScreen() {
         data.pattern && typeof data.pattern === 'object'
           ? normalizePattern(data.pattern)
           : null
+      const nextPlans = normalizePlans(data.plans || [])
       setPlansByLeak((current) => ({
         ...current,
-        [leakId]: normalizePlans(data.plans || []),
+        [leakId]: nextPlans,
       }))
-      if (data.leak && typeof data.leak.id === 'string') {
-        const nextStatus = typeof data.leak.status === 'string' ? data.leak.status : null
-        const nextResolvedAt = typeof data.leak.resolvedAt === 'string' ? data.leak.resolvedAt : null
-        if (nextStatus) {
-          setLeaks((current) =>
-            current.map((leak) =>
-              leak.id === leakId
-                ? {
-                    ...leak,
-                    status: nextStatus as LeakEntity['status'],
-                    resolvedAt: nextResolvedAt,
-                    updatedAt: new Date().toISOString(),
-                  }
-                : leak,
-            ),
-          )
-        }
-      }
+      const affectedActionIds = Array.isArray(data.affectedActionIds)
+        ? data.affectedActionIds.filter((item): item is string => typeof item === 'string')
+        : actionIds
+      const modeByActionId = new Map<string, LeakSolutionPlan['mode']>()
+      nextPlans.forEach((plan) => {
+        plan.actions.forEach((action) => {
+          modeByActionId.set(action.id, plan.mode)
+        })
+      })
+      const firstAffectedMode = affectedActionIds.map((id) => modeByActionId.get(id)).find(Boolean) || null
+      const nextStatus = data.leak && typeof data.leak.status === 'string' ? data.leak.status : null
+      const nextResolvedAt =
+        data.leak && typeof data.leak.resolvedAt === 'string' ? data.leak.resolvedAt : null
+      setLeaks((current) =>
+        current.map((leak) => {
+          if (leak.id !== leakId) return leak
+          const snapshot =
+            leak.contextSnapshot && typeof leak.contextSnapshot === 'object' && !Array.isArray(leak.contextSnapshot)
+              ? ({ ...leak.contextSnapshot } as Record<string, unknown>)
+              : {}
+          if (result === 'worked' && firstAffectedMode) {
+            snapshot.lastStableMode = firstAffectedMode
+            snapshot.lastStableAt = new Date().toISOString()
+          }
+          snapshot.contextUpdatedAt = new Date().toISOString()
+          return {
+            ...leak,
+            status: nextStatus ? (nextStatus as LeakEntity['status']) : leak.status,
+            resolvedAt: nextStatus ? nextResolvedAt : leak.resolvedAt,
+            updatedAt: new Date().toISOString(),
+            contextSnapshot: snapshot,
+          }
+        }),
+      )
       if (nextPattern) {
         setPatterns((current) => {
           const filtered = current.filter((pattern) => pattern.leakType !== nextPattern.leakType)
           return [nextPattern, ...filtered]
         })
       }
-      showSuccessToast(
-        data.reopened
-          ? 'Фидбек сохранён, leak автоматически возвращён в работу'
-          : 'Фидбек по действию сохранён',
-      )
-      setFeedbackCommentByAction((current) => ({
-        ...current,
-        [actionId]: normalizedComment,
-      }))
+      if (!options?.silent) {
+        if (data.reopened) {
+          showSuccessToast('Фидбек сохранён, leak автоматически возвращён в работу')
+        } else if (affectedActionIds.length > 1) {
+          showSuccessToast(`Фидбек применён к ${affectedActionIds.length} шагам`)
+        } else {
+          showSuccessToast('Фидбек по действию сохранён')
+        }
+      }
+      setFeedbackCommentByAction((current) => {
+        const next = { ...current }
+        affectedActionIds.forEach((id) => {
+          next[id] = normalizedComment
+        })
+        return next
+      })
     } catch (error) {
       showErrorToast(error, 'save plan feedback')
     } finally {
       setSavingFeedbackActionId(null)
+      setSavingFeedbackLeakId(null)
     }
+  }
+
+  const applyBulkFeedbackForPendingCreated = async (
+    leak: LeakEntity,
+    plan: LeakSolutionPlan,
+    result: LeakPlanFeedback['result'],
+  ) => {
+    const pendingActions = plan.actions.filter(
+      (action) => isPlanActionConverted(action) && !getLatestPlanFeedback(action),
+    )
+    if (pendingActions.length === 0) {
+      showSuccessToast('По созданным шагам без feedback ничего не осталось')
+      return
+    }
+
+    const primaryAction = pendingActions[0]
+    const bulkComment = getFeedbackCommentDraft(primaryAction)
+    await sendPlanActionFeedback(
+      leak.id,
+      primaryAction.id,
+      result,
+      bulkComment,
+      {
+        additionalActionIds: pendingActions.slice(1).map((item) => item.id),
+      },
+    )
   }
 
   const convertLeakToTask = async (leak: LeakEntity) => {
@@ -2694,16 +2911,18 @@ export function LeaksScreen() {
                 bottleneckPlanAction ? getLinkedEntityForPlanAction(leak, bottleneckPlanAction) : null
               const feedbackByActionId = getFeedbackByActionId(leakPlans)
               const planActionsById = getPlanActionById(leakPlans)
-              const feedbackTimeline = getLeakFeedbackTimeline(leak, leakPlans)
+              const feedbackByAction = getLeakFeedbackByAction(leak, leakPlans)
               const feedbackHistoryFilter = feedbackHistoryFilterByLeak[leak.id] || 'all'
               const visibleFeedbackTimeline =
                 feedbackHistoryFilter === 'problem'
-                  ? feedbackTimeline.filter((item) => item.result !== 'worked')
-                  : feedbackTimeline
+                  ? feedbackByAction.filter((item) => item.result !== 'worked')
+                  : feedbackByAction
               const latestWorkedOutcome = getLatestWorkedOutcome(leak, leakPlans)
               const recentFeedbackTrend = getRecentFeedbackTrend(leak.contextSnapshot)
               const contextHypotheses = buildContextHypotheses(leak.contextSnapshot)
               const retryFocus = getRetryFocus(leak.contextSnapshot)
+              const selectedModeFromSnapshot = getSnapshotMode(leak.contextSnapshot, 'selectedPlanMode')
+              const lastStableMode = getSnapshotMode(leak.contextSnapshot, 'lastStableMode')
               const matchedPattern = getBestPatternForLeak(patterns, leak)
               const matchedPatternLinkType = matchedPattern ? getPatternLinkTypeForLeak(matchedPattern, leak) : 'none'
               const groupKey = getLeakGroupKey(leak, groupBy)
@@ -3371,6 +3590,16 @@ export function LeaksScreen() {
                               <Badge className={PLAN_MODE_STYLES[selectedPlan.mode]}>
                                 Режим: {PLAN_MODE_LABELS[selectedPlan.mode]}
                               </Badge>
+                              {selectedModeFromSnapshot && (
+                                <Badge variant="outline" className="border-white/15 text-white/70">
+                                  Последний выбор: {PLAN_MODE_LABELS[selectedModeFromSnapshot]}
+                                </Badge>
+                              )}
+                              {lastStableMode && (
+                                <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
+                                  Стабильный режим: {PLAN_MODE_LABELS[lastStableMode]}
+                                </Badge>
+                              )}
                               <Badge className={PLAN_CONFIDENCE_STYLES[selectedPlan.confidenceLabel]}>
                                 Уверенность: {getConfidenceLabelText(selectedPlan.confidenceLabel)}
                               </Badge>
@@ -3379,6 +3608,51 @@ export function LeaksScreen() {
                               <p className="text-xs text-white/60">{selectedPlan.confidenceReason}</p>
                             )}
                           </div>
+                          {(() => {
+                            const pendingCreatedNoFeedback = selectedPlan.actions.filter(
+                              (action) => isPlanActionConverted(action) && !getLatestPlanFeedback(action),
+                            )
+                            if (pendingCreatedNoFeedback.length < 2) return null
+                            const sampleComment = getFeedbackCommentDraft(pendingCreatedNoFeedback[0])
+                            return (
+                              <div className="rounded-xl border border-white/10 bg-black/10 px-3 py-2 space-y-2">
+                                <div className="text-xs text-white/60">
+                                  Быстрый feedback: {pendingCreatedNoFeedback.length} созданных шагов пока без оценки.
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {(['worked', 'partially', 'not_worked'] as LeakPlanFeedback['result'][]).map((result) => (
+                                    <Button
+                                      key={`bulk-feedback-${leak.id}-${result}`}
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => applyBulkFeedbackForPendingCreated(leak, selectedPlan, result)}
+                                      disabled={savingFeedbackLeakId === leak.id}
+                                      className={
+                                        result === 'worked'
+                                          ? 'border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-200'
+                                          : result === 'partially'
+                                            ? 'border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200'
+                                            : 'border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/15 text-rose-200'
+                                      }
+                                    >
+                                      {savingFeedbackLeakId === leak.id
+                                        ? 'Сохраняю...'
+                                        : result === 'worked'
+                                          ? 'Отметить все как сработало'
+                                          : result === 'partially'
+                                            ? 'Отметить все как частично'
+                                            : 'Отметить все как не помогло'}
+                                    </Button>
+                                  ))}
+                                </div>
+                                {sampleComment && (
+                                  <div className="text-xs text-white/45">
+                                    Комментарий для bulk возьмётся из первого шага: «{sampleComment}»
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
                           <div className="space-y-2">
                             {selectedPlan.actions.map((planAction, index) => {
                               const linkedEntity = getLinkedEntityForPlanAction(leak, planAction)
@@ -3555,7 +3829,7 @@ export function LeaksScreen() {
                         </div>
                       )}
 
-                      {feedbackTimeline.length > 0 && (
+                      {feedbackByAction.length > 0 && (
                         <div className="space-y-2">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="text-xs uppercase tracking-wide text-white/40">
@@ -3598,7 +3872,7 @@ export function LeaksScreen() {
                           </div>
                           <div className="flex flex-wrap gap-2">
                             {(() => {
-                              const recent = feedbackTimeline.slice(0, 6)
+                              const recent = feedbackByAction.slice(0, 6)
                               const worked = recent.filter((item) => item.result === 'worked').length
                               const partial = recent.filter((item) => item.result === 'partially').length
                               const failed = recent.filter((item) => item.result === 'not_worked').length
@@ -3623,7 +3897,7 @@ export function LeaksScreen() {
                                       variant="outline"
                                       onClick={() =>
                                         retryLeakPlanning(leak, {
-                                          action: planActionsById.get(latestProblem.actionId) || null,
+                                          action: latestProblem.actionId ? planActionsById.get(latestProblem.actionId) || null : null,
                                           failureReason: latestProblem.comment || null,
                                         })
                                       }
@@ -3643,19 +3917,28 @@ export function LeaksScreen() {
                                 По текущему фильтру пока нет событий.
                               </div>
                             ) : visibleFeedbackTimeline.slice(0, 6).map((item) => {
-                              const historyAction = planActionsById.get(item.actionId) || null
+                              const historyAction = item.actionId ? planActionsById.get(item.actionId) || null : null
 
                               return (
                                 <div
-                                  key={`${item.actionId}-${item.updatedAt}`}
+                                  key={`${item.actionId || item.actionTitle}-${item.updatedAt}`}
                                   className="rounded-xl border border-white/10 bg-black/10 px-3 py-2"
                                 >
                                   <div className="flex flex-wrap items-center gap-2">
-                                    <Badge className={PLAN_MODE_STYLES[item.mode]}>
-                                      {PLAN_MODE_LABELS[item.mode]}
-                                    </Badge>
+                                    {item.mode ? (
+                                      <Badge className={PLAN_MODE_STYLES[item.mode]}>
+                                        {PLAN_MODE_LABELS[item.mode]}
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="border-white/10 text-white/55">
+                                        Режим не задан
+                                      </Badge>
+                                    )}
                                     <Badge variant="outline" className="border-white/10 text-white/55">
                                       {PLAN_KIND_LABELS[item.actionKind]}
+                                    </Badge>
+                                    <Badge className="bg-white/10 text-white/70 border-white/10">
+                                      Попытки: {item.attempts}
                                     </Badge>
                                     <Badge
                                       className={
@@ -3680,14 +3963,16 @@ export function LeaksScreen() {
                                   )}
                                   {item.comment && <div className="mt-1 text-xs text-white/60">{item.comment}</div>}
                                   <div className="mt-2 flex flex-wrap gap-2">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => focusPlanAction(leak.id, item.actionId)}
-                                      className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                                    >
-                                      К шагу
-                                    </Button>
+                                    {item.actionId && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => focusPlanAction(leak.id, item.actionId)}
+                                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                      >
+                                        К шагу
+                                      </Button>
+                                    )}
                                     {item.linkedEntity && (
                                       <Button
                                         size="sm"
