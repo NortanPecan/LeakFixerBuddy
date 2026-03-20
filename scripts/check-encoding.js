@@ -1,30 +1,34 @@
 const fs = require('fs')
 const path = require('path')
-const cp = require('child_process')
 
 const ROOT = process.cwd()
 const SRC_DIR = path.join(ROOT, 'src')
 const TEXT_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.md'])
+
+function fromCodes(...codes) {
+  return String.fromCharCode(...codes)
+}
+
 const SUSPICIOUS_MARKERS = [
-  'РџР',
-  'Р“Р',
-  'Р—Р',
-  'Р¦Р',
-  'Р¤Р',
-  'РњР',
-  'Р§Р',
-  'РЎР',
-  'РќР',
-  'СЂР',
-  'СЏ',
-  'СЋ',
-  'С‚',
-  'СЃ',
-  'С‡',
-  'рџ',
-  'вЂ',
-  'вќ',
-  'пёЏ',
+  fromCodes(0x0420, 0x045F, 0x0420),
+  fromCodes(0x0420, 0x201C, 0x0420),
+  fromCodes(0x0420, 0x2014, 0x0420),
+  fromCodes(0x0420, 0x00A6, 0x0420),
+  fromCodes(0x0420, 0x00A4, 0x0420),
+  fromCodes(0x0420, 0x045A, 0x0420),
+  fromCodes(0x0420, 0x00A7, 0x0420),
+  fromCodes(0x0420, 0x040E, 0x0420),
+  fromCodes(0x0420, 0x045C, 0x0420),
+  fromCodes(0x0421, 0x0402, 0x0420),
+  fromCodes(0x0421, 0x0457),
+  fromCodes(0x0421, 0x045B),
+  fromCodes(0x0421, 0x201A),
+  fromCodes(0x0421, 0x0453),
+  fromCodes(0x0421, 0x2021),
+  fromCodes(0x0440, 0x045F),
+  fromCodes(0x0432, 0x20AC),
+  fromCodes(0x0432, 0x045C),
+  fromCodes(0x043F, 0x0451, 0x040F),
 ]
 
 function walk(dir, out = []) {
@@ -45,19 +49,6 @@ function walk(dir, out = []) {
   return out
 }
 
-function escapeForCmd(value) {
-  return `"${String(value).replace(/"/g, '""')}"`
-}
-
-function runGit(args) {
-  const command = ['git', ...args.map(escapeForCmd)].join(' ')
-  return cp.execFileSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', command], {
-    cwd: ROOT,
-    encoding: 'utf8',
-    maxBuffer: 10 * 1024 * 1024,
-  })
-}
-
 function scanText(fileLabel, content, findings) {
   const lines = content.split(/\r?\n/)
 
@@ -72,60 +63,20 @@ function scanText(fileLabel, content, findings) {
   })
 }
 
-function getTrackedStagedFiles() {
-  const output = runGit(['diff', '--cached', '--name-only', '--diff-filter=ACM']).trim()
+const findings = []
+const files = walk(SRC_DIR)
 
-  if (!output) return []
-
-  return output
-    .split(/\r?\n/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .filter((file) => {
-      const normalized = file.replace(/\\/g, '/')
-      return (
-        normalized.startsWith('src/') ||
-        normalized === 'CLAUDE.md' ||
-        normalized.startsWith('docs/')
-      )
-    })
-    .filter((file) => TEXT_EXTENSIONS.has(path.extname(file)))
+for (const file of files) {
+  const content = fs.readFileSync(file, 'utf8')
+  scanText(path.relative(ROOT, file), content, findings)
 }
-
-function scanWorkingTree() {
-  const findings = []
-  const files = walk(SRC_DIR)
-
-  for (const file of files) {
-    const content = fs.readFileSync(file, 'utf8')
-    scanText(path.relative(ROOT, file), content, findings)
-  }
-
-  return findings
-}
-
-function scanStaged() {
-  const findings = []
-  const files = getTrackedStagedFiles()
-
-  for (const file of files) {
-    const content = runGit(['show', `:${file}`])
-
-    scanText(file, content, findings)
-  }
-
-  return findings
-}
-
-const stagedOnly = process.argv.includes('--staged')
-const findings = stagedOnly ? scanStaged() : scanWorkingTree()
 
 if (findings.length > 0) {
-  console.error(`Potential mojibake found${stagedOnly ? ' in staged files' : ''}:`)
+  console.error('Potential mojibake found:')
   findings.forEach((item) => {
     console.error(`${item.file}:${item.line}: ${item.text}`)
   })
   process.exit(1)
 }
 
-console.log(`Encoding check passed${stagedOnly ? ' (staged)' : ''}`)
+console.log('Encoding check passed')
