@@ -633,6 +633,7 @@ function getContextSnapshotItems(contextSnapshot?: Record<string, unknown> | nul
     latestFeedbackActionTitle: 'Последний feedback (шаг)',
     recentFeedbackWindowSize: 'Свежих feedback',
     recentFeedbackNegativeShare: 'Негативный feedback (%)',
+    recentFeedbackWorkedShare: 'Рабочий feedback (%)',
     retryResolvedAt: 'Retry закрыт',
   }
 
@@ -1091,6 +1092,7 @@ function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null
     typeof metrics.latestFeedbackResult === 'string' ? metrics.latestFeedbackResult : null
   const recentFeedbackWindowSize = toNum('recentFeedbackWindowSize')
   const recentFeedbackNegativeShare = toNum('recentFeedbackNegativeShare')
+  const recentFeedbackWorkedShare = toNum('recentFeedbackWorkedShare')
 
   if (sleepHoursAvg !== null && sleepHoursAvg < 6.5) {
     hypotheses.push('Наблюдение: недосып может усиливать leak. Стоит проверить связь сна и срывов.')
@@ -1152,6 +1154,14 @@ function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null
     recentFeedbackNegativeShare >= 67
   ) {
     hypotheses.push('Наблюдение: последние шаги часто не срабатывают. Стоит временно упростить режим до minimum и проверить базовые триггеры.')
+  }
+  if (
+    recentFeedbackWindowSize !== null &&
+    recentFeedbackWindowSize >= 3 &&
+    recentFeedbackWorkedShare !== null &&
+    recentFeedbackWorkedShare >= 67
+  ) {
+    hypotheses.push('Наблюдение: большинство последних шагов сработали. Можно закреплять режим и постепенно масштабировать его.')
   }
 
   return hypotheses.slice(0, 3)

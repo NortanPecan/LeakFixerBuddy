@@ -254,6 +254,16 @@ async function buildLiveLeakContext(userId: string, leakId: string) {
           ).toFixed(0),
         )
       : null
+  const recentFeedbackWorkedShare =
+    recentFeedbackWindow.length > 0
+      ? Number(
+          (
+            (recentFeedbackWindow.filter((item) => item.result === 'worked').length /
+              recentFeedbackWindow.length) *
+            100
+          ).toFixed(0),
+        )
+      : null
 
   return {
     generatedAt: new Date().toISOString(),
@@ -300,6 +310,7 @@ async function buildLiveLeakContext(userId: string, leakId: string) {
       latestFeedbackActionTitle: latestFeedback?.solutionAction.title || null,
       recentFeedbackWindowSize: recentFeedbackWindow.length,
       recentFeedbackNegativeShare,
+      recentFeedbackWorkedShare,
     },
     history: {
       linkedEntities: linkedEntities.map((item) => {
