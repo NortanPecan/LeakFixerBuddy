@@ -9,6 +9,7 @@ const ConvertLeakPlanSchema = z.object({
   userId: z.string().min(1),
   mode: z.enum(['minimum', 'base', 'maximum']).optional(),
   actionId: z.string().min(1).optional(),
+  policyCorrelationId: z.string().min(1).optional(),
 })
 
 type PlanMode = 'minimum' | 'base' | 'maximum'
@@ -276,7 +277,7 @@ export async function POST(
       )
     }
 
-    const { userId, mode, actionId } = parsed.data
+    const { userId, mode, actionId, policyCorrelationId } = parsed.data
     const auth = requireSelf(request, userId)
     if ('error' in auth) return auth.error
 
@@ -351,6 +352,7 @@ export async function POST(
           sourceActionId: action.id,
           sourceActionTitle: action.title,
           sourceActionKind: action.kind,
+          policyCorrelationId: policyCorrelationId || null,
         }
 
         if (typeof payload.convertedEntityId === 'string' && payload.convertedEntityId) {
@@ -419,6 +421,8 @@ export async function POST(
             mode: selectedPlan.mode as PlanMode,
             actionId: action.id,
             actionTitle: action.title,
+            policyCorrelationId: policyCorrelationId || null,
+            policyActionType: 'create_entity',
             note: 'reused_existing_entity',
           })
           continue
@@ -592,11 +596,18 @@ export async function POST(
           mode: selectedPlan.mode as PlanMode,
           actionId: action.id,
           actionTitle: action.title,
+          policyCorrelationId: policyCorrelationId || null,
+          policyActionType: 'create_entity',
           note: `created_${created.entityType}`,
         })
       }
 
       if (target.leak.status === 'new' && createdEntities.length > 0) {
+        if (policyCorrelationId) {
+          snapshot.activePolicyCorrelationId = policyCorrelationId
+          snapshot.activePolicyActionType = 'create_entity'
+          snapshot.activePolicyAcceptedAt = new Date().toISOString()
+        }
         snapshot = appendRunJournal(snapshot, {
           type: 'action_created',
           at: new Date().toISOString(),
@@ -614,6 +625,11 @@ export async function POST(
           },
         })
       } else {
+        if (policyCorrelationId) {
+          snapshot.activePolicyCorrelationId = policyCorrelationId
+          snapshot.activePolicyActionType = 'create_entity'
+          snapshot.activePolicyAcceptedAt = new Date().toISOString()
+        }
         await tx.leak.update({
           where: { id: leakId },
           data: {
@@ -682,6 +698,7 @@ export async function POST(
       createdEntities: result.createdEntities,
       appliedMode: selectedPlan.mode,
       appliedActionId: actionId || null,
+      policyCorrelationId: policyCorrelationId || null,
     })
   } catch (error) {
     console.error('Error converting leak plan:', error)

@@ -195,6 +195,15 @@ interface LeakPolicyHint {
     result?: string | null
     factors?: Array<{ key: string; weight: number; detail?: string }>
   }>
+  summary?: {
+    accepted: number
+    rejected: number
+    outcomes: number
+    outcomeWorked: number
+    outcomePartial: number
+    outcomeFailed: number
+    rejectReasons: Record<string, number>
+  }
 }
 
 interface LeakDraft {
@@ -1713,6 +1722,29 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
           })
           .filter((item): item is NonNullable<LeakPolicyHint['runJournal']>[number] => Boolean(item))
       : undefined,
+    summary:
+      candidate.summary && typeof candidate.summary === 'object' && !Array.isArray(candidate.summary)
+        ? (() => {
+            const summary = candidate.summary as Record<string, unknown>
+            const rejectReasons =
+              summary.rejectReasons && typeof summary.rejectReasons === 'object' && !Array.isArray(summary.rejectReasons)
+                ? Object.fromEntries(
+                    Object.entries(summary.rejectReasons as Record<string, unknown>).filter(
+                      (entry): entry is [string, number] => typeof entry[0] === 'string' && typeof entry[1] === 'number',
+                    ),
+                  )
+                : {}
+            return {
+              accepted: typeof summary.accepted === 'number' ? summary.accepted : 0,
+              rejected: typeof summary.rejected === 'number' ? summary.rejected : 0,
+              outcomes: typeof summary.outcomes === 'number' ? summary.outcomes : 0,
+              outcomeWorked: typeof summary.outcomeWorked === 'number' ? summary.outcomeWorked : 0,
+              outcomePartial: typeof summary.outcomePartial === 'number' ? summary.outcomePartial : 0,
+              outcomeFailed: typeof summary.outcomeFailed === 'number' ? summary.outcomeFailed : 0,
+              rejectReasons,
+            }
+          })()
+        : undefined,
   }
 }
 
@@ -2374,6 +2406,7 @@ export function LeaksScreen() {
         ...current,
         [leakId]: normalizeLeakPolicy({
           ...(data.policy || {}),
+          summary: data.summary || undefined,
           runJournal: data.runJournal || undefined,
         }),
       }))
@@ -2572,6 +2605,7 @@ export function LeaksScreen() {
 
   const applySelectedPlan = async (leak: LeakEntity, mode?: LeakSolutionPlan['mode']) => {
     if (!user?.id) return
+    const policyCorrelationId = policyByLeak[leak.id]?.nextBestAction?.correlationId || null
 
     setApplyingPlanLeakId(leak.id)
     try {
@@ -2581,6 +2615,7 @@ export function LeaksScreen() {
         body: JSON.stringify({
           userId: user.id,
           mode,
+          policyCorrelationId: policyCorrelationId || undefined,
         }),
       })
 
@@ -2627,6 +2662,7 @@ export function LeaksScreen() {
     action: LeakPlanAction,
   ) => {
     if (!user?.id || isPlanActionConverted(action)) return
+    const policyCorrelationId = policyByLeak[leak.id]?.nextBestAction?.correlationId || null
 
     setApplyingPlanActionId(action.id)
     try {
@@ -2637,6 +2673,7 @@ export function LeaksScreen() {
           userId: user.id,
           mode,
           actionId: action.id,
+          policyCorrelationId: policyCorrelationId || undefined,
         }),
       })
 
@@ -3424,18 +3461,30 @@ export function LeaksScreen() {
               const policy = policyByLeak[leak.id] || null
               const nextBestActionHint = policy?.nextBestAction || null
               const policyEvents = (policy?.runJournal || []).filter((event) => event.type.startsWith('policy_'))
-              const policyAcceptedCount = policyEvents.filter((event) => event.type === 'policy_accepted').length
-              const policyRejectedCount = policyEvents.filter((event) => event.type === 'policy_rejected').length
-              const policyOutcomeCount = policyEvents.filter((event) => event.type === 'policy_outcome').length
-              const policyOutcomeWorked = policyEvents.filter(
-                (event) => event.type === 'policy_outcome' && event.result === 'worked',
-              ).length
-              const policyOutcomePartial = policyEvents.filter(
-                (event) => event.type === 'policy_outcome' && event.result === 'partially',
-              ).length
-              const policyOutcomeFailed = policyEvents.filter(
-                (event) => event.type === 'policy_outcome' && event.result === 'not_worked',
-              ).length
+              const policyAcceptedCount =
+                typeof policy?.summary?.accepted === 'number'
+                  ? policy.summary.accepted
+                  : policyEvents.filter((event) => event.type === 'policy_accepted').length
+              const policyRejectedCount =
+                typeof policy?.summary?.rejected === 'number'
+                  ? policy.summary.rejected
+                  : policyEvents.filter((event) => event.type === 'policy_rejected').length
+              const policyOutcomeCount =
+                typeof policy?.summary?.outcomes === 'number'
+                  ? policy.summary.outcomes
+                  : policyEvents.filter((event) => event.type === 'policy_outcome').length
+              const policyOutcomeWorked =
+                typeof policy?.summary?.outcomeWorked === 'number'
+                  ? policy.summary.outcomeWorked
+                  : policyEvents.filter((event) => event.type === 'policy_outcome' && event.result === 'worked').length
+              const policyOutcomePartial =
+                typeof policy?.summary?.outcomePartial === 'number'
+                  ? policy.summary.outcomePartial
+                  : policyEvents.filter((event) => event.type === 'policy_outcome' && event.result === 'partially').length
+              const policyOutcomeFailed =
+                typeof policy?.summary?.outcomeFailed === 'number'
+                  ? policy.summary.outcomeFailed
+                  : policyEvents.filter((event) => event.type === 'policy_outcome' && event.result === 'not_worked').length
               const policySuggestionCorrelationId = nextBestActionHint?.correlationId || null
               const latestPolicyDecision =
                 policySuggestionCorrelationId
@@ -3451,13 +3500,16 @@ export function LeaksScreen() {
                   : 'rejected'
                 : 'pending'
               const policyComputedMinutes = getMinutesSince(policy?.computedAt)
-              const policyRejectReasonCounts = policyEvents
-                .filter((event) => event.type === 'policy_rejected' && event.note)
-                .reduce<Record<string, number>>((acc, event) => {
-                  const key = event.note || 'unknown'
-                  acc[key] = (acc[key] || 0) + 1
-                  return acc
-                }, {})
+              const policyRejectReasonCounts =
+                policy?.summary?.rejectReasons && Object.keys(policy.summary.rejectReasons).length > 0
+                  ? policy.summary.rejectReasons
+                  : policyEvents
+                      .filter((event) => event.type === 'policy_rejected' && event.note)
+                      .reduce<Record<string, number>>((acc, event) => {
+                        const key = event.note || 'unknown'
+                        acc[key] = (acc[key] || 0) + 1
+                        return acc
+                      }, {})
               const contextDriftHint = policy?.contextDrift || null
               const executionScore = policy?.executionScore || {
                 value: 0,
@@ -5000,6 +5052,10 @@ export function LeaksScreen() {
                                   typeof metadata?.sourcePlanSummary === 'string'
                                     ? metadata.sourcePlanSummary
                                     : null
+                                const sourcePolicyCorrelationId =
+                                  typeof metadata?.policyCorrelationId === 'string'
+                                    ? metadata.policyCorrelationId
+                                    : null
                                 const feedback = sourceActionId ? feedbackByActionId.get(sourceActionId) : null
                                 const sourcePlanAction = sourceActionId ? planActionsById.get(sourceActionId) || null : null
 
@@ -5036,6 +5092,11 @@ export function LeaksScreen() {
                                           {sourceActionTitle && (
                                             <Badge className="bg-white/10 text-white/65 border-white/10">
                                               Действие: {sourceActionTitle}
+                                            </Badge>
+                                          )}
+                                          {sourcePolicyCorrelationId && (
+                                            <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                                              Policy-linked
                                             </Badge>
                                           )}
                                           {feedback && (

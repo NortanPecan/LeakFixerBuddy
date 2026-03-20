@@ -61,6 +61,46 @@ function shouldAppendSuggestedEvent(snapshot: Record<string, unknown>, correlati
   return true
 }
 
+function summarizePolicyJournal(snapshot: Record<string, unknown>) {
+  const journal = Array.isArray(snapshot.runJournal) ? snapshot.runJournal : []
+  let accepted = 0
+  let rejected = 0
+  let outcomes = 0
+  let outcomeWorked = 0
+  let outcomePartial = 0
+  let outcomeFailed = 0
+  const rejectReasons: Record<string, number> = {}
+
+  journal.forEach((item) => {
+    if (!item || typeof item !== 'object') return
+    const event = item as Record<string, unknown>
+    if (event.type === 'policy_accepted') accepted += 1
+    if (event.type === 'policy_rejected') {
+      rejected += 1
+      if (typeof event.note === 'string' && event.note.trim()) {
+        const reason = event.note.trim()
+        rejectReasons[reason] = (rejectReasons[reason] || 0) + 1
+      }
+    }
+    if (event.type === 'policy_outcome') {
+      outcomes += 1
+      if (event.result === 'worked') outcomeWorked += 1
+      if (event.result === 'partially') outcomePartial += 1
+      if (event.result === 'not_worked') outcomeFailed += 1
+    }
+  })
+
+  return {
+    accepted,
+    rejected,
+    outcomes,
+    outcomeWorked,
+    outcomePartial,
+    outcomeFailed,
+    rejectReasons,
+  }
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ leakId: string }> },
@@ -121,6 +161,7 @@ export async function GET(
     return NextResponse.json({
       success: true,
       policy,
+      summary: summarizePolicyJournal(nextSnapshot),
       runJournal: Array.isArray(nextSnapshot.runJournal) ? nextSnapshot.runJournal.slice(0, 10) : [],
     })
   } catch (error) {
