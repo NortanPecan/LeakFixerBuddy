@@ -583,6 +583,13 @@ function getContextSnapshotItems(contextSnapshot?: Record<string, unknown> | nul
     plannedEnergyAvg: 'Планируемая энергия',
     doneTasks: 'Выполнено задач',
     lookbackDays: 'Глубина контекста (дней)',
+    planActionsTotal: 'Шагов в плане',
+    linkedEntitiesTotal: 'Создано сущностей',
+    feedbackGivenTotal: 'Feedback получено',
+    feedbackCoverageRate: 'Покрытие feedback (%)',
+    feedbackWorkedCount: 'Сработало (count)',
+    feedbackPartiallyCount: 'Частично (count)',
+    feedbackFailedCount: 'Не помогло (count)',
   }
 
   const lines: string[] = []

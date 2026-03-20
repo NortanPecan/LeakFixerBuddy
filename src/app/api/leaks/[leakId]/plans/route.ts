@@ -43,7 +43,7 @@ function startOfLookbackWindow(days: number) {
 async function buildLiveLeakContext(userId: string, leakId: string) {
   const since = startOfLookbackWindow(CONTEXT_LOOKBACK_DAYS)
 
-  const [dailyStates, foodEntries, fitnessDays, transactions, emotionLogs, activeSupplementsCount, supplementIntakeCheckedCount, workoutCount, ritualCount, checkins, doneTasksCount, openTasksCount, linkedEntities, feedbackRows] =
+  const [dailyStates, foodEntries, fitnessDays, transactions, emotionLogs, activeSupplementsCount, supplementIntakeCheckedCount, workoutCount, ritualCount, checkins, doneTasksCount, openTasksCount, linkedEntities, feedbackRows, totalPlanActionsCount, totalFeedbackCount, workedFeedbackCount, partialFeedbackCount, failedFeedbackCount] =
     await Promise.all([
       db.dailyState.findMany({
         where: { userId, date: { gte: since } },
@@ -167,6 +167,25 @@ async function buildLiveLeakContext(userId: string, leakId: string) {
           },
         },
       }),
+      db.leakSolutionAction.count({
+        where: {
+          plan: {
+            leakId,
+          },
+        },
+      }),
+      db.leakFeedback.count({
+        where: { leakId },
+      }),
+      db.leakFeedback.count({
+        where: { leakId, result: 'worked' },
+      }),
+      db.leakFeedback.count({
+        where: { leakId, result: 'partially' },
+      }),
+      db.leakFeedback.count({
+        where: { leakId, result: 'not_worked' },
+      }),
     ])
 
   const morningCheckins = checkins.filter((item) => item.type === 'morning')
@@ -219,6 +238,10 @@ async function buildLiveLeakContext(userId: string, leakId: string) {
     emotionLogs.length > 0
       ? Number(((negativeEmotionCount / emotionLogs.length) * 100).toFixed(0))
       : null
+  const feedbackCoverageRate =
+    totalPlanActionsCount > 0
+      ? Number(((totalFeedbackCount / totalPlanActionsCount) * 100).toFixed(0))
+      : null
 
   return {
     generatedAt: new Date().toISOString(),
@@ -253,6 +276,13 @@ async function buildLiveLeakContext(userId: string, leakId: string) {
       plannedEnergyAvg: avg(morningCheckins.map((item) => toNumber(item.energy))),
       doneTasks: doneTasksCount,
       openTasks: openTasksCount,
+      planActionsTotal: totalPlanActionsCount,
+      linkedEntitiesTotal: linkedEntities.length,
+      feedbackGivenTotal: totalFeedbackCount,
+      feedbackCoverageRate,
+      feedbackWorkedCount: workedFeedbackCount,
+      feedbackPartiallyCount: partialFeedbackCount,
+      feedbackFailedCount: failedFeedbackCount,
     },
     history: {
       linkedEntities: linkedEntities.map((item) => {
@@ -423,7 +453,7 @@ export async function POST(
             failureReason: retryFailureReason || null,
             requestedAt: new Date().toISOString(),
           }
-        : undefined,
+        : null,
       contextUpdatedAt: new Date().toISOString(),
     }
 
