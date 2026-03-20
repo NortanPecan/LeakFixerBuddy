@@ -2577,6 +2577,12 @@ export function LeaksScreen() {
               const guidance = buildLeakGuidance(leak, plansByLeak[leak.id])
               const leakPlans = plansByLeak[leak.id] || []
               const selectedPlan = getSelectedPlan(leakPlans)
+              const bottleneckPlanAction =
+                selectedPlan && guidance.bottleneckActionId
+                  ? selectedPlan.actions.find((action) => action.id === guidance.bottleneckActionId) || null
+                  : null
+              const bottleneckLinkedEntity =
+                bottleneckPlanAction ? getLinkedEntityForPlanAction(leak, bottleneckPlanAction) : null
               const feedbackByActionId = getFeedbackByActionId(leakPlans)
               const planActionsById = getPlanActionById(leakPlans)
               const feedbackTimeline = getLeakFeedbackTimeline(leak, leakPlans)
@@ -2883,6 +2889,17 @@ export function LeaksScreen() {
                             >
                               Перейти к узкому шагу
                             </Button>
+                            {selectedPlan && bottleneckPlanAction && !bottleneckLinkedEntity && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => applySinglePlanAction(leak, selectedPlan.mode, bottleneckPlanAction)}
+                                disabled={applyingPlanActionId === bottleneckPlanAction.id || applyingPlanLeakId === leak.id}
+                                className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
+                              >
+                                {applyingPlanActionId === bottleneckPlanAction.id ? 'Создаю...' : 'Создать узкий шаг'}
+                              </Button>
+                            )}
                           </div>
                         )}
                       </div>
