@@ -72,6 +72,12 @@ export async function POST(
     }
 
     const { userId, solutionActionId, result, comment } = parsed.data
+    if (result === 'not_worked' && (!comment || comment.trim().length < 5)) {
+      return NextResponse.json(
+        { error: 'Comment is required for not_worked feedback (min 5 chars)' },
+        { status: 400 },
+      )
+    }
     const auth = requireSelf(request, userId)
     if ('error' in auth) return auth.error
 

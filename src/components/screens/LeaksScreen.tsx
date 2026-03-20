@@ -88,6 +88,13 @@ interface LeakPattern {
   analysisCount: number
   whatWorked: string[]
   updatedAt: string
+  activeLeakCount?: number
+  activeLeaks?: Array<{
+    id: string
+    title: string
+    status: string
+    updatedAt: string
+  }>
 }
 
 interface LeakDraft {
@@ -537,6 +544,7 @@ function getContextSnapshotItems(contextSnapshot?: Record<string, unknown> | nul
     incomeSum7d: 'Доход за 7 дней',
     netCashflow7d: 'Net cashflow за 7 дней',
     expenseDays7d: 'Дней с расходами (7д)',
+    openTasks: 'Открытых задач',
     morningCheckins: 'Утренних check-in',
     eveningCheckins: 'Вечерних check-in',
     dayRatingAvg: 'Средняя оценка дня',
@@ -737,6 +745,7 @@ function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null
   const waterGoalHitRate = toNum('waterGoalHitRate')
   const netCashflow7d = toNum('netCashflow7d')
   const expenseDays7d = toNum('expenseDays7d')
+  const openTasks = toNum('openTasks')
 
   if (sleepHoursAvg !== null && sleepHoursAvg < 6.5) {
     hypotheses.push('Наблюдение: недосып может усиливать leak. Стоит проверить связь сна и срывов.')
@@ -767,6 +776,9 @@ function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null
   }
   if (netCashflow7d !== null && netCashflow7d < 0) {
     hypotheses.push('Наблюдение: cashflow за неделю отрицательный. Для leak в финансах нужен более жёсткий minimum-режим.')
+  }
+  if (openTasks !== null && openTasks >= 18) {
+    hypotheses.push('Наблюдение: накопилось много открытых задач. Leak может усиливаться из-за перегруза и распыления.')
   }
 
   return hypotheses.slice(0, 3)
@@ -914,6 +926,32 @@ export function LeaksScreen() {
       return acc
     }, {})
   }, [filteredLeaks, groupBy])
+
+  const priorityLeaks = useMemo(() => {
+    const severityRank: Record<LeakEntity['severity'], number> = {
+      critical: 3,
+      warning: 2,
+      info: 1,
+    }
+
+    const scoreLeak = (leak: LeakEntity) => {
+      let score = severityRank[leak.severity] * 10
+      if (leak.status === 'new') score += 7
+      if (leak.status === 'in_progress') score += 5
+      if (isFocusLeak(leak)) score += 4
+      if (leak.actions.length === 0) score += 2
+      return score
+    }
+
+    return leaks
+      .filter((leak) => leak.status === 'new' || leak.status === 'in_progress')
+      .sort((a, b) => {
+        const byScore = scoreLeak(b) - scoreLeak(a)
+        if (byScore !== 0) return byScore
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      })
+      .slice(0, 3)
+  }, [leaks])
 
   const createLeak = async (prepareAnalysis: boolean) => {
     if (!user?.id || !hasDraft) return
@@ -1451,6 +1489,15 @@ export function LeaksScreen() {
     comment?: string,
   ) => {
     if (!user?.id) return
+    const normalizedComment = comment?.trim() || ''
+
+    if (result === 'not_worked' && normalizedComment.length < 5) {
+      showErrorToast(
+        new Error('Добавь короткий комментарий (минимум 5 символов), чтобы система поняла, почему не помогло'),
+        'save plan feedback',
+      )
+      return
+    }
 
     setSavingFeedbackActionId(actionId)
     try {
@@ -1461,7 +1508,7 @@ export function LeaksScreen() {
           userId: user.id,
           solutionActionId: actionId,
           result,
-          comment: comment?.trim() || null,
+          comment: normalizedComment || null,
         }),
       })
 
@@ -1516,7 +1563,7 @@ export function LeaksScreen() {
       )
       setFeedbackCommentByAction((current) => ({
         ...current,
-        [actionId]: comment?.trim() || '',
+        [actionId]: normalizedComment,
       }))
     } catch (error) {
       showErrorToast(error, 'save plan feedback')
@@ -1911,6 +1958,35 @@ export function LeaksScreen() {
             </Card>
           )}
 
+          {priorityLeaks.length > 0 && (
+            <Card style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)' }}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-white text-base">Приоритетный фокус</CardTitle>
+                <CardDescription className="text-white/60">
+                  Leaks, где сейчас выше риск застрять без следующего шага.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="flex flex-wrap gap-2">
+                  {priorityLeaks.map((leak) => (
+                    <Button
+                      key={`priority-${leak.id}`}
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setExpandedLeakId(leak.id)
+                        setStatusFilter('all')
+                      }}
+                      className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-100"
+                    >
+                      {leak.title}
+                    </Button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <div className="flex flex-wrap gap-2">
             {STATUS_OPTIONS.map((option) => (
               <button
@@ -2254,6 +2330,32 @@ export function LeaksScreen() {
                                 Не помогло {guidance.failedActions}
                               </Badge>
                             )}
+                          </div>
+                        )}
+                        {guidance.totalActions > 0 && (
+                          <div className="mt-3 space-y-2">
+                            <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                              <div
+                                className="h-full rounded-full bg-indigo-400/80"
+                                style={{
+                                  width: `${Math.round((guidance.createdActions / guidance.totalActions) * 100)}%`,
+                                }}
+                              />
+                            </div>
+                            <div className="text-xs text-white/50">
+                              Применение: {Math.round((guidance.createdActions / guidance.totalActions) * 100)}%
+                            </div>
+                            <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                              <div
+                                className="h-full rounded-full bg-emerald-400/80"
+                                style={{
+                                  width: `${Math.round((guidance.feedbackActions / guidance.totalActions) * 100)}%`,
+                                }}
+                              />
+                            </div>
+                            <div className="text-xs text-white/50">
+                              Feedback покрытие: {Math.round((guidance.feedbackActions / guidance.totalActions) * 100)}%
+                            </div>
                           </div>
                         )}
                         {guidance.action && (
@@ -3122,12 +3224,22 @@ export function LeaksScreen() {
           ) : (
             patterns.map((pattern) => (
               (() => {
-                const activeLinkedLeaks = leaks.filter(
-                  (leak) =>
-                    leak.status !== 'resolved' &&
-                    leak.status !== 'archived' &&
-                    normalizeLookupValue(leak.title) === normalizeLookupValue(pattern.leakType),
-                )
+                const activeLinkedLeaks =
+                  Array.isArray(pattern.activeLeaks) && pattern.activeLeaks.length > 0
+                    ? pattern.activeLeaks
+                    : leaks
+                        .filter(
+                          (leak) =>
+                            leak.status !== 'resolved' &&
+                            leak.status !== 'archived' &&
+                            normalizeLookupValue(leak.title) === normalizeLookupValue(pattern.leakType),
+                        )
+                        .map((leak) => ({
+                          id: leak.id,
+                          title: leak.title,
+                          status: leak.status,
+                          updatedAt: leak.updatedAt,
+                        }))
 
                 return (
                   <Card key={pattern.leakType} style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -3142,6 +3254,11 @@ export function LeaksScreen() {
                         <Badge className="bg-white/10 text-white/75 border-white/10">
                           Анализов: {pattern.analysisCount}
                         </Badge>
+                        {typeof pattern.activeLeakCount === 'number' && pattern.activeLeakCount > 0 && (
+                          <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                            Активных leaks: {pattern.activeLeakCount}
+                          </Badge>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap gap-2">

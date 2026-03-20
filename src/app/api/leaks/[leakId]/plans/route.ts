@@ -34,7 +34,7 @@ function startOfLookbackWindow(days: number) {
 async function buildLiveLeakContext(userId: string, leakId: string) {
   const since = startOfLookbackWindow(CONTEXT_LOOKBACK_DAYS)
 
-  const [dailyStates, foodEntries, fitnessDays, transactions, workoutCount, ritualCount, checkins, doneTasksCount, linkedEntities, feedbackRows] =
+  const [dailyStates, foodEntries, fitnessDays, transactions, workoutCount, ritualCount, checkins, doneTasksCount, openTasksCount, linkedEntities, feedbackRows] =
     await Promise.all([
       db.dailyState.findMany({
         where: { userId, date: { gte: since } },
@@ -96,6 +96,12 @@ async function buildLiveLeakContext(userId: string, leakId: string) {
           userId,
           status: 'done',
           updatedAt: { gte: since },
+        },
+      }),
+      db.task.count({
+        where: {
+          userId,
+          status: 'todo',
         },
       }),
       db.leakActionLink.findMany({
@@ -187,6 +193,7 @@ async function buildLiveLeakContext(userId: string, leakId: string) {
       dayRatingAvg: avg(eveningCheckins.map((item) => toNumber(item.dayRating))),
       plannedEnergyAvg: avg(morningCheckins.map((item) => toNumber(item.energy))),
       doneTasks: doneTasksCount,
+      openTasks: openTasksCount,
     },
     history: {
       linkedEntities: linkedEntities.map((item) => {
