@@ -3525,6 +3525,10 @@ export function LeaksScreen() {
               const selectedModeForChain =
                 policy?.selectedMode || selectedPlan?.mode || selectedModeFromSnapshot || null
               const createdEntityCountForChain = leak.actions.length
+              const policyLinkedCreatedCount = leak.actions.filter((item) => {
+                const metadata = getLeakActionMetadata(item)
+                return typeof metadata?.policyCorrelationId === 'string' && metadata.policyCorrelationId.length > 0
+              }).length
               const feedbackCountForChain = feedbackByAction.length
               const workedCountForChain = feedbackByAction.filter((item) => item.result === 'worked').length
               const contextPulse = {
@@ -3885,6 +3889,8 @@ export function LeaksScreen() {
                           feedback {feedbackCountForChain}
                           {' → '}
                           worked {workedCountForChain}
+                          {' • '}
+                          policy-linked entities {policyLinkedCreatedCount}
                         </div>
                         {contextDriftHint && (
                           <div
@@ -4111,6 +4117,9 @@ export function LeaksScreen() {
                               </Badge>
                               <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
                                 Failed: {policyOutcomeFailed}
+                              </Badge>
+                              <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                                Created by policy: {policyLinkedCreatedCount}
                               </Badge>
                             </div>
                             {Object.keys(policyRejectReasonCounts).length > 0 && (
