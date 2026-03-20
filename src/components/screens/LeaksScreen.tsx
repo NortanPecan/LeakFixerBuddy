@@ -627,6 +627,20 @@ function getContextSnapshotItems(contextSnapshot?: Record<string, unknown> | nul
       return
     }
 
+    if (key === 'retry' && value && typeof value === 'object' && !Array.isArray(value)) {
+      const retry = value as Record<string, unknown>
+      if (typeof retry.actionTitle === 'string') {
+        lines.push(`Retry-фокус: ${retry.actionTitle}`)
+      }
+      if (typeof retry.failureReason === 'string' && retry.failureReason.trim()) {
+        lines.push(`Почему не сработало: ${retry.failureReason}`)
+      }
+      if (typeof retry.requestedAt === 'string') {
+        lines.push(`Retry запрошен: ${formatDate(retry.requestedAt)}`)
+      }
+      return
+    }
+
     pushValue(key, value)
   })
 
