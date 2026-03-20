@@ -10,6 +10,27 @@ function normalizePatternKey(value: string) {
     .replace(/\s+/g, ' ')
 }
 
+function normalizeTriedSolution(item: unknown) {
+  if (!item || typeof item !== 'object') return null
+  const candidate = item as Record<string, unknown>
+  if (typeof candidate.text !== 'string' || !candidate.text.trim()) return null
+
+  return {
+    text: candidate.text.trim(),
+    worked:
+      typeof candidate.worked === 'boolean'
+        ? candidate.worked
+        : null,
+    result: typeof candidate.result === 'string' ? candidate.result : undefined,
+    comment: typeof candidate.comment === 'string' ? candidate.comment : null,
+    updatedAt: typeof candidate.updatedAt === 'string' ? candidate.updatedAt : null,
+    sourceActionKind: typeof candidate.sourceActionKind === 'string' ? candidate.sourceActionKind : null,
+    sourcePlanMode: typeof candidate.sourcePlanMode === 'string' ? candidate.sourcePlanMode : null,
+    linkedEntityType: typeof candidate.linkedEntityType === 'string' ? candidate.linkedEntityType : null,
+    linkedEntityLabel: typeof candidate.linkedEntityLabel === 'string' ? candidate.linkedEntityLabel : null,
+  }
+}
+
 // GET /api/ai/patterns?userId=xxx — list all UserAiPattern records for a user
 export async function GET(request: NextRequest) {
   try {
@@ -28,6 +49,7 @@ export async function GET(request: NextRequest) {
           leakType: true,
           analysisCount: true,
           whatWorked: true,
+          triedSolutions: true,
           updatedAt: true,
         },
       }),
@@ -80,8 +102,25 @@ export async function GET(request: NextRequest) {
             updatedAt: leak.updatedAt.toISOString(),
           }))
       }
+      const triedSolutions = Array.isArray(pattern.triedSolutions)
+        ? (pattern.triedSolutions as unknown[])
+            .map(normalizeTriedSolution)
+            .filter((item): item is NonNullable<ReturnType<typeof normalizeTriedSolution>> => Boolean(item))
+        : []
+      const workedCount = triedSolutions.filter((item) => item.result === 'worked').length
+      const partialCount = triedSolutions.filter((item) => item.result === 'partially').length
+      const failedCount = triedSolutions.filter((item) => item.result === 'not_worked').length
+      const workedExamples = triedSolutions
+        .filter((item) => item.result === 'worked' || item.worked === true)
+        .slice(0, 6)
+
       return {
         ...pattern,
+        triedSolutions,
+        workedCount,
+        partialCount,
+        failedCount,
+        workedExamples,
         activeLeakCount: linkedLeaks.length,
         activeLeaks: linkedLeaks,
       }

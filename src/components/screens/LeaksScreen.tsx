@@ -87,6 +87,31 @@ interface LeakPattern {
   leakType: string
   analysisCount: number
   whatWorked: string[]
+  triedSolutions?: Array<{
+    text: string
+    worked: boolean | null
+    result?: 'worked' | 'partially' | 'not_worked'
+    comment?: string | null
+    updatedAt?: string | null
+    sourceActionKind?: string | null
+    sourcePlanMode?: string | null
+    linkedEntityType?: string | null
+    linkedEntityLabel?: string | null
+  }>
+  workedCount?: number
+  partialCount?: number
+  failedCount?: number
+  workedExamples?: Array<{
+    text: string
+    worked: boolean | null
+    result?: 'worked' | 'partially' | 'not_worked'
+    comment?: string | null
+    updatedAt?: string | null
+    sourceActionKind?: string | null
+    sourcePlanMode?: string | null
+    linkedEntityType?: string | null
+    linkedEntityLabel?: string | null
+  }>
   updatedAt: string
   activeLeakCount?: number
   activeLeaks?: Array<{
@@ -663,7 +688,86 @@ function getFeedbackByActionId(plans?: LeakSolutionPlan[]) {
   return map
 }
 
-function getLeakFeedbackTimeline(plans?: LeakSolutionPlan[]) {
+function normalizePattern(rawPattern: unknown): LeakPattern | null {
+  if (!rawPattern || typeof rawPattern !== 'object') return null
+  const pattern = rawPattern as Record<string, unknown>
+  if (typeof pattern.leakType !== 'string' || !pattern.leakType.trim()) return null
+
+  const normalizeTried = (item: unknown) => {
+    if (!item || typeof item !== 'object') return null
+    const candidate = item as Record<string, unknown>
+    if (typeof candidate.text !== 'string' || !candidate.text.trim()) return null
+
+    const result = candidate.result
+    return {
+      text: candidate.text.trim(),
+      worked: typeof candidate.worked === 'boolean' ? candidate.worked : null,
+      result:
+        result === 'worked' || result === 'partially' || result === 'not_worked'
+          ? result
+          : undefined,
+      comment: typeof candidate.comment === 'string' ? candidate.comment : null,
+      updatedAt: typeof candidate.updatedAt === 'string' ? candidate.updatedAt : null,
+      sourceActionKind: typeof candidate.sourceActionKind === 'string' ? candidate.sourceActionKind : null,
+      sourcePlanMode: typeof candidate.sourcePlanMode === 'string' ? candidate.sourcePlanMode : null,
+      linkedEntityType: typeof candidate.linkedEntityType === 'string' ? candidate.linkedEntityType : null,
+      linkedEntityLabel: typeof candidate.linkedEntityLabel === 'string' ? candidate.linkedEntityLabel : null,
+    } as LeakPattern['triedSolutions'][number]
+  }
+
+  const triedSolutions = Array.isArray(pattern.triedSolutions)
+    ? pattern.triedSolutions
+        .map(normalizeTried)
+        .filter((item): item is NonNullable<ReturnType<typeof normalizeTried>> => Boolean(item))
+    : []
+  const fallbackWorkedExamples = triedSolutions
+    .filter((item) => item.result === 'worked' || item.worked === true)
+    .slice(0, 6)
+  const workedExamples = Array.isArray(pattern.workedExamples)
+    ? pattern.workedExamples
+        .map(normalizeTried)
+        .filter((item): item is NonNullable<ReturnType<typeof normalizeTried>> => Boolean(item))
+    : fallbackWorkedExamples
+
+  return {
+    leakType: pattern.leakType.trim(),
+    analysisCount: typeof pattern.analysisCount === 'number' ? pattern.analysisCount : 0,
+    whatWorked: Array.isArray(pattern.whatWorked)
+      ? pattern.whatWorked.filter((item): item is string => typeof item === 'string')
+      : [],
+    triedSolutions,
+    workedCount:
+      typeof pattern.workedCount === 'number'
+        ? pattern.workedCount
+        : triedSolutions.filter((item) => item.result === 'worked').length,
+    partialCount:
+      typeof pattern.partialCount === 'number'
+        ? pattern.partialCount
+        : triedSolutions.filter((item) => item.result === 'partially').length,
+    failedCount:
+      typeof pattern.failedCount === 'number'
+        ? pattern.failedCount
+        : triedSolutions.filter((item) => item.result === 'not_worked').length,
+    workedExamples,
+    updatedAt: typeof pattern.updatedAt === 'string' ? pattern.updatedAt : new Date().toISOString(),
+    activeLeakCount: typeof pattern.activeLeakCount === 'number' ? pattern.activeLeakCount : undefined,
+    activeLeaks: Array.isArray(pattern.activeLeaks)
+      ? pattern.activeLeaks
+          .filter((item): item is { id: string; title: string; status: string; updatedAt: string } => {
+            if (!item || typeof item !== 'object') return false
+            const leak = item as Record<string, unknown>
+            return (
+              typeof leak.id === 'string' &&
+              typeof leak.title === 'string' &&
+              typeof leak.status === 'string' &&
+              typeof leak.updatedAt === 'string'
+            )
+          })
+      : undefined,
+  }
+}
+
+function getLeakFeedbackTimeline(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
   const rows: Array<{
     actionId: string
     actionTitle: string
@@ -672,6 +776,7 @@ function getLeakFeedbackTimeline(plans?: LeakSolutionPlan[]) {
     comment: string | null
     updatedAt: string
     mode: LeakSolutionPlan['mode']
+    linkedEntity: LeakActionLink | null
   }> = []
 
   plans?.forEach((plan) => {
@@ -687,6 +792,7 @@ function getLeakFeedbackTimeline(plans?: LeakSolutionPlan[]) {
         comment: feedback.comment,
         updatedAt: feedback.updatedAt,
         mode: plan.mode,
+        linkedEntity: getLinkedEntityForPlanAction(leak, action),
       })
     })
   })
@@ -861,7 +967,13 @@ export function LeaksScreen() {
 
       setLeaks(Array.isArray(leaksData.leaks) ? leaksData.leaks.map(normalizeLeak) : [])
       setSignals(Array.isArray(signalsData.leakHints) ? signalsData.leakHints : [])
-      setPatterns(Array.isArray(patternsData.patterns) ? patternsData.patterns : [])
+      setPatterns(
+        Array.isArray(patternsData.patterns)
+          ? patternsData.patterns
+              .map(normalizePattern)
+              .filter((item): item is LeakPattern => Boolean(item))
+          : [],
+      )
     } catch (error) {
       showErrorToast(error, 'load leaks module')
     } finally {
@@ -1365,6 +1477,14 @@ export function LeaksScreen() {
     return action.feedbacks?.[0]?.comment || ''
   }
 
+  const getFeedbackCommentDraftByActionId = (actionId: string) => {
+    if (feedbackCommentByAction[actionId] !== undefined) {
+      return feedbackCommentByAction[actionId]
+    }
+
+    return ''
+  }
+
   const clearLeakFilters = () => {
     setStatusFilter('all')
     setSourceFilter('all')
@@ -1554,19 +1674,10 @@ export function LeaksScreen() {
       if (!response.ok) throw response
 
       const data = await response.json()
-      const nextPattern = data.pattern && typeof data.pattern.leakType === 'string'
-        ? {
-            leakType: data.pattern.leakType,
-            analysisCount: typeof data.pattern.analysisCount === 'number' ? data.pattern.analysisCount : 0,
-            whatWorked: Array.isArray(data.pattern.whatWorked)
-              ? data.pattern.whatWorked.filter((item: unknown): item is string => typeof item === 'string')
-              : [],
-            updatedAt:
-              typeof data.pattern.updatedAt === 'string'
-                ? data.pattern.updatedAt
-                : new Date().toISOString(),
-          } satisfies LeakPattern
-        : null
+      const nextPattern =
+        data.pattern && typeof data.pattern === 'object'
+          ? normalizePattern(data.pattern)
+          : null
       setPlansByLeak((current) => ({
         ...current,
         [leakId]: normalizePlans(data.plans || []),
@@ -2198,7 +2309,7 @@ export function LeaksScreen() {
               const leakPlans = plansByLeak[leak.id] || []
               const selectedPlan = getSelectedPlan(leakPlans)
               const feedbackByActionId = getFeedbackByActionId(leakPlans)
-              const feedbackTimeline = getLeakFeedbackTimeline(leakPlans)
+              const feedbackTimeline = getLeakFeedbackTimeline(leak, leakPlans)
               const contextHypotheses = buildContextHypotheses(leak.contextSnapshot)
               const matchedPattern = patterns.find(
                 (pattern) => normalizeLookupValue(pattern.leakType) === normalizeLookupValue(leak.title),
@@ -2550,7 +2661,7 @@ export function LeaksScreen() {
                         </div>
                       )}
 
-                      {(matchedPattern?.whatWorked?.length || selectedPlan) && (
+                      {(matchedPattern || selectedPlan) && (
                         <div className="space-y-2">
                           <div className="text-xs uppercase tracking-wide text-white/40">
                             Learning слой
@@ -2566,6 +2677,21 @@ export function LeaksScreen() {
                               <Badge className="bg-white/10 text-white/70 border-white/10">
                                 Обновлено: {formatDate(matchedPattern.updatedAt)}
                               </Badge>
+                              {(matchedPattern.workedCount || 0) > 0 && (
+                                <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
+                                  Сработало: {matchedPattern.workedCount}
+                                </Badge>
+                              )}
+                              {(matchedPattern.partialCount || 0) > 0 && (
+                                <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
+                                  Частично: {matchedPattern.partialCount}
+                                </Badge>
+                              )}
+                              {(matchedPattern.failedCount || 0) > 0 && (
+                                <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
+                                  Не помогло: {matchedPattern.failedCount}
+                                </Badge>
+                              )}
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -2576,7 +2702,39 @@ export function LeaksScreen() {
                               </Button>
                             </div>
                           )}
-                          {matchedPattern?.whatWorked?.length ? (
+                          {matchedPattern?.workedExamples && matchedPattern.workedExamples.length > 0 ? (
+                            <div className="space-y-2">
+                              {matchedPattern.workedExamples.map((item) => (
+                                <div
+                                  key={`${item.text}-${item.updatedAt || 'na'}`}
+                                  className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2"
+                                >
+                                  <div className="text-sm text-emerald-100">{item.text}</div>
+                                  <div className="mt-1 flex flex-wrap gap-2">
+                                    {item.sourcePlanMode && (
+                                      <Badge className="bg-white/10 text-white/70 border-white/10">
+                                        Режим:{' '}
+                                        {item.sourcePlanMode in PLAN_MODE_LABELS
+                                          ? PLAN_MODE_LABELS[item.sourcePlanMode as LeakSolutionPlan['mode']]
+                                          : item.sourcePlanMode}
+                                      </Badge>
+                                    )}
+                                    {item.linkedEntityLabel && item.linkedEntityType && (
+                                      <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                                        Сущность: {getActionLabel(item.linkedEntityType as LeakActionLink['entityType'])} • {item.linkedEntityLabel}
+                                      </Badge>
+                                    )}
+                                    {item.updatedAt && (
+                                      <Badge className="bg-white/10 text-white/65 border-white/10">
+                                        Feedback: {formatDate(item.updatedAt)}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {item.comment && <div className="mt-1 text-xs text-emerald-100/80">{item.comment}</div>}
+                                </div>
+                              ))}
+                            </div>
+                          ) : matchedPattern?.whatWorked?.length ? (
                             <div className="flex flex-wrap gap-2">
                               {matchedPattern.whatWorked.map((item) => (
                                 <Badge
@@ -2587,11 +2745,11 @@ export function LeaksScreen() {
                                 </Badge>
                               ))}
                             </div>
-                          ) : (
+                          ) : matchedPattern ? (
                             <p className="text-sm text-white/55">
                               После первых feedback тут появятся решения, которые стабильно работают именно для этого leak.
                             </p>
-                          )}
+                          ) : null}
                         </div>
                       )}
 
@@ -2599,6 +2757,25 @@ export function LeaksScreen() {
                         <div className="space-y-2">
                           <div className="text-xs uppercase tracking-wide text-white/40">
                             Цепочка выполнения
+                          </div>
+                          <div className="rounded-xl border border-white/10 bg-black/10 px-3 py-2">
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-white/70">
+                              <Badge variant="outline" className="border-white/10 text-white/70">
+                                Leak: {leak.title}
+                              </Badge>
+                              <span className="text-white/35">→</span>
+                              <Badge className={PLAN_MODE_STYLES[selectedPlan.mode]}>
+                                Режим: {PLAN_MODE_LABELS[selectedPlan.mode]}
+                              </Badge>
+                              <span className="text-white/35">→</span>
+                              <Badge className="bg-white/10 text-white/75 border-white/10">
+                                Создано: {guidance.createdActions}/{guidance.totalActions}
+                              </Badge>
+                              <span className="text-white/35">→</span>
+                              <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
+                                Feedback: {guidance.feedbackActions}/{guidance.totalActions}
+                              </Badge>
+                            </div>
                           </div>
                           <div className="rounded-xl border border-white/10 bg-black/10 px-3 py-2 space-y-2">
                             <div className="flex flex-wrap gap-2">
@@ -2766,6 +2943,13 @@ export function LeaksScreen() {
                                   <div className="text-xs text-white/40">{formatDate(item.updatedAt)}</div>
                                 </div>
                                 <div className="mt-1 text-sm text-white">{item.actionTitle}</div>
+                                {item.linkedEntity && (
+                                  <div className="mt-1">
+                                    <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20 whitespace-normal text-left">
+                                      Сущность: {getActionLabel(item.linkedEntity.entityType)} • {item.linkedEntity.label}
+                                    </Badge>
+                                  </div>
+                                )}
                                 {item.comment && <div className="mt-1 text-xs text-white/60">{item.comment}</div>}
                               </div>
                             ))}
@@ -2814,7 +2998,10 @@ export function LeaksScreen() {
                                         <div className="flex flex-wrap gap-2">
                                           {sourcePlanMode && (
                                             <Badge className="bg-white/10 text-white/65 border-white/10">
-                                              Режим: {sourcePlanMode}
+                                              Режим:{' '}
+                                              {sourcePlanMode in PLAN_MODE_LABELS
+                                                ? PLAN_MODE_LABELS[sourcePlanMode as LeakSolutionPlan['mode']]
+                                                : sourcePlanMode}
                                             </Badge>
                                           )}
                                           {sourceActionTitle && (
@@ -2850,6 +3037,33 @@ export function LeaksScreen() {
                                       >
                                         Открыть
                                       </Button>
+                                      {sourceActionId && !feedback && (
+                                        <>
+                                          {(['worked', 'partially', 'not_worked'] as const).map((result) => (
+                                            <Button
+                                              key={`${action.id}-${result}`}
+                                              size="sm"
+                                              variant="outline"
+                                              onClick={() =>
+                                                sendPlanActionFeedback(
+                                                  leak.id,
+                                                  sourceActionId,
+                                                  result,
+                                                  getFeedbackCommentDraftByActionId(sourceActionId),
+                                                )
+                                              }
+                                              disabled={savingFeedbackActionId === sourceActionId}
+                                              className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                            >
+                                              {result === 'worked'
+                                                ? 'Сработало'
+                                                : result === 'partially'
+                                                  ? 'Частично'
+                                                  : 'Не помогло'}
+                                            </Button>
+                                          ))}
+                                        </>
+                                      )}
                                       {feedback && feedback.result !== 'worked' && (
                                         <Button
                                           size="sm"
@@ -3334,6 +3548,11 @@ export function LeaksScreen() {
                         <Badge className="bg-white/10 text-white/75 border-white/10">
                           Анализов: {pattern.analysisCount}
                         </Badge>
+                        {(pattern.workedCount || 0) > 0 && (
+                          <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
+                            Сработало: {pattern.workedCount}
+                          </Badge>
+                        )}
                         {typeof pattern.activeLeakCount === 'number' && pattern.activeLeakCount > 0 && (
                           <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
                             Активных leaks: {pattern.activeLeakCount}
@@ -3378,7 +3597,45 @@ export function LeaksScreen() {
                         </div>
                       )}
 
-                      {pattern.whatWorked.length > 0 ? (
+                      {pattern.workedExamples && pattern.workedExamples.length > 0 ? (
+                        <div className="space-y-2">
+                          <div className="text-xs uppercase tracking-wide text-white/40 flex items-center gap-2">
+                            <Lightbulb className="w-3.5 h-3.5" />
+                            Что уже сработало
+                          </div>
+                          <div className="space-y-2">
+                            {pattern.workedExamples.map((item) => (
+                              <div
+                                key={`${pattern.leakType}-${item.text}-${item.updatedAt || 'na'}`}
+                                className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2"
+                              >
+                                <div className="text-sm text-emerald-100">{item.text}</div>
+                                <div className="mt-1 flex flex-wrap gap-2">
+                                  {item.sourcePlanMode && (
+                                    <Badge className="bg-white/10 text-white/70 border-white/10">
+                                      Режим:{' '}
+                                      {item.sourcePlanMode in PLAN_MODE_LABELS
+                                        ? PLAN_MODE_LABELS[item.sourcePlanMode as LeakSolutionPlan['mode']]
+                                        : item.sourcePlanMode}
+                                    </Badge>
+                                  )}
+                                  {item.linkedEntityLabel && item.linkedEntityType && (
+                                    <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                                      Сущность: {getActionLabel(item.linkedEntityType as LeakActionLink['entityType'])} • {item.linkedEntityLabel}
+                                    </Badge>
+                                  )}
+                                  {item.updatedAt && (
+                                    <Badge className="bg-white/10 text-white/65 border-white/10">
+                                      Обновлено: {formatDate(item.updatedAt)}
+                                    </Badge>
+                                  )}
+                                </div>
+                                {item.comment && <div className="mt-1 text-xs text-emerald-100/80">{item.comment}</div>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : pattern.whatWorked.length > 0 ? (
                         <div className="space-y-2">
                           <div className="text-xs uppercase tracking-wide text-white/40 flex items-center gap-2">
                             <Lightbulb className="w-3.5 h-3.5" />

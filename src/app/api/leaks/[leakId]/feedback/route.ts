@@ -12,7 +12,17 @@ const LeakFeedbackSchema = z.object({
 
 function normalizeTriedSolution(
   item: unknown,
-): { text: string; worked: boolean | null; result?: string; comment?: string | null } | null {
+): {
+  text: string
+  worked: boolean | null
+  result?: string
+  comment?: string | null
+  updatedAt?: string
+  sourceActionKind?: string
+  sourcePlanMode?: string
+  linkedEntityType?: string | null
+  linkedEntityLabel?: string | null
+} | null {
   if (!item || typeof item !== 'object') return null
 
   const candidate = item as Record<string, unknown>
@@ -26,6 +36,48 @@ function normalizeTriedSolution(
         : null,
     result: typeof candidate.result === 'string' ? candidate.result : undefined,
     comment: typeof candidate.comment === 'string' ? candidate.comment : null,
+    updatedAt: typeof candidate.updatedAt === 'string' ? candidate.updatedAt : undefined,
+    sourceActionKind: typeof candidate.sourceActionKind === 'string' ? candidate.sourceActionKind : undefined,
+    sourcePlanMode: typeof candidate.sourcePlanMode === 'string' ? candidate.sourcePlanMode : undefined,
+    linkedEntityType:
+      typeof candidate.linkedEntityType === 'string' ? candidate.linkedEntityType : null,
+    linkedEntityLabel:
+      typeof candidate.linkedEntityLabel === 'string' ? candidate.linkedEntityLabel : null,
+  }
+}
+
+function buildPatternResponse(pattern: {
+  leakType: string
+  analysisCount: number
+  whatWorked: unknown
+  triedSolutions: unknown
+  updatedAt: Date
+}) {
+  const normalizedTried = Array.isArray(pattern.triedSolutions)
+    ? (pattern.triedSolutions as unknown[])
+        .map(normalizeTriedSolution)
+        .filter((item): item is NonNullable<ReturnType<typeof normalizeTriedSolution>> => Boolean(item))
+    : []
+
+  const workedCount = normalizedTried.filter((item) => item.result === 'worked').length
+  const partialCount = normalizedTried.filter((item) => item.result === 'partially').length
+  const failedCount = normalizedTried.filter((item) => item.result === 'not_worked').length
+  const workedExamples = normalizedTried
+    .filter((item) => item.result === 'worked' || item.worked === true)
+    .slice(0, 6)
+
+  return {
+    leakType: pattern.leakType,
+    analysisCount: pattern.analysisCount,
+    whatWorked: Array.isArray(pattern.whatWorked)
+      ? (pattern.whatWorked as unknown[]).filter((item): item is string => typeof item === 'string')
+      : [],
+    triedSolutions: normalizedTried,
+    workedCount,
+    partialCount,
+    failedCount,
+    workedExamples,
+    updatedAt: pattern.updatedAt.toISOString(),
   }
 }
 
@@ -100,6 +152,7 @@ export async function POST(
         plan: {
           select: {
             leakId: true,
+            mode: true,
           },
         },
       },
@@ -156,6 +209,19 @@ export async function POST(
           analysisCount: true,
         },
       })
+      const linkedEntities = await tx.leakActionLink.findMany({
+        where: { leakId },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          entityType: true,
+          label: true,
+          metadata: true,
+        },
+      })
+      const linkedEntity = linkedEntities.find((item) => {
+        if (!item.metadata || typeof item.metadata !== 'object' || Array.isArray(item.metadata)) return false
+        return (item.metadata as Record<string, unknown>).sourceActionId === action.id
+      }) || null
 
       const triedSolutions = Array.isArray(existingPattern?.triedSolutions)
         ? (existingPattern?.triedSolutions as unknown[])
@@ -172,6 +238,11 @@ export async function POST(
           worked: workedValue,
           result,
           comment: comment?.trim() || null,
+          updatedAt: new Date().toISOString(),
+          sourceActionKind: action.kind,
+          sourcePlanMode: action.plan.mode,
+          linkedEntityType: linkedEntity?.entityType || null,
+          linkedEntityLabel: linkedEntity?.label || null,
         }
       } else {
         triedSolutions.push({
@@ -179,6 +250,11 @@ export async function POST(
           worked: workedValue,
           result,
           comment: comment?.trim() || null,
+          updatedAt: new Date().toISOString(),
+          sourceActionKind: action.kind,
+          sourcePlanMode: action.plan.mode,
+          linkedEntityType: linkedEntity?.entityType || null,
+          linkedEntityLabel: linkedEntity?.label || null,
         })
       }
 
@@ -216,6 +292,7 @@ export async function POST(
           leakType: true,
           analysisCount: true,
           whatWorked: true,
+          triedSolutions: true,
           updatedAt: true,
         },
       })
@@ -237,7 +314,7 @@ export async function POST(
       success: true,
       plans,
       result,
-      pattern: updatedPattern.pattern,
+      pattern: buildPatternResponse(updatedPattern.pattern),
       reopened: updatedPattern.reopened,
       leak: refreshedLeak,
     })
