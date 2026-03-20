@@ -194,6 +194,16 @@ export async function POST(
 
       for (const action of targetActions) {
         const payload = getPayloadObject(action.payload)
+        const sharedMetadata = {
+          ...(payload || {}),
+          sourcePlanId: selectedPlan.id,
+          sourcePlanMode: selectedPlan.mode,
+          sourcePlanConfidenceLabel: selectedPlan.confidenceLabel,
+          sourcePlanConfidenceReason: selectedPlan.confidenceReason || null,
+          sourceActionId: action.id,
+          sourceActionTitle: action.title,
+          sourceActionKind: action.kind,
+        }
 
         if (typeof payload.convertedEntityId === 'string' && payload.convertedEntityId) {
           skippedActions += 1
@@ -221,6 +231,28 @@ export async function POST(
 
         if (existingLinkForAction) {
           reusedActions += 1
+          await tx.leakActionLink.upsert({
+            where: {
+              leakId_entityType_entityId: {
+                leakId,
+                entityType: existingLinkForAction.entityType,
+                entityId: existingLinkForAction.entityId,
+              },
+            },
+            update: {
+              label: existingLinkForAction.label,
+              status: 'active',
+              metadata: sharedMetadata,
+            },
+            create: {
+              leakId,
+              entityType: existingLinkForAction.entityType,
+              entityId: existingLinkForAction.entityId,
+              label: existingLinkForAction.label,
+              status: 'active',
+              metadata: sharedMetadata,
+            },
+          })
           await tx.leakSolutionAction.update({
             where: { id: action.id },
             data: {
@@ -360,14 +392,7 @@ export async function POST(
           entityType: created.entityType,
           entityId: created.entityId,
           label: created.label,
-          metadata: {
-            ...(payload || {}),
-            sourcePlanId: selectedPlan.id,
-            sourcePlanMode: selectedPlan.mode,
-            sourceActionId: action.id,
-            sourceActionTitle: action.title,
-            sourceActionKind: action.kind,
-          },
+          metadata: sharedMetadata,
         })
 
         await tx.leakActionLink.upsert({
@@ -381,14 +406,7 @@ export async function POST(
           update: {
             label: created.label,
             status: 'active',
-            metadata: {
-              ...(payload || {}),
-              sourcePlanId: selectedPlan.id,
-              sourcePlanMode: selectedPlan.mode,
-              sourceActionId: action.id,
-              sourceActionTitle: action.title,
-              sourceActionKind: action.kind,
-            },
+            metadata: sharedMetadata,
           },
           create: {
             leakId,
@@ -396,14 +414,7 @@ export async function POST(
             entityId: created.entityId,
             label: created.label,
             status: 'active',
-            metadata: {
-              ...(payload || {}),
-              sourcePlanId: selectedPlan.id,
-              sourcePlanMode: selectedPlan.mode,
-              sourceActionId: action.id,
-              sourceActionTitle: action.title,
-              sourceActionKind: action.kind,
-            },
+            metadata: sharedMetadata,
           },
         })
 

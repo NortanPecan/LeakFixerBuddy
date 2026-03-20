@@ -3303,6 +3303,14 @@ export function LeaksScreen() {
                                   typeof metadata?.sourcePlanMode === 'string'
                                     ? metadata.sourcePlanMode
                                     : null
+                                const sourcePlanConfidenceLabel =
+                                  typeof metadata?.sourcePlanConfidenceLabel === 'string'
+                                    ? metadata.sourcePlanConfidenceLabel
+                                    : null
+                                const sourcePlanConfidenceReason =
+                                  typeof metadata?.sourcePlanConfidenceReason === 'string'
+                                    ? metadata.sourcePlanConfidenceReason
+                                    : null
                                 const feedback = sourceActionId ? feedbackByActionId.get(sourceActionId) : null
                                 const sourcePlanAction = sourceActionId ? planActionsById.get(sourceActionId) || null : null
 
@@ -3328,6 +3336,14 @@ export function LeaksScreen() {
                                                 : sourcePlanMode}
                                             </Badge>
                                           )}
+                                          {sourcePlanConfidenceLabel &&
+                                            (sourcePlanConfidenceLabel === 'low' ||
+                                              sourcePlanConfidenceLabel === 'medium' ||
+                                              sourcePlanConfidenceLabel === 'high') && (
+                                              <Badge className={PLAN_CONFIDENCE_STYLES[sourcePlanConfidenceLabel]}>
+                                                Уверенность: {getConfidenceLabelText(sourcePlanConfidenceLabel)}
+                                              </Badge>
+                                            )}
                                           {sourceActionTitle && (
                                             <Badge className="bg-white/10 text-white/65 border-white/10">
                                               Действие: {sourceActionTitle}
@@ -3350,6 +3366,9 @@ export function LeaksScreen() {
                                       )}
                                       {feedback?.comment && (
                                         <div className="text-xs text-white/55">{feedback.comment}</div>
+                                      )}
+                                      {sourcePlanConfidenceReason && (
+                                        <div className="text-xs text-white/55">{sourcePlanConfidenceReason}</div>
                                       )}
                                     </div>
                                     <div className="flex flex-wrap gap-2">
