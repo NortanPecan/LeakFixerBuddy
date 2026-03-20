@@ -187,6 +187,7 @@ interface LeakPolicyHint {
   runJournal?: Array<{
     type: string
     at: string
+    actionId?: string | null
     note?: string | null
     policyCorrelationId?: string | null
     policyActionType?: string | null
@@ -663,6 +664,13 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
     bottleneckText: 'Критичных блокеров нет: можно тестировать следующий шаг или уточнять контекст.',
     bottleneckActionId: null,
   }
+}
+
+function getMinutesSince(date: string | null | undefined) {
+  if (!date) return null
+  const ts = new Date(date).getTime()
+  if (!Number.isFinite(ts)) return null
+  return Math.max(0, Math.round((Date.now() - ts) / 60000))
 }
 
 function isLeakEntityType(value: string): value is LeakActionLink['entityType'] {
@@ -1679,6 +1687,7 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
             return {
               type: event.type,
               at: event.at,
+              actionId: typeof event.actionId === 'string' ? event.actionId : null,
               note: typeof event.note === 'string' ? event.note : null,
               policyCorrelationId:
                 typeof event.policyCorrelationId === 'string' ? event.policyCorrelationId : null,
@@ -3418,6 +3427,37 @@ export function LeaksScreen() {
               const policyAcceptedCount = policyEvents.filter((event) => event.type === 'policy_accepted').length
               const policyRejectedCount = policyEvents.filter((event) => event.type === 'policy_rejected').length
               const policyOutcomeCount = policyEvents.filter((event) => event.type === 'policy_outcome').length
+              const policyOutcomeWorked = policyEvents.filter(
+                (event) => event.type === 'policy_outcome' && event.result === 'worked',
+              ).length
+              const policyOutcomePartial = policyEvents.filter(
+                (event) => event.type === 'policy_outcome' && event.result === 'partially',
+              ).length
+              const policyOutcomeFailed = policyEvents.filter(
+                (event) => event.type === 'policy_outcome' && event.result === 'not_worked',
+              ).length
+              const policySuggestionCorrelationId = nextBestActionHint?.correlationId || null
+              const latestPolicyDecision =
+                policySuggestionCorrelationId
+                  ? policyEvents.find(
+                      (event) =>
+                        (event.type === 'policy_accepted' || event.type === 'policy_rejected') &&
+                        event.policyCorrelationId === policySuggestionCorrelationId,
+                    ) || null
+                  : null
+              const policyDecisionState = latestPolicyDecision
+                ? latestPolicyDecision.type === 'policy_accepted'
+                  ? 'accepted'
+                  : 'rejected'
+                : 'pending'
+              const policyComputedMinutes = getMinutesSince(policy?.computedAt)
+              const policyRejectReasonCounts = policyEvents
+                .filter((event) => event.type === 'policy_rejected' && event.note)
+                .reduce<Record<string, number>>((acc, event) => {
+                  const key = event.note || 'unknown'
+                  acc[key] = (acc[key] || 0) + 1
+                  return acc
+                }, {})
               const contextDriftHint = policy?.contextDrift || null
               const executionScore = policy?.executionScore || {
                 value: 0,
@@ -3815,8 +3855,25 @@ export function LeaksScreen() {
                         )}
                         {nextBestActionHint && (
                           <div className="mt-3 rounded-xl border border-indigo-500/20 bg-indigo-500/10 px-3 py-2">
-                            <div className="text-xs uppercase tracking-wide text-indigo-200/80">
-                              Next Best Action ({nextBestActionHint.confidence})
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="text-xs uppercase tracking-wide text-indigo-200/80">
+                                Next Best Action ({nextBestActionHint.confidence})
+                              </div>
+                              <Badge
+                                className={
+                                  policyDecisionState === 'accepted'
+                                    ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
+                                    : policyDecisionState === 'rejected'
+                                      ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                                      : 'bg-white/10 text-white/70 border-white/10'
+                                }
+                              >
+                                {policyDecisionState === 'accepted'
+                                  ? 'Статус: принят'
+                                  : policyDecisionState === 'rejected'
+                                    ? 'Статус: отклонён'
+                                    : 'Статус: без ответа'}
+                              </Badge>
                             </div>
                             <div className="mt-1 text-sm text-indigo-100">{nextBestActionHint.reason}</div>
                             {nextBestActionHint.factors && nextBestActionHint.factors.length > 0 && (
@@ -3982,6 +4039,7 @@ export function LeaksScreen() {
                             <div className="mt-1 text-xs text-white/70">
                               v{policy.policyVersion || 1}
                               {policy.computedAt ? ` • ${formatDate(policy.computedAt)}` : ''}
+                              {policyComputedMinutes !== null ? ` • ${policyComputedMinutes}м назад` : ''}
                             </div>
                             <div className="mt-2 flex flex-wrap gap-2">
                               <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
@@ -3993,7 +4051,36 @@ export function LeaksScreen() {
                               <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
                                 Outcome: {policyOutcomeCount}
                               </Badge>
+                              <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
+                                Worked: {policyOutcomeWorked}
+                              </Badge>
+                              <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
+                                Partial: {policyOutcomePartial}
+                              </Badge>
+                              <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
+                                Failed: {policyOutcomeFailed}
+                              </Badge>
                             </div>
+                            {Object.keys(policyRejectReasonCounts).length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {Object.entries(policyRejectReasonCounts).map(([reason, count]) => (
+                                  <Badge
+                                    key={`reject-reason-${reason}`}
+                                    className="bg-white/10 text-white/70 border-white/10"
+                                  >
+                                    reject:{' '}
+                                    {reason === 'not_now'
+                                      ? 'не сейчас'
+                                      : reason === 'too_hard'
+                                        ? 'сложно сейчас'
+                                        : reason === 'not_relevant'
+                                          ? 'не по контексту'
+                                          : reason}
+                                    {' '}({count})
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
                             {policyEvents.length > 0 && (
                               <div className="mt-2 space-y-1">
                                 {policyEvents
@@ -4001,16 +4088,28 @@ export function LeaksScreen() {
                                   .map((event) => (
                                     <div
                                       key={`${event.type}-${event.at}-${event.policyCorrelationId || ''}`}
-                                      className="text-xs text-white/65"
+                                      className="text-xs text-white/65 flex flex-wrap items-center gap-2"
                                     >
-                                      {getPolicyEventLabel(event.type)} • {formatDate(event.at)}
-                                      {event.policyActionType ? ` • ${getPolicyActionLabel(event.policyActionType)}` : ''}
-                                      {event.result ? ` • ${getPolicyResultLabel(event.result)}` : ''}
-                                      {event.note ? ` • ${event.note}` : ''}
-                                      {event.actionTitle ? ` • ${event.actionTitle}` : ''}
-                                      {event.factors && event.factors.length > 0
-                                        ? ` • factors: ${event.factors.slice(0, 2).map((item) => item.key).join(', ')}`
-                                        : ''}
+                                      <span>
+                                        {getPolicyEventLabel(event.type)} • {formatDate(event.at)}
+                                        {event.policyActionType ? ` • ${getPolicyActionLabel(event.policyActionType)}` : ''}
+                                        {event.result ? ` • ${getPolicyResultLabel(event.result)}` : ''}
+                                        {event.note ? ` • ${event.note}` : ''}
+                                        {event.actionTitle ? ` • ${event.actionTitle}` : ''}
+                                        {event.factors && event.factors.length > 0
+                                          ? ` • factors: ${event.factors.slice(0, 2).map((item) => item.key).join(', ')}`
+                                          : ''}
+                                      </span>
+                                      {event.actionId && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => focusPlanAction(leak.id, event.actionId || '')}
+                                          className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                        >
+                                          К шагу
+                                        </Button>
+                                      )}
                                     </div>
                                   ))}
                               </div>

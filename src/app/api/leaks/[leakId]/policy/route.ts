@@ -102,6 +102,8 @@ export async function GET(
           type: 'policy_suggested',
           at: new Date().toISOString(),
           mode: policy.selectedMode as LeakPlanMode | null,
+          actionId: policy.nextBestAction?.actionId || null,
+          actionTitle: null,
           policyCorrelationId: policy.nextBestAction?.correlationId || null,
           policyActionType: policy.nextBestAction?.type || null,
           factors: policy.nextBestAction?.factors || [],
