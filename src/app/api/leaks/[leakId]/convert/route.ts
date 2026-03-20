@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { requireSelf } from '@/lib/server-auth'
+import { appendRunJournal, compactSnapshot, normalizeSnapshot } from '@/lib/leak-policy'
 
 const ConvertLeakPlanSchema = z.object({
   userId: z.string().min(1),
@@ -244,6 +245,7 @@ async function getLeakForUser(leakId: string, userId: string) {
       severity: true,
       sphere: true,
       status: true,
+      contextSnapshot: true,
     },
   })
 
@@ -325,6 +327,7 @@ export async function POST(
       const createdEntities: Array<{ entityType: EntityType; entityId: string; label: string }> = []
       let skippedActions = 0
       let reusedActions = 0
+      let snapshot = normalizeSnapshot(target.leak.contextSnapshot)
       const healthCheck = await runLeakActionLinkHealthCheck(tx, leakId, plans)
       const existingLinks = await tx.leakActionLink.findMany({
         where: { leakId },
@@ -409,6 +412,14 @@ export async function POST(
                 convertedAt: new Date().toISOString(),
               },
             },
+          })
+          snapshot = appendRunJournal(snapshot, {
+            type: 'action_created',
+            at: new Date().toISOString(),
+            mode: selectedPlan.mode as PlanMode,
+            actionId: action.id,
+            actionTitle: action.title,
+            note: 'reused_existing_entity',
           })
           continue
         }
@@ -575,12 +586,42 @@ export async function POST(
             },
           },
         })
+        snapshot = appendRunJournal(snapshot, {
+          type: 'action_created',
+          at: new Date().toISOString(),
+          mode: selectedPlan.mode as PlanMode,
+          actionId: action.id,
+          actionTitle: action.title,
+          note: `created_${created.entityType}`,
+        })
       }
 
       if (target.leak.status === 'new' && createdEntities.length > 0) {
+        snapshot = appendRunJournal(snapshot, {
+          type: 'action_created',
+          at: new Date().toISOString(),
+          mode: selectedPlan.mode as PlanMode,
+          note: 'leak_auto_in_progress',
+        })
         await tx.leak.update({
           where: { id: leakId },
-          data: { status: 'in_progress' },
+          data: {
+            status: 'in_progress',
+            contextSnapshot: compactSnapshot({
+              ...snapshot,
+              contextUpdatedAt: new Date().toISOString(),
+            }),
+          },
+        })
+      } else {
+        await tx.leak.update({
+          where: { id: leakId },
+          data: {
+            contextSnapshot: compactSnapshot({
+              ...snapshot,
+              contextUpdatedAt: new Date().toISOString(),
+            }),
+          },
         })
       }
 

@@ -1,8 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { requireSelf } from '@/lib/server-auth'
 import { generateLeakPlans, type LeakPlanMode } from '@/lib/ai-leak-plan'
+import {
+  appendRunJournal,
+  buildLeakPolicy,
+  compactSnapshot,
+  getNumericMetricsSubset,
+  getSnapshotMode,
+  normalizeSnapshot,
+} from '@/lib/leak-policy'
 
 const PLAN_MODE_ORDER: LeakPlanMode[] = ['minimum', 'base', 'maximum']
 
@@ -21,84 +29,6 @@ const GeneratePlansSchema = z.object({
 })
 
 const CONTEXT_LOOKBACK_DAYS = 7
-const PLAN_MODE_SET = new Set<LeakPlanMode>(PLAN_MODE_ORDER)
-const DRIFT_METRIC_KEYS = [
-  'energyAvg',
-  'stressAvg',
-  'sleepHoursAvg',
-  'openTasks',
-  'feedbackFailedCount',
-  'feedbackWorkedCount',
-  'recentFeedbackNegativeShare',
-  'recentFeedbackWorkedShare',
-] as const
-
-type DriftMetricKey = (typeof DRIFT_METRIC_KEYS)[number]
-
-type NextBestAction = {
-  type: 'generate' | 'create_entity' | 'give_feedback' | 'retry' | 'switch_mode' | 'regenerate_context'
-  reason: string
-  actionId?: string | null
-  targetMode?: LeakPlanMode | null
-  confidence: 'low' | 'medium' | 'high'
-}
-
-type ContextDrift = {
-  isStale: boolean
-  score: number
-  changedMetrics: Array<{
-    key: DriftMetricKey
-    before: number
-    now: number
-    deltaPct: number
-  }>
-  generatedAt: string | null
-  checkedAt: string
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value))
-}
-
-function toRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  return value as Record<string, unknown>
-}
-
-function toMode(value: unknown): LeakPlanMode | null {
-  if (value !== 'minimum' && value !== 'base' && value !== 'maximum') return null
-  return value as LeakPlanMode
-}
-
-function getLiveMetrics(snapshot: Record<string, unknown>) {
-  const live = toRecord(snapshot.live)
-  return toRecord(live.metrics)
-}
-
-function getNumericMetricsSubset(metrics: Record<string, unknown>) {
-  const subset: Partial<Record<DriftMetricKey, number>> = {}
-  DRIFT_METRIC_KEYS.forEach((key) => {
-    const value = metrics[key]
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      subset[key] = Number(value.toFixed(2))
-    }
-  })
-  return subset
-}
-
-function normalizeSnapshot(snapshot: unknown): Record<string, unknown> {
-  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
-    return {}
-  }
-
-  return snapshot as Record<string, unknown>
-}
-
-function getSnapshotMode(snapshot: Record<string, unknown>, key: string): LeakPlanMode | null {
-  const raw = snapshot[key]
-  if (typeof raw !== 'string') return null
-  return PLAN_MODE_SET.has(raw as LeakPlanMode) ? (raw as LeakPlanMode) : null
-}
 
 function toNumber(value: unknown): number | null {
   if (typeof value !== 'number' || Number.isNaN(value)) return null
@@ -525,157 +455,6 @@ async function loadPlans(leakId: string) {
   })
 }
 
-function getLatestActionFeedback(action: Awaited<ReturnType<typeof loadPlans>>[number]['actions'][number]) {
-  return action.feedbacks?.[0] || null
-}
-
-function selectPlan(
-  plans: Awaited<ReturnType<typeof loadPlans>>,
-  snapshot: Record<string, unknown>,
-) {
-  const selectedByFlag = plans.find((plan) => plan.isSelected) || null
-  if (selectedByFlag) return selectedByFlag
-  const selectedBySnapshot = toMode(snapshot.selectedPlanMode)
-    ? plans.find((plan) => plan.mode === snapshot.selectedPlanMode) || null
-    : null
-  return selectedBySnapshot || plans[0] || null
-}
-
-function buildContextDrift(
-  snapshot: Record<string, unknown>,
-  currentLive: Awaited<ReturnType<typeof buildLiveLeakContext>>,
-): ContextDrift {
-  const baseline = toRecord(snapshot.planGenerationBaseline)
-  const baselineMetrics = toRecord(baseline.metrics)
-  const currentMetrics = currentLive.metrics && typeof currentLive.metrics === 'object'
-    ? (currentLive.metrics as Record<string, unknown>)
-    : {}
-
-  const changedMetrics: ContextDrift['changedMetrics'] = []
-  DRIFT_METRIC_KEYS.forEach((key) => {
-    const before = baselineMetrics[key]
-    const now = currentMetrics[key]
-    if (typeof before !== 'number' || typeof now !== 'number') return
-    const denominator = Math.max(Math.abs(before), 1)
-    const deltaPct = Number((((now - before) / denominator) * 100).toFixed(1))
-    if (Math.abs(deltaPct) >= 25) {
-      changedMetrics.push({
-        key,
-        before: Number(before.toFixed(2)),
-        now: Number(now.toFixed(2)),
-        deltaPct,
-      })
-    }
-  })
-
-  changedMetrics.sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct))
-  const top = changedMetrics.slice(0, 4)
-  const avgDelta =
-    top.length > 0
-      ? top.reduce((sum, item) => sum + Math.abs(item.deltaPct), 0) / top.length
-      : 0
-  const score = clamp(Math.round(avgDelta * 1.2), 0, 100)
-  const isStale = top.length >= 3 || top.some((item) => Math.abs(item.deltaPct) >= 60)
-
-  return {
-    isStale,
-    score,
-    changedMetrics: top,
-    generatedAt: typeof baseline.capturedAt === 'string' ? baseline.capturedAt : null,
-    checkedAt: new Date().toISOString(),
-  }
-}
-
-function buildNextBestAction(
-  plans: Awaited<ReturnType<typeof loadPlans>>,
-  snapshot: Record<string, unknown>,
-  drift: ContextDrift,
-): NextBestAction | null {
-  if (!plans.length) {
-    return {
-      type: 'generate',
-      reason: 'Для лика ещё нет режимов. Сначала сгенерируй 3 плана.',
-      confidence: 'high',
-    }
-  }
-
-  if (drift.isStale) {
-    return {
-      type: 'regenerate_context',
-      reason: `Контекст заметно изменился (drift ${drift.score}%). Лучше пересобрать планы.`,
-      confidence: 'high',
-    }
-  }
-
-  const selectedPlan = selectPlan(plans, snapshot)
-  if (!selectedPlan) return null
-
-  const firstNoEntity = selectedPlan.actions.find((action) => {
-    const payload = toRecord(action.payload)
-    return !(typeof payload.convertedEntityId === 'string' && payload.convertedEntityId)
-  }) || null
-  if (firstNoEntity) {
-    return {
-      type: 'create_entity',
-      actionId: firstNoEntity.id,
-      reason: `Сначала создай сущность для шага «${firstNoEntity.title}», чтобы запустить цикл выполнения.`,
-      confidence: 'high',
-    }
-  }
-
-  const firstNoFeedback = selectedPlan.actions.find((action) => !getLatestActionFeedback(action)) || null
-  if (firstNoFeedback) {
-    return {
-      type: 'give_feedback',
-      actionId: firstNoFeedback.id,
-      reason: `По шагу «${firstNoFeedback.title}» нет feedback. Закрой обратную связь.`,
-      confidence: 'high',
-    }
-  }
-
-  const recentFeedback = selectedPlan.actions
-    .map((action) => ({ action, feedback: getLatestActionFeedback(action) }))
-    .filter((item): item is { action: typeof selectedPlan.actions[number]; feedback: NonNullable<ReturnType<typeof getLatestActionFeedback>> } => Boolean(item.feedback))
-    .sort((a, b) => new Date(b.feedback.updatedAt).getTime() - new Date(a.feedback.updatedAt).getTime())
-    .slice(0, 4)
-  const failedRecent = recentFeedback.filter((item) => item.feedback.result === 'not_worked').length
-  const workedRecent = recentFeedback.filter((item) => item.feedback.result === 'worked').length
-
-  if (failedRecent >= 2 && selectedPlan.mode !== 'minimum') {
-    return {
-      type: 'switch_mode',
-      targetMode: 'minimum',
-      reason: 'В свежих feedback много сбоев. Временно упрости режим до minimum.',
-      confidence: 'medium',
-    }
-  }
-  if (workedRecent >= 3 && selectedPlan.mode === 'minimum') {
-    return {
-      type: 'switch_mode',
-      targetMode: 'base',
-      reason: 'Последние шаги стабильно срабатывают. Можно расширить до base.',
-      confidence: 'medium',
-    }
-  }
-
-  const failedAction = recentFeedback.find((item) => item.feedback.result === 'not_worked') || null
-  if (failedAction) {
-    return {
-      type: 'retry',
-      actionId: failedAction.action.id,
-      reason: `Последний проблемный шаг — «${failedAction.action.title}». Запусти retry.`,
-      confidence: 'medium',
-    }
-  }
-
-  return {
-    type: 'give_feedback',
-    actionId: selectedPlan.actions[0]?.id || null,
-    reason: 'Поддерживай цикл: по новым шагам сразу фиксируй результат.',
-    confidence: 'low',
-  }
-}
-
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ leakId: string }> },
@@ -698,9 +477,8 @@ export async function GET(
     const plans = await loadPlans(leakId)
     const previousSnapshot = normalizeSnapshot(target.leak.contextSnapshot)
     const liveContext = await buildLiveLeakContext(userId, leakId)
-    const contextDrift = buildContextDrift(previousSnapshot, liveContext)
-    const nextBestAction = buildNextBestAction(plans, previousSnapshot, contextDrift)
-    return NextResponse.json({ plans, nextBestAction, contextDrift })
+    const policy = buildLeakPolicy(plans, previousSnapshot, liveContext)
+    return NextResponse.json({ plans, policy })
   } catch (error) {
     console.error('Error fetching leak plans:', error)
     return NextResponse.json({ error: 'Failed to fetch leak plans' }, { status: 500 })
@@ -747,9 +525,8 @@ export async function POST(
       if (existingPlans.length > 0) {
         const previousSnapshot = normalizeSnapshot(target.leak.contextSnapshot)
         const liveContext = await buildLiveLeakContext(userId, leakId)
-        const contextDrift = buildContextDrift(previousSnapshot, liveContext)
-        const nextBestAction = buildNextBestAction(existingPlans, previousSnapshot, contextDrift)
-        return NextResponse.json({ plans: existingPlans, cached: true, nextBestAction, contextDrift })
+        const policy = buildLeakPolicy(existingPlans, previousSnapshot, liveContext)
+        return NextResponse.json({ plans: existingPlans, cached: true, policy })
       }
     }
 
@@ -763,7 +540,7 @@ export async function POST(
     const previousSnapshot = normalizeSnapshot(target.leak.contextSnapshot)
     const liveContext = await buildLiveLeakContext(userId, leakId)
     const selectedPlanMode = getSnapshotMode(previousSnapshot, 'selectedPlanMode') || 'base'
-    const mergedSnapshot = {
+    let mergedSnapshot = {
       ...previousSnapshot,
       live: liveContext,
       history: liveContext.history,
@@ -783,6 +560,23 @@ export async function POST(
         : null,
       contextUpdatedAt: new Date().toISOString(),
     }
+    mergedSnapshot = appendRunJournal(mergedSnapshot, {
+      type: 'plan_generated',
+      at: new Date().toISOString(),
+      mode: selectedPlanMode,
+      note: regenerate ? 'regenerate' : 'initial',
+    })
+    if (retryFocus) {
+      mergedSnapshot = appendRunJournal(mergedSnapshot, {
+        type: 'retry_started',
+        at: new Date().toISOString(),
+        mode: selectedPlanMode,
+        actionId: retryFocus.actionId || null,
+        actionTitle: retryFocus.actionTitle,
+        note: retryFocus.failureReason || null,
+      })
+    }
+    mergedSnapshot = compactSnapshot(mergedSnapshot)
 
     await db.leak.update({
       where: { id: leakId },
@@ -843,9 +637,8 @@ export async function POST(
     })
 
     const storedPlans = await loadPlans(leakId)
-    const contextDrift = buildContextDrift(mergedSnapshot, liveContext)
-    const nextBestAction = buildNextBestAction(storedPlans, mergedSnapshot, contextDrift)
-    return NextResponse.json({ plans: storedPlans, provider, cached: false, nextBestAction, contextDrift })
+    const policy = buildLeakPolicy(storedPlans, mergedSnapshot, liveContext)
+    return NextResponse.json({ plans: storedPlans, provider, cached: false, policy })
   } catch (error) {
     console.error('Error generating leak plans:', error)
     return NextResponse.json({ error: 'Failed to generate leak plans' }, { status: 500 })
@@ -894,10 +687,17 @@ export async function PATCH(
       const snapshot = normalizeSnapshot(leakSnapshotSource?.contextSnapshot)
       snapshot.selectedPlanMode = mode
       snapshot.contextUpdatedAt = new Date().toISOString()
+      const nextSnapshot = compactSnapshot(
+        appendRunJournal(snapshot, {
+          type: 'mode_selected',
+          at: new Date().toISOString(),
+          mode,
+        }),
+      )
       await tx.leak.update({
         where: { id: leakId },
         data: {
-          contextSnapshot: snapshot,
+          contextSnapshot: nextSnapshot,
         },
       })
     })
@@ -909,9 +709,8 @@ export async function PATCH(
     })
     const snapshot = normalizeSnapshot(leakState?.contextSnapshot)
     const liveContext = await buildLiveLeakContext(userId, leakId)
-    const contextDrift = buildContextDrift(snapshot, liveContext)
-    const nextBestAction = buildNextBestAction(plans, snapshot, contextDrift)
-    return NextResponse.json({ plans, selectedMode: mode, nextBestAction, contextDrift })
+    const policy = buildLeakPolicy(plans, snapshot, liveContext)
+    return NextResponse.json({ plans, selectedMode: mode, policy })
   } catch (error) {
     console.error('Error selecting leak plan:', error)
     return NextResponse.json({ error: 'Failed to select leak plan' }, { status: 500 })

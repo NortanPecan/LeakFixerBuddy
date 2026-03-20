@@ -90,10 +90,13 @@ interface LeakPattern {
   clusterKey?: string
   clusterLabel?: string
   clusterSize?: number
+  clusterConfidence?: number
   clusterWorkedCount?: number
   clusterPartialCount?: number
   clusterFailedCount?: number
   clusterLeakTypes?: string[]
+  clusterWorkedExamples?: string[]
+  clusterFailedExamples?: string[]
   linkType?: 'exact' | 'fuzzy' | 'none'
   triedSolutions?: Array<{
     text: string
@@ -150,6 +153,30 @@ interface ContextDriftHint {
     now: number
     deltaPct: number
   }>
+}
+
+interface ExecutionScoreHint {
+  value: number
+  breakdown: {
+    createdCoverage: number
+    feedbackCoverage: number
+    workedShare: number
+    attemptsPenalty: number
+    driftPenalty: number
+  }
+}
+
+interface AdaptiveModeHint {
+  targetMode: LeakSolutionPlan['mode']
+  reason: string
+}
+
+interface LeakPolicyHint {
+  selectedMode: LeakSolutionPlan['mode'] | null
+  nextBestAction: NextBestActionHint | null
+  contextDrift: ContextDriftHint | null
+  executionScore: ExecutionScoreHint | null
+  adaptiveModeSuggestion: AdaptiveModeHint | null
 }
 
 interface LeakDraft {
@@ -307,9 +334,6 @@ function normalizeLookupValue(value: string | null | undefined) {
   return String(value || '').trim().toLowerCase()
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value))
-}
 
 function normalizeLeak(rawLeak: LeakEntity): LeakEntity {
   return {
@@ -936,6 +960,8 @@ function normalizePattern(rawPattern: unknown): LeakPattern | null {
     clusterKey: typeof pattern.clusterKey === 'string' ? pattern.clusterKey : undefined,
     clusterLabel: typeof pattern.clusterLabel === 'string' ? pattern.clusterLabel : undefined,
     clusterSize: typeof pattern.clusterSize === 'number' ? pattern.clusterSize : undefined,
+    clusterConfidence:
+      typeof pattern.clusterConfidence === 'number' ? pattern.clusterConfidence : undefined,
     clusterWorkedCount:
       typeof pattern.clusterWorkedCount === 'number' ? pattern.clusterWorkedCount : undefined,
     clusterPartialCount:
@@ -944,6 +970,12 @@ function normalizePattern(rawPattern: unknown): LeakPattern | null {
       typeof pattern.clusterFailedCount === 'number' ? pattern.clusterFailedCount : undefined,
     clusterLeakTypes: Array.isArray(pattern.clusterLeakTypes)
       ? pattern.clusterLeakTypes.filter((item): item is string => typeof item === 'string').slice(0, 8)
+      : undefined,
+    clusterWorkedExamples: Array.isArray(pattern.clusterWorkedExamples)
+      ? pattern.clusterWorkedExamples.filter((item): item is string => typeof item === 'string').slice(0, 6)
+      : undefined,
+    clusterFailedExamples: Array.isArray(pattern.clusterFailedExamples)
+      ? pattern.clusterFailedExamples.filter((item): item is string => typeof item === 'string').slice(0, 6)
       : undefined,
     workedExamples,
     updatedAt: typeof pattern.updatedAt === 'string' ? pattern.updatedAt : new Date().toISOString(),
@@ -1422,66 +1454,59 @@ function normalizeContextDrift(value: unknown): ContextDriftHint | null {
   }
 }
 
-function getExecutionScore(
-  guidance: ReturnType<typeof buildLeakGuidance>,
-  feedbackRows: ReturnType<typeof getLeakFeedbackByAction>,
-  drift: ContextDriftHint | null,
-) {
-  const total = Math.max(guidance.totalActions, 1)
-  const createdShare = guidance.createdActions / total
-  const feedbackShare = guidance.feedbackActions / total
-  const workedShare = guidance.feedbackActions > 0 ? guidance.workedActions / guidance.feedbackActions : 0
-  const attemptsAvg =
-    feedbackRows.length > 0
-      ? feedbackRows.reduce((sum, row) => sum + row.attempts, 0) / feedbackRows.length
-      : 1
-
-  let score = 0
-  score += createdShare * 40
-  score += feedbackShare * 25
-  score += workedShare * 25
-  score += clamp(12 - Math.max(0, attemptsAvg - 1) * 6, 0, 10)
-  score -= drift?.isStale ? Math.min(15, Math.round((drift.score || 0) / 6)) : 0
-  const value = clamp(Math.round(score), 0, 100)
+function normalizeExecutionScore(value: unknown): ExecutionScoreHint | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as Record<string, unknown>
+  const breakdown =
+    candidate.breakdown && typeof candidate.breakdown === 'object' && !Array.isArray(candidate.breakdown)
+      ? (candidate.breakdown as Record<string, unknown>)
+      : null
+  if (typeof candidate.value !== 'number' || !breakdown) return null
   return {
-    value,
-    tone:
-      value >= 70
-        ? 'good'
-        : value >= 40
-          ? 'mid'
-          : 'low',
+    value: Math.round(candidate.value),
+    breakdown: {
+      createdCoverage: typeof breakdown.createdCoverage === 'number' ? Math.round(breakdown.createdCoverage) : 0,
+      feedbackCoverage: typeof breakdown.feedbackCoverage === 'number' ? Math.round(breakdown.feedbackCoverage) : 0,
+      workedShare: typeof breakdown.workedShare === 'number' ? Math.round(breakdown.workedShare) : 0,
+      attemptsPenalty: typeof breakdown.attemptsPenalty === 'number' ? Math.round(breakdown.attemptsPenalty) : 0,
+      driftPenalty: typeof breakdown.driftPenalty === 'number' ? Math.round(breakdown.driftPenalty) : 0,
+    },
   }
 }
 
-function getAdaptiveModeSuggestion(
-  selectedMode: LeakSolutionPlan['mode'] | null,
-  feedbackRows: ReturnType<typeof getLeakFeedbackByAction>,
-) {
-  if (!selectedMode) return null
-  const recent = feedbackRows.slice(0, 4)
-  if (recent.length < 3) return null
-  const failed = recent.filter((item) => item.result === 'not_worked').length
-  const worked = recent.filter((item) => item.result === 'worked').length
-  if (failed >= 2 && selectedMode !== 'minimum') {
-    return {
-      targetMode: 'minimum' as LeakSolutionPlan['mode'],
-      reason: 'Слишком много свежих неудач, лучше временно упростить режим.',
-    }
+function normalizeAdaptiveMode(value: unknown): AdaptiveModeHint | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as Record<string, unknown>
+  if (
+    candidate.targetMode !== 'minimum' &&
+    candidate.targetMode !== 'base' &&
+    candidate.targetMode !== 'maximum'
+  ) {
+    return null
   }
-  if (worked >= 3 && selectedMode === 'minimum') {
-    return {
-      targetMode: 'base' as LeakSolutionPlan['mode'],
-      reason: 'Стабильные успехи в последних шагах, можно расширить режим.',
-    }
+  if (typeof candidate.reason !== 'string' || !candidate.reason.trim()) return null
+  return {
+    targetMode: candidate.targetMode,
+    reason: candidate.reason.trim(),
   }
-  if (worked >= 3 && selectedMode === 'base') {
-    return {
-      targetMode: 'maximum' as LeakSolutionPlan['mode'],
-      reason: 'Шаги устойчиво работают, есть запас для усиления плана.',
-    }
+}
+
+function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as Record<string, unknown>
+  const selectedMode =
+    candidate.selectedMode === 'minimum' ||
+    candidate.selectedMode === 'base' ||
+    candidate.selectedMode === 'maximum'
+      ? candidate.selectedMode
+      : null
+  return {
+    selectedMode,
+    nextBestAction: normalizeNextBestAction(candidate.nextBestAction),
+    contextDrift: normalizeContextDrift(candidate.contextDrift),
+    executionScore: normalizeExecutionScore(candidate.executionScore),
+    adaptiveModeSuggestion: normalizeAdaptiveMode(candidate.adaptiveModeSuggestion),
   }
-  return null
 }
 
 export function LeaksScreen() {
@@ -1524,8 +1549,7 @@ export function LeaksScreen() {
   const [savingPatternLeakType, setSavingPatternLeakType] = useState<string | null>(null)
   const [retryingLeakId, setRetryingLeakId] = useState<string | null>(null)
   const [focusedPlanActionId, setFocusedPlanActionId] = useState<string | null>(null)
-  const [nextBestActionByLeak, setNextBestActionByLeak] = useState<Record<string, NextBestActionHint | null>>({})
-  const [contextDriftByLeak, setContextDriftByLeak] = useState<Record<string, ContextDriftHint | null>>({})
+  const [policyByLeak, setPolicyByLeak] = useState<Record<string, LeakPolicyHint | null>>({})
   const [feedbackHistoryFilterByLeak, setFeedbackHistoryFilterByLeak] = useState<
     Record<string, FeedbackHistoryFilter>
   >({})
@@ -1585,8 +1609,7 @@ export function LeaksScreen() {
       const patternsData = await patternsRes.json()
 
       setLeaks(Array.isArray(leaksData.leaks) ? leaksData.leaks.map(normalizeLeak) : [])
-      setNextBestActionByLeak({})
-      setContextDriftByLeak({})
+      setPolicyByLeak({})
       setSignals(Array.isArray(signalsData.leakHints) ? signalsData.leakHints : [])
       setPatterns(
         Array.isArray(patternsData.patterns)
@@ -2004,13 +2027,9 @@ export function LeaksScreen() {
         ...current,
         [leakId]: normalizePlans(data.plans || []),
       }))
-      setNextBestActionByLeak((current) => ({
+      setPolicyByLeak((current) => ({
         ...current,
-        [leakId]: normalizeNextBestAction(data.nextBestAction),
-      }))
-      setContextDriftByLeak((current) => ({
-        ...current,
-        [leakId]: normalizeContextDrift(data.contextDrift),
+        [leakId]: normalizeLeakPolicy(data.policy),
       }))
     } catch (error) {
       showErrorToast(error, 'load leak plans')
@@ -2056,13 +2075,9 @@ export function LeaksScreen() {
         ...current,
         [leakId]: normalizePlans(data.plans || []),
       }))
-      setNextBestActionByLeak((current) => ({
+      setPolicyByLeak((current) => ({
         ...current,
-        [leakId]: normalizeNextBestAction(data.nextBestAction),
-      }))
-      setContextDriftByLeak((current) => ({
-        ...current,
-        [leakId]: normalizeContextDrift(data.contextDrift),
+        [leakId]: normalizeLeakPolicy(data.policy),
       }))
       if (!options?.silent) {
         showSuccessToast(regenerate ? 'Планы пересобраны' : 'Планы для лика готовы')
@@ -2097,13 +2112,9 @@ export function LeaksScreen() {
         ...current,
         [leakId]: normalizePlans(data.plans || []),
       }))
-      setNextBestActionByLeak((current) => ({
+      setPolicyByLeak((current) => ({
         ...current,
-        [leakId]: normalizeNextBestAction(data.nextBestAction),
-      }))
-      setContextDriftByLeak((current) => ({
-        ...current,
-        [leakId]: normalizeContextDrift(data.contextDrift),
+        [leakId]: normalizeLeakPolicy(data.policy),
       }))
       setLeaks((current) =>
         current.map((leak) => {
@@ -2322,6 +2333,7 @@ export function LeaksScreen() {
             : 'Новых сущностей не создано, всё уже было применено',
         )
       }
+      void loadPlansForLeak(leak.id)
     } catch (error) {
       showErrorToast(error, 'apply leak plan')
     } finally {
@@ -2367,6 +2379,7 @@ export function LeaksScreen() {
           ? `Создано: ${createdEntity.label}`
           : 'Действие из плана применено',
       )
+      void loadPlansForLeak(leak.id)
     } catch (error) {
       showErrorToast(error, 'apply single leak action')
     } finally {
@@ -2484,6 +2497,7 @@ export function LeaksScreen() {
         })
         return next
       })
+      void loadPlansForLeak(leakId)
     } catch (error) {
       showErrorToast(error, 'save plan feedback')
     } finally {
@@ -3124,13 +3138,20 @@ export function LeaksScreen() {
               const retryFocus = getRetryFocus(leak.contextSnapshot)
               const selectedModeFromSnapshot = getSnapshotMode(leak.contextSnapshot, 'selectedPlanMode')
               const lastStableMode = getSnapshotMode(leak.contextSnapshot, 'lastStableMode')
-              const nextBestActionHint = nextBestActionByLeak[leak.id] || null
-              const contextDriftHint = contextDriftByLeak[leak.id] || null
-              const executionScore = getExecutionScore(guidance, feedbackByAction, contextDriftHint)
-              const adaptiveModeSuggestion = getAdaptiveModeSuggestion(
-                selectedPlan?.mode || null,
-                feedbackByAction,
-              )
+              const policy = policyByLeak[leak.id] || null
+              const nextBestActionHint = policy?.nextBestAction || null
+              const contextDriftHint = policy?.contextDrift || null
+              const executionScore = policy?.executionScore || {
+                value: 0,
+                breakdown: {
+                  createdCoverage: 0,
+                  feedbackCoverage: 0,
+                  workedShare: 0,
+                  attemptsPenalty: 0,
+                  driftPenalty: 0,
+                },
+              }
+              const adaptiveModeSuggestion = policy?.adaptiveModeSuggestion || null
               const matchedPattern = getBestPatternForLeak(patterns, leak)
               const matchedPatternLinkType = matchedPattern ? getPatternLinkTypeForLeak(matchedPattern, leak) : 'none'
               const groupKey = getLeakGroupKey(leak, groupBy)
@@ -3371,9 +3392,9 @@ export function LeaksScreen() {
                             </Badge>
                             <Badge
                               className={
-                                executionScore.tone === 'good'
+                                executionScore.value >= 70
                                   ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
-                                  : executionScore.tone === 'mid'
+                                  : executionScore.value >= 40
                                     ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
                                     : 'bg-rose-500/10 text-rose-200 border-rose-500/20'
                               }
@@ -3398,6 +3419,11 @@ export function LeaksScreen() {
                                 Не помогло {guidance.failedActions}
                               </Badge>
                             )}
+                          </div>
+                        )}
+                        {guidance.selectedPlan && (
+                          <div className="mt-2 text-[11px] text-white/55">
+                            Score breakdown: создание {executionScore.breakdown.createdCoverage}% • feedback {executionScore.breakdown.feedbackCoverage}% • worked {executionScore.breakdown.workedShare}% • штраф попыток -{executionScore.breakdown.attemptsPenalty} • штраф drift -{executionScore.breakdown.driftPenalty}
                           </div>
                         )}
                         {guidance.totalActions > 0 && (
@@ -3591,32 +3617,6 @@ export function LeaksScreen() {
                               </div>
                             </div>
                           )}
-                        {recentFeedbackTrend?.isRisky && selectedPlan?.mode !== 'minimum' && (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => selectPlanMode(leak.id, 'minimum')}
-                              disabled={selectingPlanLeakId === leak.id}
-                              className="border-amber-500/25 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
-                            >
-                              {selectingPlanLeakId === leak.id ? 'Переключаю...' : 'Переключить на минимум'}
-                            </Button>
-                          </div>
-                        )}
-                        {recentFeedbackTrend?.isStable && selectedPlan?.mode === 'minimum' && (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => selectPlanMode(leak.id, 'base')}
-                              disabled={selectingPlanLeakId === leak.id}
-                              className="border-emerald-500/25 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-200"
-                            >
-                              {selectingPlanLeakId === leak.id ? 'Переключаю...' : 'Переключить на базу'}
-                            </Button>
-                          </div>
-                        )}
                         {guidance.bottleneckActionId && (
                           <div className="mt-3 flex flex-wrap gap-2">
                             <Button
@@ -4998,6 +4998,19 @@ export function LeaksScreen() {
                             Кластер: {pattern.clusterSize}
                           </Badge>
                         )}
+                        {typeof pattern.clusterConfidence === 'number' && pattern.clusterSize && pattern.clusterSize > 1 && (
+                          <Badge
+                            className={
+                              pattern.clusterConfidence >= 0.6
+                                ? 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20'
+                                : 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                            }
+                          >
+                            {pattern.clusterConfidence >= 0.6
+                              ? `Cluster confidence: ${Math.round(pattern.clusterConfidence * 100)}%`
+                              : `Низкая уверенность: ${Math.round(pattern.clusterConfidence * 100)}%`}
+                          </Badge>
+                        )}
                         {typeof pattern.clusterWorkedCount === 'number' && pattern.clusterWorkedCount > 0 && (
                           <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
                             Кластер worked: {pattern.clusterWorkedCount}
@@ -5031,7 +5044,7 @@ export function LeaksScreen() {
                           {savingPatternLeakType === pattern.leakType ? 'Сохраняю...' : 'В leak'}
                         </Button>
                       </div>
-                      {pattern.clusterLeakTypes && pattern.clusterLeakTypes.length > 1 && (
+                      {pattern.clusterLeakTypes && pattern.clusterLeakTypes.length > 1 && (pattern.clusterSize || 0) >= 2 && (
                         <div className="rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/10 px-3 py-2">
                           <div className="text-xs uppercase tracking-wide text-fuchsia-100/80">
                             Learning cluster
@@ -5046,6 +5059,16 @@ export function LeaksScreen() {
                               </Badge>
                             ))}
                           </div>
+                          {pattern.clusterWorkedExamples && pattern.clusterWorkedExamples.length > 0 && (
+                            <div className="mt-2 text-xs text-emerald-100/90">
+                              Worked в кластере: {pattern.clusterWorkedExamples.slice(0, 3).join(' • ')}
+                            </div>
+                          )}
+                          {pattern.clusterFailedExamples && pattern.clusterFailedExamples.length > 0 && (
+                            <div className="mt-1 text-xs text-rose-100/90">
+                              Failed в кластере: {pattern.clusterFailedExamples.slice(0, 3).join(' • ')}
+                            </div>
+                          )}
                         </div>
                       )}
 

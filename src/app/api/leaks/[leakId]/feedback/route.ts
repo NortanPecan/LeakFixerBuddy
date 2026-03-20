@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { requireSelf } from '@/lib/server-auth'
+import { appendRunJournal, compactSnapshot } from '@/lib/leak-policy'
 
 const LeakFeedbackSchema = z.object({
   userId: z.string().min(1),
@@ -336,6 +337,15 @@ export async function POST(
           if (isSameRetryAction) {
             snapshot.retry = null
             snapshot.retryResolvedAt = updatedAt
+            const withResolved = appendRunJournal(snapshot, {
+              type: 'retry_resolved',
+              at: updatedAt,
+              mode: action.plan.mode as 'minimum' | 'base' | 'maximum',
+              actionId: action.id,
+              actionTitle: action.title,
+              result,
+            })
+            Object.assign(snapshot, withResolved)
           }
           snapshot.lastStableMode = action.plan.mode
           snapshot.lastStableAt = updatedAt
@@ -350,6 +360,16 @@ export async function POST(
             failureReason: normalizedComment,
             requestedAt: updatedAt,
           }
+          const withRetry = appendRunJournal(snapshot, {
+            type: 'retry_started',
+            at: updatedAt,
+            mode: action.plan.mode as 'minimum' | 'base' | 'maximum',
+            actionId: action.id,
+            actionTitle: action.title,
+            result,
+            note: normalizedComment,
+          })
+          Object.assign(snapshot, withRetry)
           const existingWorkedIndex = whatWorked.indexOf(action.title)
           if (existingWorkedIndex >= 0) {
             whatWorked.splice(existingWorkedIndex, 1)
@@ -397,14 +417,26 @@ export async function POST(
         if (feedbackLog.length > 80) {
           feedbackLog.length = 80
         }
+
+        const withFeedback = appendRunJournal(snapshot, {
+          type: 'feedback_saved',
+          at: updatedAt,
+          mode: action.plan.mode as 'minimum' | 'base' | 'maximum',
+          actionId: action.id,
+          actionTitle: action.title,
+          result,
+          note: normalizedComment,
+        })
+        Object.assign(snapshot, withFeedback)
       }
 
       snapshot.feedbackLog = feedbackLog
       snapshot.contextUpdatedAt = new Date().toISOString()
+      const compactedSnapshot = compactSnapshot(snapshot)
       await tx.leak.update({
         where: { id: leakId },
         data: {
-          contextSnapshot: snapshot,
+          contextSnapshot: compactedSnapshot,
         },
       })
 

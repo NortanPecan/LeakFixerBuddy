@@ -34,6 +34,13 @@ function isClusterMatch(a: string, b: string) {
   return overlap >= 0.45
 }
 
+function clusterMatchConfidence(a: string, b: string) {
+  if (!a || !b) return 0
+  if (a === b) return 1
+  if (a.includes(b) || b.includes(a)) return 0.8
+  return tokenOverlapScore(patternTokens(a), patternTokens(b))
+}
+
 function normalizeTriedSolution(item: unknown) {
   if (!item || typeof item !== 'object') return null
   const candidate = item as Record<string, unknown>
@@ -167,17 +174,20 @@ export async function GET(request: NextRequest) {
       key: string
       label: string
       members: number[]
+      confidence: number
     }> = []
     enrichedPatterns.forEach((pattern, index) => {
       const match = clusters.find((cluster) => isClusterMatch(cluster.key, pattern.patternKey))
       if (match) {
         match.members.push(index)
+        match.confidence = Math.max(match.confidence, clusterMatchConfidence(match.key, pattern.patternKey))
         return
       }
       clusters.push({
         key: pattern.patternKey || `cluster-${index}`,
         label: pattern.leakType,
         members: [index],
+        confidence: 1,
       })
     })
 
@@ -189,15 +199,29 @@ export async function GET(request: NextRequest) {
         const failedCount = members.reduce((sum, item) => sum + (item.failedCount || 0), 0)
         const analysisCount = members.reduce((sum, item) => sum + (item.analysisCount || 0), 0)
         const leakTypes = members.map((item) => item.leakType)
+        const workedExamples = members
+          .flatMap((item) => item.workedExamples || [])
+          .map((item) => item.text)
+          .filter(Boolean)
+          .slice(0, 6)
+        const failedExamples = members
+          .flatMap((item) => item.triedSolutions || [])
+          .filter((item) => item.result === 'not_worked')
+          .map((item) => item.text)
+          .filter(Boolean)
+          .slice(0, 6)
         return {
           key: cluster.key,
           label: cluster.label,
           size: members.length,
+          confidence: Number(cluster.confidence.toFixed(2)),
           workedCount,
           partialCount,
           failedCount,
           analysisCount,
           leakTypes,
+          workedExamples,
+          failedExamples,
         }
       })
       .sort((a, b) => b.size - a.size || b.analysisCount - a.analysisCount)
@@ -210,21 +234,27 @@ export async function GET(request: NextRequest) {
         clusterKey: cluster?.key || pattern.patternKey,
         clusterLabel: cluster?.label || pattern.leakType,
         clusterSize: cluster?.size || 1,
+        clusterConfidence: cluster?.confidence || 1,
         clusterWorkedCount: cluster?.workedCount || pattern.workedCount || 0,
         clusterPartialCount: cluster?.partialCount || pattern.partialCount || 0,
         clusterFailedCount: cluster?.failedCount || pattern.failedCount || 0,
         clusterLeakTypes: cluster?.leakTypes || [pattern.leakType],
+        clusterWorkedExamples: cluster?.workedExamples || [],
+        clusterFailedExamples: cluster?.failedExamples || [],
       }
     })
     const clustersView = clusterStats.slice(0, 12).map((cluster) => ({
       key: cluster.key,
       label: cluster.label,
       size: cluster.size,
+      confidence: cluster.confidence,
       workedCount: cluster.workedCount,
       partialCount: cluster.partialCount,
       failedCount: cluster.failedCount,
       analysisCount: cluster.analysisCount,
       leakTypes: cluster.leakTypes.slice(0, 6),
+      workedExamples: cluster.workedExamples,
+      failedExamples: cluster.failedExamples,
     }))
 
     return NextResponse.json({ success: true, patterns: patternsWithCluster, clusters: clustersView })
