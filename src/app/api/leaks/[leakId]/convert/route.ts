@@ -181,12 +181,58 @@ export async function POST(
     const result = await db.$transaction(async (tx) => {
       const createdEntities: Array<{ entityType: EntityType; entityId: string; label: string }> = []
       let skippedActions = 0
+      let reusedActions = 0
+      const existingLinks = await tx.leakActionLink.findMany({
+        where: { leakId },
+        select: {
+          entityType: true,
+          entityId: true,
+          label: true,
+          metadata: true,
+        },
+      })
 
       for (const action of targetActions) {
         const payload = getPayloadObject(action.payload)
 
         if (typeof payload.convertedEntityId === 'string' && payload.convertedEntityId) {
           skippedActions += 1
+          continue
+        }
+
+        const existingLinkForAction = existingLinks.find((link) => {
+          const metadata =
+            link.metadata && typeof link.metadata === 'object' && !Array.isArray(link.metadata)
+              ? (link.metadata as Record<string, unknown>)
+              : {}
+          return metadata.sourceActionId === action.id
+        }) || existingLinks.find((link) => {
+          const metadata =
+            link.metadata && typeof link.metadata === 'object' && !Array.isArray(link.metadata)
+              ? (link.metadata as Record<string, unknown>)
+              : {}
+          return (
+            metadata.sourceActionKind === action.kind &&
+            String(metadata.sourceActionTitle || '').trim().toLowerCase() === action.title.trim().toLowerCase()
+          )
+        }) || existingLinks.find(
+          (link) => link.entityType === action.kind && link.label.trim().toLowerCase() === action.title.trim().toLowerCase(),
+        )
+
+        if (existingLinkForAction) {
+          reusedActions += 1
+          await tx.leakSolutionAction.update({
+            where: { id: action.id },
+            data: {
+              payload: {
+                ...payload,
+                convertedEntityId: existingLinkForAction.entityId,
+                convertedEntityType: existingLinkForAction.entityType,
+                convertedEntityLabel: existingLinkForAction.label,
+                convertedAt: new Date().toISOString(),
+              },
+            },
+          })
           continue
         }
 
@@ -310,6 +356,19 @@ export async function POST(
         }
 
         createdEntities.push(created)
+        existingLinks.push({
+          entityType: created.entityType,
+          entityId: created.entityId,
+          label: created.label,
+          metadata: {
+            ...(payload || {}),
+            sourcePlanId: selectedPlan.id,
+            sourcePlanMode: selectedPlan.mode,
+            sourceActionId: action.id,
+            sourceActionTitle: action.title,
+            sourceActionKind: action.kind,
+          },
+        })
 
         await tx.leakActionLink.upsert({
           where: {
@@ -327,6 +386,8 @@ export async function POST(
               sourcePlanId: selectedPlan.id,
               sourcePlanMode: selectedPlan.mode,
               sourceActionId: action.id,
+              sourceActionTitle: action.title,
+              sourceActionKind: action.kind,
             },
           },
           create: {
@@ -340,6 +401,8 @@ export async function POST(
               sourcePlanId: selectedPlan.id,
               sourcePlanMode: selectedPlan.mode,
               sourceActionId: action.id,
+              sourceActionTitle: action.title,
+              sourceActionKind: action.kind,
             },
           },
         })
@@ -406,6 +469,7 @@ export async function POST(
         updatedPlans,
         createdEntities,
         skippedActions,
+        reusedActions,
       }
     })
 
@@ -415,6 +479,7 @@ export async function POST(
       plans: result.updatedPlans,
       createdCount: result.createdEntities.length,
       skippedActions: result.skippedActions,
+      reusedActions: result.reusedActions,
       createdEntities: result.createdEntities,
       appliedMode: selectedPlan.mode,
       appliedActionId: actionId || null,

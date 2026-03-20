@@ -32,6 +32,24 @@ interface LeakPlanInput {
   }
 }
 
+interface LeakHistoryContext {
+  linkedEntities: Array<{
+    entityType: string
+    label: string
+    sourceActionTitle: string | null
+    sourceActionKind: string | null
+    sourcePlanMode: string | null
+    createdAt: string
+  }>
+  actionFeedback: Array<{
+    actionTitle: string
+    actionKind: string
+    result: string
+    comment: string | null
+    updatedAt: string
+  }>
+}
+
 const PLAN_MODES: LeakPlanMode[] = ['minimum', 'base', 'maximum']
 const ACTION_KINDS: LeakPlanActionKind[] = ['task', 'ritual', 'skill', 'trait', 'challenge', 'content']
 const CONFIDENCE_LABELS: LeakPlanConfidence[] = ['low', 'medium', 'high']
@@ -232,19 +250,173 @@ function buildFallbackPlans(leak: LeakPlanInput['leak']): LeakPlanDraft[] {
   ]
 }
 
+function normalizeHistoryContext(raw: unknown): LeakHistoryContext {
+  if (!raw || typeof raw !== 'object') {
+    return { linkedEntities: [], actionFeedback: [] }
+  }
+
+  const candidate = raw as Record<string, unknown>
+  const linkedEntities = Array.isArray(candidate.linkedEntities)
+    ? candidate.linkedEntities
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null
+          const entity = item as Record<string, unknown>
+          const entityType = typeof entity.entityType === 'string' ? entity.entityType : ''
+          const label = typeof entity.label === 'string' ? entity.label : ''
+          const createdAt = typeof entity.createdAt === 'string' ? entity.createdAt : ''
+          if (!entityType || !label || !createdAt) return null
+
+          return {
+            entityType,
+            label,
+            sourceActionTitle:
+              typeof entity.sourceActionTitle === 'string' ? entity.sourceActionTitle : null,
+            sourceActionKind:
+              typeof entity.sourceActionKind === 'string' ? entity.sourceActionKind : null,
+            sourcePlanMode:
+              typeof entity.sourcePlanMode === 'string' ? entity.sourcePlanMode : null,
+            createdAt,
+          }
+        })
+        .filter(
+          (
+            item,
+          ): item is {
+            entityType: string
+            label: string
+            sourceActionTitle: string | null
+            sourceActionKind: string | null
+            sourcePlanMode: string | null
+            createdAt: string
+          } => Boolean(item),
+        )
+    : []
+
+  const actionFeedback = Array.isArray(candidate.actionFeedback)
+    ? candidate.actionFeedback
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null
+          const feedback = item as Record<string, unknown>
+          const actionTitle = typeof feedback.actionTitle === 'string' ? feedback.actionTitle : ''
+          const actionKind = typeof feedback.actionKind === 'string' ? feedback.actionKind : ''
+          const result = typeof feedback.result === 'string' ? feedback.result : ''
+          const updatedAt = typeof feedback.updatedAt === 'string' ? feedback.updatedAt : ''
+          if (!actionTitle || !actionKind || !result || !updatedAt) return null
+
+          return {
+            actionTitle,
+            actionKind,
+            result,
+            comment: typeof feedback.comment === 'string' ? feedback.comment : null,
+            updatedAt,
+          }
+        })
+        .filter(
+          (
+            item,
+          ): item is {
+            actionTitle: string
+            actionKind: string
+            result: string
+            comment: string | null
+            updatedAt: string
+          } => Boolean(item),
+        )
+    : []
+
+  return { linkedEntities, actionFeedback }
+}
+
+async function loadLeakHistoryContext(userId: string, leakId: string): Promise<LeakHistoryContext> {
+  const [linkedEntities, feedbackRows] = await Promise.all([
+    db.leakActionLink.findMany({
+      where: {
+        leakId,
+        leak: {
+          userId,
+        },
+      },
+      select: {
+        entityType: true,
+        label: true,
+        metadata: true,
+        createdAt: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 24,
+    }),
+    db.leakFeedback.findMany({
+      where: {
+        leakId,
+        leak: {
+          userId,
+        },
+      },
+      select: {
+        result: true,
+        comment: true,
+        updatedAt: true,
+        solutionAction: {
+          select: {
+            title: true,
+            kind: true,
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+      take: 24,
+    }),
+  ])
+
+  return {
+    linkedEntities: linkedEntities.map((link) => {
+      const metadata =
+        link.metadata && typeof link.metadata === 'object' && !Array.isArray(link.metadata)
+          ? (link.metadata as Record<string, unknown>)
+          : {}
+
+      return {
+        entityType: link.entityType,
+        label: link.label,
+        sourceActionTitle:
+          typeof metadata.sourceActionTitle === 'string' ? metadata.sourceActionTitle : null,
+        sourceActionKind:
+          typeof metadata.sourceActionKind === 'string' ? metadata.sourceActionKind : null,
+        sourcePlanMode:
+          typeof metadata.sourcePlanMode === 'string' ? metadata.sourcePlanMode : null,
+        createdAt: link.createdAt.toISOString(),
+      }
+    }),
+    actionFeedback: feedbackRows.map((row) => ({
+      actionTitle: row.solutionAction.title,
+      actionKind: row.solutionAction.kind,
+      result: row.result,
+      comment: row.comment,
+      updatedAt: row.updatedAt.toISOString(),
+    })),
+  }
+}
+
 export async function generateLeakPlans(input: LeakPlanInput): Promise<{
   plans: LeakPlanDraft[]
   provider: 'groq' | 'gemini' | 'fallback'
 }> {
   const { userId, leak } = input
 
-  const existingPattern = await db.userAiPattern.findUnique({
-    where: { userId_leakType: { userId, leakType: leak.title } },
-    select: {
-      whatWorked: true,
-      triedSolutions: true,
-    },
-  })
+  const [existingPattern, leakHistory] = await Promise.all([
+    db.userAiPattern.findUnique({
+      where: { userId_leakType: { userId, leakType: leak.title } },
+      select: {
+        whatWorked: true,
+        triedSolutions: true,
+      },
+    }),
+    loadLeakHistoryContext(userId, leak.id),
+  ])
 
   const whatWorked = Array.isArray(existingPattern?.whatWorked)
     ? (existingPattern?.whatWorked as string[])
@@ -252,6 +424,35 @@ export async function generateLeakPlans(input: LeakPlanInput): Promise<{
   const triedSolutions = Array.isArray(existingPattern?.triedSolutions)
     ? (existingPattern?.triedSolutions as Array<{ text?: string }>).map((item) => item.text).filter(Boolean)
     : []
+
+  const snapshotContext =
+    leak.contextSnapshot && typeof leak.contextSnapshot === 'object' && !Array.isArray(leak.contextSnapshot)
+      ? (leak.contextSnapshot as Record<string, unknown>)
+      : null
+  const snapshotHistory = normalizeHistoryContext(snapshotContext?.history)
+  const mergedHistory: LeakHistoryContext = {
+    linkedEntities: [...leakHistory.linkedEntities, ...snapshotHistory.linkedEntities].slice(0, 30),
+    actionFeedback: [...leakHistory.actionFeedback, ...snapshotHistory.actionFeedback].slice(0, 30),
+  }
+
+  const feedbackSummary =
+    mergedHistory.actionFeedback.length > 0
+      ? mergedHistory.actionFeedback
+          .map(
+            (item) =>
+              `${item.actionKind}:${item.actionTitle} => ${item.result}${item.comment ? ` (${item.comment})` : ''}`,
+          )
+          .join('; ')
+      : null
+  const entitySummary =
+    mergedHistory.linkedEntities.length > 0
+      ? mergedHistory.linkedEntities
+          .map(
+            (item) =>
+              `${item.entityType}:${item.label}${item.sourceActionTitle ? ` [from ${item.sourceActionTitle}]` : ''}`,
+          )
+          .join('; ')
+      : null
 
   const userMessage = [
     `Лик: ${leak.title}`,
@@ -261,6 +462,8 @@ export async function generateLeakPlans(input: LeakPlanInput): Promise<{
     leak.contextSnapshot ? `Контекст: ${JSON.stringify(leak.contextSnapshot)}` : null,
     whatWorked.length > 0 ? `Что уже срабатывало: ${whatWorked.join('; ')}` : null,
     triedSolutions.length > 0 ? `Что уже пробовали: ${triedSolutions.join('; ')}` : null,
+    entitySummary ? `Что уже создавали из этого leak: ${entitySummary}` : null,
+    feedbackSummary ? `Фидбек по действиям: ${feedbackSummary}` : null,
   ]
     .filter(Boolean)
     .join('\n')

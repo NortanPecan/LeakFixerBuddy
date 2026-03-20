@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import { useAppStore, type Screen } from '@/lib/store'
@@ -98,6 +98,9 @@ interface LeakDraft {
 
 type LeakStatusFilter = 'all' | 'new' | 'in_progress' | 'resolved' | 'archived'
 type LeakSourceFilter = 'all' | 'manual' | 'signal' | 'imported' | 'ai_suggested'
+type LeakSortOption = 'updated_desc' | 'created_desc' | 'severity_desc'
+type LeakFocusFilter = 'all' | 'focus'
+type LeakGroupOption = 'none' | 'sphere' | 'source'
 
 const SEVERITY_OPTIONS: Array<{
   id: 'info' | 'warning' | 'critical'
@@ -123,6 +126,18 @@ const SOURCE_OPTIONS: Array<{ id: LeakSourceFilter; label: string }> = [
   { id: 'signal', label: 'Сигналы' },
   { id: 'ai_suggested', label: 'AI' },
   { id: 'imported', label: 'Импорт' },
+]
+
+const SORT_OPTIONS: Array<{ id: LeakSortOption; label: string }> = [
+  { id: 'updated_desc', label: 'Сначала обновлённые' },
+  { id: 'created_desc', label: 'Сначала новые' },
+  { id: 'severity_desc', label: 'Сначала критичные' },
+]
+
+const GROUP_OPTIONS: Array<{ id: LeakGroupOption; label: string }> = [
+  { id: 'none', label: 'Без групп' },
+  { id: 'sphere', label: 'По сфере' },
+  { id: 'source', label: 'По источнику' },
 ]
 
 const STATUS_LABELS: Record<Exclude<LeakStatusFilter, 'all'>, string> = {
@@ -298,6 +313,18 @@ function getSourceLabel(source: LeakEntity['source']) {
     default:
       return 'AI'
   }
+}
+
+function getFeedbackResultLabel(result: LeakPlanFeedback['result']) {
+  if (result === 'worked') return 'Сработало'
+  if (result === 'partially') return 'Частично'
+  return 'Не помогло'
+}
+
+function getConfidenceLabelText(label: LeakSolutionPlan['confidenceLabel']) {
+  if (label === 'high') return 'Высокий'
+  if (label === 'medium') return 'Средний'
+  return 'Низкий'
 }
 
 function getSphereLabel(sphere: string | null | undefined) {
@@ -488,26 +515,261 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
 function getContextSnapshotItems(contextSnapshot?: Record<string, unknown> | null) {
   if (!contextSnapshot) return []
 
-  return Object.entries(contextSnapshot).flatMap(([key, value]) => {
-    if (value === null || value === undefined || value === '') return []
+  const LABELS: Record<string, string> = {
+    days: 'Дни',
+    analysisCount: 'AI-анализов',
+    whatWorked: 'Что помогало',
+    contextUpdatedAt: 'Контекст обновлён',
+    moodAvg: 'Среднее настроение',
+    energyAvg: 'Средняя энергия',
+    stressAvg: 'Средний стресс',
+    sleepHoursAvg: 'Сон (часы)',
+    sleepQualityAvg: 'Качество сна',
+    mealsLogged: 'Записей еды',
+    mealsWithBadQuality: 'Плохих приёмов еды',
+    caloriesAvg: 'Средние калории',
+    workoutsCompleted: 'Тренировок',
+    ritualsCompleted: 'Выполнено ритуалов',
+    waterAvg: 'Средняя вода (мл)',
+    waterTargetAvg: 'Средняя цель воды (мл)',
+    waterGoalHitRate: 'Попадание в цель воды (%)',
+    expenseSum7d: 'Расход за 7 дней',
+    incomeSum7d: 'Доход за 7 дней',
+    netCashflow7d: 'Net cashflow за 7 дней',
+    expenseDays7d: 'Дней с расходами (7д)',
+    morningCheckins: 'Утренних check-in',
+    eveningCheckins: 'Вечерних check-in',
+    dayRatingAvg: 'Средняя оценка дня',
+    plannedEnergyAvg: 'Планируемая энергия',
+    doneTasks: 'Выполнено задач',
+    lookbackDays: 'Глубина контекста (дней)',
+  }
 
-    const label = key === 'days' ? 'Дни' : key
+  const lines: string[] = []
+
+  const pushValue = (key: string, value: unknown) => {
+    if (value === null || value === undefined || value === '') return
+    const label = LABELS[key] || key
 
     if (Array.isArray(value)) {
       const normalized = value
         .map((item) => (typeof item === 'string' || typeof item === 'number' ? String(item) : null))
         .filter((item): item is string => Boolean(item))
-
-      if (normalized.length === 0) return []
-      return [`${label}: ${normalized.join(', ')}`]
+      if (normalized.length > 0) {
+        lines.push(`${label}: ${normalized.join(', ')}`)
+      }
+      return
     }
 
     if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      return [`${label}: ${String(value)}`]
+      lines.push(`${label}: ${String(value)}`)
+    }
+  }
+
+  Object.entries(contextSnapshot).forEach(([key, value]) => {
+    if (key === 'live' && value && typeof value === 'object' && !Array.isArray(value)) {
+      const live = value as Record<string, unknown>
+      if (typeof live.generatedAt === 'string') {
+        lines.push(`Контекст собран: ${formatDate(live.generatedAt)}`)
+      }
+      if (live.metrics && typeof live.metrics === 'object' && !Array.isArray(live.metrics)) {
+        Object.entries(live.metrics as Record<string, unknown>).forEach(([metricKey, metricValue]) =>
+          pushValue(metricKey, metricValue),
+        )
+      }
+      if (typeof live.lookbackDays === 'number') {
+        pushValue('lookbackDays', live.lookbackDays)
+      }
+      return
     }
 
-    return []
+    if (key === 'history') {
+      return
+    }
+
+    pushValue(key, value)
   })
+
+  return lines
+}
+
+function getLeakActionMetadata(action: LeakActionLink) {
+  if (!action.metadata || typeof action.metadata !== 'object' || Array.isArray(action.metadata)) {
+    return null
+  }
+
+  return action.metadata as Record<string, unknown>
+}
+
+function isFocusLeak(leak: LeakEntity) {
+  if (!leak.contextSnapshot || typeof leak.contextSnapshot !== 'object' || Array.isArray(leak.contextSnapshot)) {
+    return false
+  }
+
+  return Boolean((leak.contextSnapshot as Record<string, unknown>).isFocus)
+}
+
+function getLinkedEntityForPlanAction(leak: LeakEntity, action: LeakPlanAction) {
+  const byMetadata = leak.actions.find((link) => {
+    const metadata = getLeakActionMetadata(link)
+    return metadata?.sourceActionId === action.id
+  })
+
+  if (byMetadata) return byMetadata
+
+  const convertedEntityId =
+    typeof action.payload?.convertedEntityId === 'string' ? action.payload.convertedEntityId : null
+  const convertedEntityType =
+    typeof action.payload?.convertedEntityType === 'string'
+      ? action.payload.convertedEntityType
+      : null
+  if (!convertedEntityId || !convertedEntityType) return null
+
+  return (
+    leak.actions.find(
+      (link) => link.entityId === convertedEntityId && link.entityType === convertedEntityType,
+    ) || null
+  )
+}
+
+function getFeedbackByActionId(plans?: LeakSolutionPlan[]) {
+  const map = new Map<string, LeakPlanFeedback>()
+  plans?.forEach((plan) => {
+    plan.actions.forEach((action) => {
+      const latest = getLatestPlanFeedback(action)
+      if (!latest) return
+
+      const existing = map.get(action.id)
+      if (!existing || new Date(latest.updatedAt).getTime() > new Date(existing.updatedAt).getTime()) {
+        map.set(action.id, latest)
+      }
+    })
+  })
+  return map
+}
+
+function getLeakFeedbackTimeline(plans?: LeakSolutionPlan[]) {
+  const rows: Array<{
+    actionId: string
+    actionTitle: string
+    actionKind: LeakPlanAction['kind']
+    result: LeakPlanFeedback['result']
+    comment: string | null
+    updatedAt: string
+    mode: LeakSolutionPlan['mode']
+  }> = []
+
+  plans?.forEach((plan) => {
+    plan.actions.forEach((action) => {
+      const feedback = getLatestPlanFeedback(action)
+      if (!feedback) return
+
+      rows.push({
+        actionId: action.id,
+        actionTitle: action.title,
+        actionKind: action.kind,
+        result: feedback.result,
+        comment: feedback.comment,
+        updatedAt: feedback.updatedAt,
+        mode: plan.mode,
+      })
+    })
+  })
+
+  return rows.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+}
+
+function getLeakGroupKey(leak: LeakEntity, groupBy: LeakGroupOption) {
+  if (groupBy === 'sphere') {
+    return leak.sphere || '__no_sphere__'
+  }
+
+  if (groupBy === 'source') {
+    return leak.source
+  }
+
+  return '__all__'
+}
+
+function getLeakGroupLabel(groupKey: string, groupBy: LeakGroupOption) {
+  if (groupBy === 'sphere') {
+    return groupKey === '__no_sphere__' ? 'Без сферы' : getSphereLabel(groupKey)
+  }
+
+  if (groupBy === 'source') {
+    return getSourceLabel(groupKey as LeakEntity['source'])
+  }
+
+  return 'Все leaks'
+}
+
+function getLiveContextMetrics(contextSnapshot?: Record<string, unknown> | null) {
+  if (!contextSnapshot || typeof contextSnapshot !== 'object' || Array.isArray(contextSnapshot)) {
+    return null
+  }
+
+  const live =
+    contextSnapshot.live && typeof contextSnapshot.live === 'object' && !Array.isArray(contextSnapshot.live)
+      ? (contextSnapshot.live as Record<string, unknown>)
+      : null
+  const metrics =
+    live?.metrics && typeof live.metrics === 'object' && !Array.isArray(live.metrics)
+      ? (live.metrics as Record<string, unknown>)
+      : null
+
+  return metrics
+}
+
+function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null) {
+  const metrics = getLiveContextMetrics(contextSnapshot)
+  if (!metrics) return []
+
+  const toNum = (key: string) => (typeof metrics[key] === 'number' ? (metrics[key] as number) : null)
+  const hypotheses: string[] = []
+
+  const energyAvg = toNum('energyAvg')
+  const moodAvg = toNum('moodAvg')
+  const sleepHoursAvg = toNum('sleepHoursAvg')
+  const stressAvg = toNum('stressAvg')
+  const workoutsCompleted = toNum('workoutsCompleted')
+  const ritualsCompleted = toNum('ritualsCompleted')
+  const mealsWithBadQuality = toNum('mealsWithBadQuality')
+  const waterGoalHitRate = toNum('waterGoalHitRate')
+  const netCashflow7d = toNum('netCashflow7d')
+  const expenseDays7d = toNum('expenseDays7d')
+
+  if (sleepHoursAvg !== null && sleepHoursAvg < 6.5) {
+    hypotheses.push('Наблюдение: недосып может усиливать leak. Стоит проверить связь сна и срывов.')
+  }
+  if (stressAvg !== null && stressAvg >= 7) {
+    hypotheses.push('Наблюдение: высокий стресс совпадает с leak. Проверь, нужен ли anti-stress шаг в режиме.')
+  }
+  if (energyAvg !== null && energyAvg <= 5) {
+    hypotheses.push('Наблюдение: низкая энергия — вероятный триггер leak. Имеет смысл добавить более лёгкий режим.')
+  }
+  if (moodAvg !== null && moodAvg <= 5) {
+    hypotheses.push('Наблюдение: просадка настроения совпадает с leak. Полезно добавить быстрый стабилизирующий ритуал.')
+  }
+  if (workoutsCompleted !== null && workoutsCompleted === 0) {
+    hypotheses.push('Наблюдение: в окне контекста нет тренировок. Проверь влияние движения на устойчивость к leak.')
+  }
+  if (ritualsCompleted !== null && ritualsCompleted <= 2) {
+    hypotheses.push('Наблюдение: ритуалы выполнялись редко. Возможно, leak связан с потерей структуры дня.')
+  }
+  if (mealsWithBadQuality !== null && mealsWithBadQuality >= 3) {
+    hypotheses.push('Наблюдение: качество питания часто проседает. Стоит проверить, не усиливает ли это leak.')
+  }
+  if (waterGoalHitRate !== null && waterGoalHitRate < 50) {
+    hypotheses.push('Наблюдение: вода часто ниже цели. Проверь, влияет ли гидратация на устойчивость к leak.')
+  }
+  if (expenseDays7d !== null && expenseDays7d >= 5) {
+    hypotheses.push('Наблюдение: почти каждый день есть расходы. Проверь импульсные траты как триггер leak.')
+  }
+  if (netCashflow7d !== null && netCashflow7d < 0) {
+    hypotheses.push('Наблюдение: cashflow за неделю отрицательный. Для leak в финансах нужен более жёсткий minimum-режим.')
+  }
+
+  return hypotheses.slice(0, 3)
 }
 
 export function LeaksScreen() {
@@ -520,6 +782,9 @@ export function LeaksScreen() {
   const [activeTab, setActiveTab] = useState('inbox')
   const [statusFilter, setStatusFilter] = useState<LeakStatusFilter>('all')
   const [sourceFilter, setSourceFilter] = useState<LeakSourceFilter>('all')
+  const [sortOption, setSortOption] = useState<LeakSortOption>('updated_desc')
+  const [focusFilter, setFocusFilter] = useState<LeakFocusFilter>('all')
+  const [groupBy, setGroupBy] = useState<LeakGroupOption>('none')
   const [searchQuery, setSearchQuery] = useState('')
   const [title, setTitle] = useState('')
   const [details, setDetails] = useState('')
@@ -581,9 +846,10 @@ export function LeaksScreen() {
   }, [user?.id])
 
   const filteredLeaks = useMemo(() => {
-    return leaks.filter((leak) => {
+    const filtered = leaks.filter((leak) => {
       if (statusFilter !== 'all' && leak.status !== statusFilter) return false
       if (sourceFilter !== 'all' && leak.source !== sourceFilter) return false
+      if (focusFilter === 'focus' && !isFocusLeak(leak)) return false
 
       if (!searchQuery.trim()) return true
 
@@ -595,7 +861,31 @@ export function LeaksScreen() {
         normalizeLookupValue(getSphereLabel(leak.sphere)).includes(normalizedQuery)
       )
     })
-  }, [leaks, searchQuery, sourceFilter, statusFilter])
+
+    const severityRank: Record<LeakEntity['severity'], number> = {
+      critical: 3,
+      warning: 2,
+      info: 1,
+    }
+
+    return filtered.sort((a, b) => {
+      if (sortOption === 'created_desc') {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      }
+
+      if (sortOption === 'severity_desc') {
+        const byFocus = Number(isFocusLeak(b)) - Number(isFocusLeak(a))
+        if (byFocus !== 0) return byFocus
+        const bySeverity = severityRank[b.severity] - severityRank[a.severity]
+        if (bySeverity !== 0) return bySeverity
+      }
+
+      const byFocus = Number(isFocusLeak(b)) - Number(isFocusLeak(a))
+      if (byFocus !== 0) return byFocus
+
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    })
+  }, [leaks, searchQuery, sourceFilter, statusFilter, sortOption, focusFilter])
 
   const leakCounts = useMemo(() => {
     return leaks.reduce(
@@ -614,8 +904,30 @@ export function LeaksScreen() {
     )
   }, [leaks])
 
+  const focusLeakCount = useMemo(() => leaks.filter((leak) => isFocusLeak(leak)).length, [leaks])
+  const groupCounts = useMemo(() => {
+    if (groupBy === 'none') return {}
+
+    return filteredLeaks.reduce<Record<string, number>>((acc, leak) => {
+      const key = getLeakGroupKey(leak, groupBy)
+      acc[key] = (acc[key] || 0) + 1
+      return acc
+    }, {})
+  }, [filteredLeaks, groupBy])
+
   const createLeak = async (prepareAnalysis: boolean) => {
     if (!user?.id || !hasDraft) return
+
+    const nextTitle = title.trim() || details.trim().slice(0, 80) || 'Новый лик'
+    const nextDescription = details.trim() || null
+    const duplicateLeak = findOpenLeak(nextTitle, nextDescription)
+    if (duplicateLeak) {
+      setActiveTab('inbox')
+      setStatusFilter('all')
+      setExpandedLeakId(duplicateLeak.id)
+      showSuccessToast('Похожий активный leak уже есть в inbox, открыл его для продолжения')
+      return
+    }
 
     setSubmitting(true)
     try {
@@ -624,8 +936,8 @@ export function LeaksScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: user.id,
-          title: title.trim() || 'Новый лик',
-          description: details.trim() || null,
+          title: nextTitle,
+          description: nextDescription,
           severity,
           source: 'manual',
           sphere,
@@ -731,6 +1043,44 @@ export function LeaksScreen() {
       showSuccessToast('Сфера лика обновлена')
     } catch (error) {
       showErrorToast(error, 'update leak sphere')
+    } finally {
+      setUpdatingLeakId(null)
+    }
+  }
+
+  const toggleLeakFocus = async (leak: LeakEntity) => {
+    if (!user?.id || updatingLeakId) return
+
+    const currentSnapshot =
+      leak.contextSnapshot && typeof leak.contextSnapshot === 'object' && !Array.isArray(leak.contextSnapshot)
+        ? (leak.contextSnapshot as Record<string, unknown>)
+        : {}
+    const nextFocusValue = !isFocusLeak(leak)
+
+    setUpdatingLeakId(leak.id)
+    try {
+      const response = await fetch('/api/leaks', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          id: leak.id,
+          contextSnapshot: {
+            ...currentSnapshot,
+            isFocus: nextFocusValue,
+            focusUpdatedAt: new Date().toISOString(),
+          },
+        }),
+      })
+
+      if (!response.ok) throw response
+
+      const data = await response.json()
+      const updatedLeak = normalizeLeak(data.leak as LeakEntity)
+      setLeaks((current) => current.map((item) => (item.id === leak.id ? updatedLeak : item)))
+      showSuccessToast(nextFocusValue ? 'Leak добавлен в фокус' : 'Leak убран из фокуса')
+    } catch (error) {
+      showErrorToast(error, 'toggle leak focus')
     } finally {
       setUpdatingLeakId(null)
     }
@@ -941,6 +1291,9 @@ export function LeaksScreen() {
   const clearLeakFilters = () => {
     setStatusFilter('all')
     setSourceFilter('all')
+    setSortOption('updated_desc')
+    setFocusFilter('all')
+    setGroupBy('none')
     setSearchQuery('')
   }
 
@@ -1025,14 +1378,19 @@ export function LeaksScreen() {
 
       const createdCount = typeof data.createdCount === 'number' ? data.createdCount : 0
       const skippedCount = typeof data.skippedActions === 'number' ? data.skippedActions : 0
+      const reusedCount = typeof data.reusedActions === 'number' ? data.reusedActions : 0
       if (createdCount > 0) {
         showSuccessToast(
-          skippedCount > 0
-            ? `Применил режим: создано ${createdCount}, пропущено ${skippedCount}`
+          skippedCount > 0 || reusedCount > 0
+            ? `Применил режим: создано ${createdCount}, повторно привязано ${reusedCount}, пропущено ${skippedCount}`
             : `Применил режим: создано ${createdCount}`,
         )
       } else {
-        showSuccessToast('Новых сущностей не создано, всё уже было применено')
+        showSuccessToast(
+          reusedCount > 0
+            ? `Новых сущностей нет, повторно связал ${reusedCount} шагов с уже созданным`
+            : 'Новых сущностей не создано, всё уже было применено',
+        )
       }
     } catch (error) {
       showErrorToast(error, 'apply leak plan')
@@ -1127,13 +1485,35 @@ export function LeaksScreen() {
         ...current,
         [leakId]: normalizePlans(data.plans || []),
       }))
+      if (data.leak && typeof data.leak.id === 'string') {
+        const nextStatus = typeof data.leak.status === 'string' ? data.leak.status : null
+        const nextResolvedAt = typeof data.leak.resolvedAt === 'string' ? data.leak.resolvedAt : null
+        if (nextStatus) {
+          setLeaks((current) =>
+            current.map((leak) =>
+              leak.id === leakId
+                ? {
+                    ...leak,
+                    status: nextStatus as LeakEntity['status'],
+                    resolvedAt: nextResolvedAt,
+                    updatedAt: new Date().toISOString(),
+                  }
+                : leak,
+            ),
+          )
+        }
+      }
       if (nextPattern) {
         setPatterns((current) => {
           const filtered = current.filter((pattern) => pattern.leakType !== nextPattern.leakType)
           return [nextPattern, ...filtered]
         })
       }
-      showSuccessToast('Фидбек по действию сохранён')
+      showSuccessToast(
+        data.reopened
+          ? 'Фидбек сохранён, leak автоматически возвращён в работу'
+          : 'Фидбек по действию сохранён',
+      )
       setFeedbackCommentByAction((current) => ({
         ...current,
         [actionId]: comment?.trim() || '',
@@ -1565,6 +1945,65 @@ export function LeaksScreen() {
             ))}
           </div>
 
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setFocusFilter('all')}
+              className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                focusFilter === 'all'
+                  ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
+                  : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+              }`}
+            >
+              Все leaks
+            </button>
+            <button
+              type="button"
+              onClick={() => setFocusFilter('focus')}
+              className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                focusFilter === 'focus'
+                  ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
+                  : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+              }`}
+            >
+              Фокус ({focusLeakCount})
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {SORT_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setSortOption(option.id)}
+                className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                  sortOption === option.id
+                    ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
+                    : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {GROUP_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setGroupBy(option.id)}
+                className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                  groupBy === option.id
+                    ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
+                    : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
           <Input
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
@@ -1625,11 +2064,31 @@ export function LeaksScreen() {
               </CardContent>
             </Card>
           ) : (
-            filteredLeaks.map((leak) => {
+            filteredLeaks.map((leak, index) => {
               const guidance = buildLeakGuidance(leak, plansByLeak[leak.id])
+              const leakPlans = plansByLeak[leak.id] || []
+              const selectedPlan = getSelectedPlan(leakPlans)
+              const feedbackByActionId = getFeedbackByActionId(leakPlans)
+              const feedbackTimeline = getLeakFeedbackTimeline(leakPlans)
+              const contextHypotheses = buildContextHypotheses(leak.contextSnapshot)
+              const matchedPattern = patterns.find(
+                (pattern) => normalizeLookupValue(pattern.leakType) === normalizeLookupValue(leak.title),
+              )
+              const groupKey = getLeakGroupKey(leak, groupBy)
+              const prevGroupKey =
+                index > 0 ? getLeakGroupKey(filteredLeaks[index - 1], groupBy) : null
+              const showGroupHeader = groupBy !== 'none' && groupKey !== prevGroupKey
 
               return (
-                <Card key={leak.id} style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div key={leak.id} className="space-y-2">
+                {showGroupHeader && (
+                    <div className="px-1">
+                      <div className="text-[11px] uppercase tracking-wide text-white/35">
+                      {getLeakGroupLabel(groupKey, groupBy)} ({groupCounts[groupKey] || 0})
+                      </div>
+                    </div>
+                )}
+                <Card style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
                   <CardContent className="pt-4 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -1640,6 +2099,11 @@ export function LeaksScreen() {
                       </div>
                     </div>
                     <div className="flex flex-wrap justify-end gap-2">
+                      {isFocusLeak(leak) && (
+                        <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                          Фокус
+                        </Badge>
+                      )}
                       <Badge className={STATUS_STYLES[leak.status]}>{STATUS_LABELS[leak.status]}</Badge>
                       <Badge className={SEVERITY_STYLES[leak.severity]}>{leak.severity}</Badge>
                       {leak.actions.length > 0 && (
@@ -1714,6 +2178,19 @@ export function LeaksScreen() {
                         Вернуть в работу
                       </Button>
                     )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => toggleLeakFocus(leak)}
+                      disabled={updatingLeakId === leak.id}
+                      className={
+                        isFocusLeak(leak)
+                          ? 'border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200'
+                          : 'border-white/15 bg-white/5 hover:bg-white/10 text-white'
+                      }
+                    >
+                      {isFocusLeak(leak) ? 'Убрать из фокуса' : 'В фокус'}
+                    </Button>
                     <Button
                       size="sm"
                       variant="outline"
@@ -1900,6 +2377,247 @@ export function LeaksScreen() {
                         </div>
                       )}
 
+                      {contextHypotheses.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="text-xs uppercase tracking-wide text-white/40">
+                            Контекстные гипотезы
+                          </div>
+                          <div className="space-y-2">
+                            {contextHypotheses.map((item) => (
+                              <div
+                                key={item}
+                                className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
+                              >
+                                {item}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {(matchedPattern?.whatWorked?.length || selectedPlan) && (
+                        <div className="space-y-2">
+                          <div className="text-xs uppercase tracking-wide text-white/40">
+                            Learning слой
+                          </div>
+                          {matchedPattern && (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge className="bg-white/10 text-white/70 border-white/10">
+                                Паттерн: {matchedPattern.leakType}
+                              </Badge>
+                              <Badge className="bg-white/10 text-white/70 border-white/10">
+                                Анализов: {matchedPattern.analysisCount}
+                              </Badge>
+                              <Badge className="bg-white/10 text-white/70 border-white/10">
+                                Обновлено: {formatDate(matchedPattern.updatedAt)}
+                              </Badge>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setActiveTab('patterns')}
+                                className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                              >
+                                Открыть Patterns
+                              </Button>
+                            </div>
+                          )}
+                          {matchedPattern?.whatWorked?.length ? (
+                            <div className="flex flex-wrap gap-2">
+                              {matchedPattern.whatWorked.map((item) => (
+                                <Badge
+                                  key={item}
+                                  className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20 whitespace-normal text-left"
+                                >
+                                  {item}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-white/55">
+                              После первых feedback тут появятся решения, которые стабильно работают именно для этого leak.
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {selectedPlan && (
+                        <div className="space-y-2">
+                          <div className="text-xs uppercase tracking-wide text-white/40">
+                            Цепочка выполнения
+                          </div>
+                          <div className="rounded-xl border border-white/10 bg-black/10 px-3 py-2 space-y-2">
+                            <div className="flex flex-wrap gap-2">
+                              <Badge className={PLAN_MODE_STYLES[selectedPlan.mode]}>
+                                Режим: {PLAN_MODE_LABELS[selectedPlan.mode]}
+                              </Badge>
+                              <Badge className={PLAN_CONFIDENCE_STYLES[selectedPlan.confidenceLabel]}>
+                                Уверенность: {getConfidenceLabelText(selectedPlan.confidenceLabel)}
+                              </Badge>
+                            </div>
+                            {selectedPlan.confidenceReason && (
+                              <p className="text-xs text-white/60">{selectedPlan.confidenceReason}</p>
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            {selectedPlan.actions.map((planAction, index) => {
+                              const linkedEntity = getLinkedEntityForPlanAction(leak, planAction)
+                              const feedback = feedbackByActionId.get(planAction.id)
+
+                              return (
+                                <div
+                                  key={planAction.id}
+                                  className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"
+                                >
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Badge variant="outline" className="border-white/10 text-white/55">
+                                      {index + 1}
+                                    </Badge>
+                                    <Badge variant="outline" className="border-white/10 text-white/55">
+                                      {PLAN_KIND_LABELS[planAction.kind]}
+                                    </Badge>
+                                    <div className="text-sm text-white">{planAction.title}</div>
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    <Badge className={PLAN_MODE_STYLES[selectedPlan.mode]}>
+                                      {PLAN_MODE_LABELS[selectedPlan.mode]}
+                                    </Badge>
+                                    {linkedEntity ? (
+                                      <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                                        Сущность: {getActionLabel(linkedEntity.entityType)} • {linkedEntity.label}
+                                      </Badge>
+                                    ) : (
+                                      <Badge className="bg-white/10 text-white/60 border-white/10">
+                                        Сущность ещё не создана
+                                      </Badge>
+                                    )}
+                                    {feedback ? (
+                                      <Badge
+                                        className={
+                                          feedback.result === 'worked'
+                                            ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
+                                            : feedback.result === 'partially'
+                                              ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                                              : 'bg-rose-500/10 text-rose-200 border-rose-500/20'
+                                        }
+                                      >
+                                        Feedback: {getFeedbackResultLabel(feedback.result)}
+                                      </Badge>
+                                    ) : (
+                                      <Badge className="bg-white/10 text-white/60 border-white/10">
+                                        Feedback ещё не получен
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {!linkedEntity ? (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => applySinglePlanAction(leak, selectedPlan.mode, planAction)}
+                                        disabled={applyingPlanActionId === planAction.id || applyingPlanLeakId === leak.id}
+                                        className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
+                                      >
+                                        {applyingPlanActionId === planAction.id ? 'Создаю...' : 'Создать шаг'}
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => setScreen(getActionScreen(linkedEntity.entityType))}
+                                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                      >
+                                        Открыть сущность
+                                      </Button>
+                                    )}
+                                    {linkedEntity && !feedback && (
+                                      <>
+                                        {(['worked', 'partially', 'not_worked'] as const).map((result) => (
+                                          <Button
+                                            key={result}
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() =>
+                                              sendPlanActionFeedback(
+                                                leak.id,
+                                                planAction.id,
+                                                result,
+                                                getFeedbackCommentDraft(planAction),
+                                              )
+                                            }
+                                            disabled={savingFeedbackActionId === planAction.id}
+                                            className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                          >
+                                            {result === 'worked'
+                                              ? 'Сработало'
+                                              : result === 'partially'
+                                                ? 'Частично'
+                                                : 'Не помогло'}
+                                          </Button>
+                                        ))}
+                                      </>
+                                    )}
+                                    {feedback && feedback.result !== 'worked' && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => retryLeakPlanning(leak)}
+                                        disabled={retryingLeakId === leak.id}
+                                        className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
+                                      >
+                                        {retryingLeakId === leak.id
+                                          ? 'Обновляю...'
+                                          : leak.status === 'resolved' || leak.status === 'archived'
+                                            ? 'Reopen и retry'
+                                            : 'Retry по шагу'}
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {feedbackTimeline.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="text-xs uppercase tracking-wide text-white/40">
+                            История feedback
+                          </div>
+                          <div className="space-y-2">
+                            {feedbackTimeline.slice(0, 6).map((item) => (
+                              <div
+                                key={`${item.actionId}-${item.updatedAt}`}
+                                className="rounded-xl border border-white/10 bg-black/10 px-3 py-2"
+                              >
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge className={PLAN_MODE_STYLES[item.mode]}>
+                                    {PLAN_MODE_LABELS[item.mode]}
+                                  </Badge>
+                                  <Badge variant="outline" className="border-white/10 text-white/55">
+                                    {PLAN_KIND_LABELS[item.actionKind]}
+                                  </Badge>
+                                  <Badge
+                                    className={
+                                      item.result === 'worked'
+                                        ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
+                                        : item.result === 'partially'
+                                          ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                                          : 'bg-rose-500/10 text-rose-200 border-rose-500/20'
+                                    }
+                                  >
+                                    {getFeedbackResultLabel(item.result)}
+                                  </Badge>
+                                  <div className="text-xs text-white/40">{formatDate(item.updatedAt)}</div>
+                                </div>
+                                <div className="mt-1 text-sm text-white">{item.actionTitle}</div>
+                                {item.comment && <div className="mt-1 text-xs text-white/60">{item.comment}</div>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="space-y-2">
                         <div className="text-xs uppercase tracking-wide text-white/40">
                           Что уже создано из лика
@@ -1911,27 +2629,87 @@ export function LeaksScreen() {
                         ) : (
                           <div className="space-y-2">
                             {leak.actions.map((action) => (
-                              <div
-                                key={action.id}
-                                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"
-                              >
-                                <div>
-                                  <div className="text-sm text-white">
-                                    {getActionLabel(action.entityType)}: {action.label}
+                              (() => {
+                                const metadata = getLeakActionMetadata(action)
+                                const sourceActionId =
+                                  typeof metadata?.sourceActionId === 'string' ? metadata.sourceActionId : null
+                                const sourceActionTitle =
+                                  typeof metadata?.sourceActionTitle === 'string'
+                                    ? metadata.sourceActionTitle
+                                    : null
+                                const sourcePlanMode =
+                                  typeof metadata?.sourcePlanMode === 'string'
+                                    ? metadata.sourcePlanMode
+                                    : null
+                                const feedback = sourceActionId ? feedbackByActionId.get(sourceActionId) : null
+
+                                return (
+                                  <div
+                                    key={action.id}
+                                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"
+                                  >
+                                    <div className="space-y-1">
+                                      <div className="text-sm text-white">
+                                        {getActionLabel(action.entityType)}: {action.label}
+                                      </div>
+                                      <div className="text-xs text-white/40">
+                                        Создано: {formatDate(action.createdAt)}
+                                      </div>
+                                      {(sourceActionTitle || sourcePlanMode || feedback) && (
+                                        <div className="flex flex-wrap gap-2">
+                                          {sourcePlanMode && (
+                                            <Badge className="bg-white/10 text-white/65 border-white/10">
+                                              Режим: {sourcePlanMode}
+                                            </Badge>
+                                          )}
+                                          {sourceActionTitle && (
+                                            <Badge className="bg-white/10 text-white/65 border-white/10">
+                                              Действие: {sourceActionTitle}
+                                            </Badge>
+                                          )}
+                                          {feedback && (
+                                            <Badge
+                                              className={
+                                                feedback.result === 'worked'
+                                                  ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
+                                                  : feedback.result === 'partially'
+                                                    ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                                                    : 'bg-rose-500/10 text-rose-200 border-rose-500/20'
+                                              }
+                                            >
+                                              Feedback: {getFeedbackResultLabel(feedback.result)}
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      )}
+                                      {feedback?.comment && (
+                                        <div className="text-xs text-white/55">{feedback.comment}</div>
+                                      )}
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => setScreen(getActionScreen(action.entityType))}
+                                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                      >
+                                        Открыть
+                                      </Button>
+                                      {feedback && feedback.result !== 'worked' && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => retryLeakPlanning(leak)}
+                                          disabled={retryingLeakId === leak.id}
+                                          className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
+                                        >
+                                          {retryingLeakId === leak.id ? 'Обновляю...' : 'Retry'}
+                                        </Button>
+                                      )}
+                                    </div>
                                   </div>
-                                  <div className="text-xs text-white/40">
-                                    Создано: {formatDate(action.createdAt)}
-                                  </div>
-                                </div>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setScreen(getActionScreen(action.entityType))}
-                                  className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                                >
-                                  Открыть
-                                </Button>
-                              </div>
+                                )
+                              })()
                             ))}
                           </div>
                         )}
@@ -2011,6 +2789,37 @@ export function LeaksScreen() {
                           </div>
                         ) : plansByLeak[leak.id]?.length ? (
                           <div className="space-y-3">
+                            <div className="rounded-xl border border-white/10 bg-black/10 p-3 space-y-2">
+                              <div className="text-xs uppercase tracking-wide text-white/40">
+                                Сравнение режимов
+                              </div>
+                              <div className="grid gap-2 md:grid-cols-3">
+                                {plansByLeak[leak.id].map((plan) => (
+                                  <div
+                                    key={`compare-${plan.id}`}
+                                    className={`rounded-lg border p-2 ${
+                                      plan.isSelected
+                                        ? 'border-indigo-500/30 bg-indigo-500/10'
+                                        : 'border-white/10 bg-white/[0.03]'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <Badge className={PLAN_MODE_STYLES[plan.mode]}>
+                                        {PLAN_MODE_LABELS[plan.mode]}
+                                      </Badge>
+                                      <Badge className={PLAN_CONFIDENCE_STYLES[plan.confidenceLabel]}>
+                                        {getConfidenceLabelText(plan.confidenceLabel)}
+                                      </Badge>
+                                    </div>
+                                    <div className="mt-2 text-xs text-white/60 line-clamp-3">{plan.summary}</div>
+                                    <div className="mt-2 text-xs text-white/40">
+                                      Действий: {plan.actions.length}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
                             {plansByLeak[leak.id].map((plan) => (
                               <div
                                 key={plan.id}
@@ -2221,6 +3030,7 @@ export function LeaksScreen() {
                   )}
                 </CardContent>
               </Card>
+              </div>
               )
             })
           )}
@@ -2311,56 +3121,92 @@ export function LeaksScreen() {
             </Card>
           ) : (
             patterns.map((pattern) => (
-              <Card key={pattern.leakType} style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <CardContent className="pt-4 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-white font-medium">{pattern.leakType}</div>
-                      <div className="text-xs text-white/35 mt-1">
-                        Последнее обновление: {formatDate(pattern.updatedAt)}
-                      </div>
-                    </div>
-                    <Badge className="bg-white/10 text-white/75 border-white/10">
-                      Анализов: {pattern.analysisCount}
-                    </Badge>
-                  </div>
+              (() => {
+                const activeLinkedLeaks = leaks.filter(
+                  (leak) =>
+                    leak.status !== 'resolved' &&
+                    leak.status !== 'archived' &&
+                    normalizeLookupValue(leak.title) === normalizeLookupValue(pattern.leakType),
+                )
 
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => createLeakFromPattern(pattern)}
-                      disabled={savingPatternLeakType === pattern.leakType}
-                      className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
-                    >
-                      {savingPatternLeakType === pattern.leakType ? 'Сохраняю...' : 'В leak'}
-                    </Button>
-                  </div>
-
-                  {pattern.whatWorked.length > 0 ? (
-                    <div className="space-y-2">
-                      <div className="text-xs uppercase tracking-wide text-white/40 flex items-center gap-2">
-                        <Lightbulb className="w-3.5 h-3.5" />
-                        Что уже сработало
+                return (
+                  <Card key={pattern.leakType} style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <CardContent className="pt-4 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-white font-medium">{pattern.leakType}</div>
+                          <div className="text-xs text-white/35 mt-1">
+                            Последнее обновление: {formatDate(pattern.updatedAt)}
+                          </div>
+                        </div>
+                        <Badge className="bg-white/10 text-white/75 border-white/10">
+                          Анализов: {pattern.analysisCount}
+                        </Badge>
                       </div>
+
                       <div className="flex flex-wrap gap-2">
-                        {pattern.whatWorked.map((item) => (
-                          <Badge
-                            key={item}
-                            className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20 whitespace-normal text-left"
-                          >
-                            {item}
-                          </Badge>
-                        ))}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => createLeakFromPattern(pattern)}
+                          disabled={savingPatternLeakType === pattern.leakType}
+                          className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
+                        >
+                          {savingPatternLeakType === pattern.leakType ? 'Сохраняю...' : 'В leak'}
+                        </Button>
                       </div>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-white/55">
-                      Пока нет отмеченных решений, которые пользователь подтвердил как рабочие.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
+
+                      {activeLinkedLeaks.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="text-xs uppercase tracking-wide text-white/40">
+                            Активные leaks по этому паттерну
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {activeLinkedLeaks.map((leak) => (
+                              <Button
+                                key={leak.id}
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setActiveTab('inbox')
+                                  setStatusFilter('all')
+                                  setExpandedLeakId(leak.id)
+                                }}
+                                className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                              >
+                                {leak.title}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {pattern.whatWorked.length > 0 ? (
+                        <div className="space-y-2">
+                          <div className="text-xs uppercase tracking-wide text-white/40 flex items-center gap-2">
+                            <Lightbulb className="w-3.5 h-3.5" />
+                            Что уже сработало
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {pattern.whatWorked.map((item) => (
+                              <Badge
+                                key={item}
+                                className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20 whitespace-normal text-left"
+                              >
+                                {item}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-white/55">
+                          Пока нет отмеченных решений, которые пользователь подтвердил как рабочие.
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })()
             ))
           )}
         </TabsContent>
@@ -2368,3 +3214,4 @@ export function LeaksScreen() {
     </div>
   )
 }
+

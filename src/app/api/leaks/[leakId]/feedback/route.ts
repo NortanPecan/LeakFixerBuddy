@@ -123,6 +123,25 @@ export async function POST(
         },
       })
 
+      let reopened = false
+      if (result !== 'worked') {
+        const currentLeak = await tx.leak.findUnique({
+          where: { id: leakId },
+          select: { status: true },
+        })
+
+        if (currentLeak && (currentLeak.status === 'resolved' || currentLeak.status === 'archived')) {
+          await tx.leak.update({
+            where: { id: leakId },
+            data: {
+              status: 'in_progress',
+              resolvedAt: null,
+            },
+          })
+          reopened = true
+        }
+      }
+
       const existingPattern = await tx.userAiPattern.findUnique({
         where: { userId_leakType: { userId, leakType: leak.title } },
         select: {
@@ -172,7 +191,7 @@ export async function POST(
         }
       }
 
-      return tx.userAiPattern.upsert({
+      const pattern = await tx.userAiPattern.upsert({
         where: { userId_leakType: { userId, leakType: leak.title } },
         update: {
           triedSolutions,
@@ -194,10 +213,28 @@ export async function POST(
           updatedAt: true,
         },
       })
+
+      return { pattern, reopened }
     })
 
     const plans = await loadPlans(leakId)
-    return NextResponse.json({ success: true, plans, result, pattern: updatedPattern })
+    const refreshedLeak = await db.leak.findUnique({
+      where: { id: leakId },
+      select: {
+        id: true,
+        status: true,
+        resolvedAt: true,
+      },
+    })
+
+    return NextResponse.json({
+      success: true,
+      plans,
+      result,
+      pattern: updatedPattern.pattern,
+      reopened: updatedPattern.reopened,
+      leak: refreshedLeak,
+    })
   } catch (error) {
     console.error('Error saving leak feedback:', error)
     return NextResponse.json({ error: 'Failed to save leak feedback' }, { status: 500 })

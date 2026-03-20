@@ -11,6 +11,213 @@ const SelectPlanSchema = z.object({
   mode: z.enum(['minimum', 'base', 'maximum']),
 })
 
+const CONTEXT_LOOKBACK_DAYS = 7
+
+function toNumber(value: unknown): number | null {
+  if (typeof value !== 'number' || Number.isNaN(value)) return null
+  return value
+}
+
+function avg(values: Array<number | null | undefined>) {
+  const normalized = values.filter((item): item is number => typeof item === 'number')
+  if (normalized.length === 0) return null
+  return Number((normalized.reduce((sum, item) => sum + item, 0) / normalized.length).toFixed(1))
+}
+
+function startOfLookbackWindow(days: number) {
+  const date = new Date()
+  date.setDate(date.getDate() - (days - 1))
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+async function buildLiveLeakContext(userId: string, leakId: string) {
+  const since = startOfLookbackWindow(CONTEXT_LOOKBACK_DAYS)
+
+  const [dailyStates, foodEntries, fitnessDays, transactions, workoutCount, ritualCount, checkins, doneTasksCount, linkedEntities, feedbackRows] =
+    await Promise.all([
+      db.dailyState.findMany({
+        where: { userId, date: { gte: since } },
+        orderBy: { date: 'desc' },
+        take: CONTEXT_LOOKBACK_DAYS,
+        select: {
+          mood: true,
+          energy: true,
+          stress: true,
+          sleepHours: true,
+          sleepQuality: true,
+        },
+      }),
+      db.foodEntry.findMany({
+        where: { userId, date: { gte: since } },
+        orderBy: { date: 'desc' },
+        take: 60,
+        select: {
+          calories: true,
+          quality: true,
+        },
+      }),
+      db.fitnessDaily.findMany({
+        where: { userId, date: { gte: since } },
+        orderBy: { date: 'desc' },
+        take: CONTEXT_LOOKBACK_DAYS,
+        select: {
+          water: true,
+          waterTarget: true,
+        },
+      }),
+      db.transaction.findMany({
+        where: { userId, date: { gte: since } },
+        orderBy: { date: 'desc' },
+        take: 120,
+        select: {
+          amount: true,
+          date: true,
+        },
+      }),
+      db.gymWorkout.count({
+        where: { period: { userId }, date: { gte: since }, completed: true },
+      }),
+      db.ritualCompletion.count({
+        where: { userId, date: { gte: since }, completed: true },
+      }),
+      db.dailyCheckin.findMany({
+        where: { userId, date: { gte: since } },
+        orderBy: { date: 'desc' },
+        take: CONTEXT_LOOKBACK_DAYS * 2,
+        select: {
+          type: true,
+          dayRating: true,
+          energy: true,
+        },
+      }),
+      db.task.count({
+        where: {
+          userId,
+          status: 'done',
+          updatedAt: { gte: since },
+        },
+      }),
+      db.leakActionLink.findMany({
+        where: { leakId },
+        orderBy: { createdAt: 'desc' },
+        take: 24,
+        select: {
+          entityType: true,
+          label: true,
+          metadata: true,
+          createdAt: true,
+        },
+      }),
+      db.leakFeedback.findMany({
+        where: { leakId },
+        orderBy: { updatedAt: 'desc' },
+        take: 24,
+        select: {
+          result: true,
+          comment: true,
+          updatedAt: true,
+          solutionAction: {
+            select: {
+              title: true,
+              kind: true,
+            },
+          },
+        },
+      }),
+    ])
+
+  const morningCheckins = checkins.filter((item) => item.type === 'morning')
+  const eveningCheckins = checkins.filter((item) => item.type === 'evening')
+  const waterAvg = avg(fitnessDays.map((item) => toNumber(item.water)))
+  const waterTargetAvg = avg(fitnessDays.map((item) => toNumber(item.waterTarget)))
+  const waterGoalHitRate =
+    fitnessDays.length > 0
+      ? Number(
+          (
+            (fitnessDays.filter((item) => (item.water || 0) >= (item.waterTarget || 0)).length /
+              fitnessDays.length) *
+            100
+          ).toFixed(0),
+        )
+      : null
+  const expenseSum = Number(
+    Math.abs(
+      transactions
+        .filter((item) => item.amount < 0)
+        .reduce((sum, item) => sum + item.amount, 0),
+    ).toFixed(2),
+  )
+  const incomeSum = Number(
+    transactions
+      .filter((item) => item.amount > 0)
+      .reduce((sum, item) => sum + item.amount, 0)
+      .toFixed(2),
+  )
+  const netCashflow = Number((incomeSum - expenseSum).toFixed(2))
+  const expenseDays = new Set(
+    transactions
+      .filter((item) => item.amount < 0)
+      .map((item) => item.date.toISOString().slice(0, 10)),
+  ).size
+
+  return {
+    generatedAt: new Date().toISOString(),
+    lookbackDays: CONTEXT_LOOKBACK_DAYS,
+    metrics: {
+      moodAvg: avg(dailyStates.map((item) => toNumber(item.mood))),
+      energyAvg: avg(dailyStates.map((item) => toNumber(item.energy))),
+      stressAvg: avg(dailyStates.map((item) => toNumber(item.stress))),
+      sleepHoursAvg: avg(dailyStates.map((item) => toNumber(item.sleepHours))),
+      sleepQualityAvg: avg(dailyStates.map((item) => toNumber(item.sleepQuality))),
+      mealsLogged: foodEntries.length,
+      mealsWithBadQuality: foodEntries.filter((item) => String(item.quality || '') === 'bad').length,
+      caloriesAvg: avg(foodEntries.map((item) => toNumber(item.calories))),
+      workoutsCompleted: workoutCount,
+      ritualsCompleted: ritualCount,
+      waterAvg,
+      waterTargetAvg,
+      waterGoalHitRate,
+      expenseSum7d: expenseSum,
+      incomeSum7d: incomeSum,
+      netCashflow7d: netCashflow,
+      expenseDays7d: expenseDays,
+      morningCheckins: morningCheckins.length,
+      eveningCheckins: eveningCheckins.length,
+      dayRatingAvg: avg(eveningCheckins.map((item) => toNumber(item.dayRating))),
+      plannedEnergyAvg: avg(morningCheckins.map((item) => toNumber(item.energy))),
+      doneTasks: doneTasksCount,
+    },
+    history: {
+      linkedEntities: linkedEntities.map((item) => {
+        const metadata =
+          item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
+            ? (item.metadata as Record<string, unknown>)
+            : {}
+
+        return {
+          entityType: item.entityType,
+          label: item.label,
+          sourceActionTitle:
+            typeof metadata.sourceActionTitle === 'string' ? metadata.sourceActionTitle : null,
+          sourceActionKind:
+            typeof metadata.sourceActionKind === 'string' ? metadata.sourceActionKind : null,
+          sourcePlanMode:
+            typeof metadata.sourcePlanMode === 'string' ? metadata.sourcePlanMode : null,
+          createdAt: item.createdAt.toISOString(),
+        }
+      }),
+      actionFeedback: feedbackRows.map((item) => ({
+        actionTitle: item.solutionAction.title,
+        actionKind: item.solutionAction.kind,
+        result: item.result,
+        comment: item.comment,
+        updatedAt: item.updatedAt.toISOString(),
+      })),
+    },
+  }
+}
+
 async function getLeakForUser(leakId: string, userId: string) {
   const leak = await db.leak.findUnique({
     where: { id: leakId },
@@ -116,9 +323,33 @@ export async function POST(
       }
     }
 
+    const previousSnapshot =
+      target.leak.contextSnapshot &&
+      typeof target.leak.contextSnapshot === 'object' &&
+      !Array.isArray(target.leak.contextSnapshot)
+        ? (target.leak.contextSnapshot as Record<string, unknown>)
+        : {}
+    const liveContext = await buildLiveLeakContext(userId, leakId)
+    const mergedSnapshot = {
+      ...previousSnapshot,
+      live: liveContext,
+      history: liveContext.history,
+      contextUpdatedAt: new Date().toISOString(),
+    }
+
+    await db.leak.update({
+      where: { id: leakId },
+      data: {
+        contextSnapshot: mergedSnapshot,
+      },
+    })
+
     const { plans, provider } = await generateLeakPlans({
       userId,
-      leak: target.leak,
+      leak: {
+        ...target.leak,
+        contextSnapshot: mergedSnapshot,
+      },
     })
 
     await db.$transaction(async (tx) => {
