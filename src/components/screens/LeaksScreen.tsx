@@ -2256,6 +2256,7 @@ export function LeaksScreen() {
       actionId?: string | null
       actionTitle?: string | null
       actionKind?: string | null
+      factors?: Array<{ key: string; weight: number; detail?: string }>
     },
   ) => {
     if (!user?.id) return false
@@ -2273,6 +2274,7 @@ export function LeaksScreen() {
           actionId: payload.actionId || undefined,
           actionTitle: payload.actionTitle || undefined,
           actionKind: payload.actionKind || undefined,
+          factors: payload.factors || undefined,
         }),
       })
       if (!response.ok) throw response
@@ -3693,6 +3695,7 @@ export function LeaksScreen() {
                                       actionType: 'switch_mode',
                                       correlationId: nextBestActionHint.correlationId || null,
                                       targetMode: nextBestActionHint.targetMode,
+                                      factors: nextBestActionHint.factors || [],
                                     })
                                   }
                                   disabled={selectingPlanLeakId === leak.id}
@@ -3716,6 +3719,7 @@ export function LeaksScreen() {
                                         actionId: action.id,
                                         actionTitle: action.title,
                                         actionKind: action.kind,
+                                        factors: nextBestActionHint.factors || [],
                                       })
                                       applySinglePlanAction(leak, selectedPlan.mode, action)
                                     }
@@ -3737,6 +3741,7 @@ export function LeaksScreen() {
                                       actionId: nextBestActionHint.actionId || null,
                                       actionTitle: action?.title || null,
                                       actionKind: action?.kind || null,
+                                      factors: nextBestActionHint.factors || [],
                                     })
                                     focusPlanAction(leak.id, nextBestActionHint.actionId || '')
                                   }}
@@ -3757,6 +3762,7 @@ export function LeaksScreen() {
                                       actionId: action?.id || nextBestActionHint.actionId || null,
                                       actionTitle: action?.title || null,
                                       actionKind: action?.kind || null,
+                                      factors: nextBestActionHint.factors || [],
                                     })
                                     await retryLeakPlanning(leak, {
                                       action: planActionsById.get(nextBestActionHint.actionId || '') || null,
@@ -3778,6 +3784,7 @@ export function LeaksScreen() {
                                       await executePolicyAction(leak, {
                                         actionType: 'regenerate_context',
                                         correlationId: nextBestActionHint.correlationId || null,
+                                        factors: nextBestActionHint.factors || [],
                                       })
                                       return
                                     }
@@ -3789,6 +3796,30 @@ export function LeaksScreen() {
                                   {generatingPlansLeakId === leak.id ? 'Собираю...' : 'Пересобрать планы'}
                                 </Button>
                               )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  executePolicyAction(leak, {
+                                    actionType: nextBestActionHint.type === 'switch_mode'
+                                      ? 'switch_mode'
+                                      : nextBestActionHint.type === 'retry'
+                                        ? 'retry'
+                                        : nextBestActionHint.type === 'regenerate_context'
+                                          ? 'regenerate_context'
+                                          : 'focus_action',
+                                    decision: 'rejected',
+                                    reason: 'not_now',
+                                    correlationId: nextBestActionHint.correlationId || null,
+                                    targetMode: nextBestActionHint.targetMode || undefined,
+                                    actionId: nextBestActionHint.actionId || undefined,
+                                    factors: nextBestActionHint.factors || [],
+                                  })
+                                }
+                                className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                              >
+                                Не сейчас
+                              </Button>
                             </div>
                           </div>
                         )}

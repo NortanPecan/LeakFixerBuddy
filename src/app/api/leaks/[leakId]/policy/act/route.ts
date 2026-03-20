@@ -19,6 +19,16 @@ const PolicyActSchema = z.object({
   actionId: z.string().min(1).optional(),
   actionTitle: z.string().min(1).optional(),
   actionKind: z.string().min(1).optional(),
+  factors: z
+    .array(
+      z.object({
+        key: z.string().min(1),
+        weight: z.number(),
+        detail: z.string().optional(),
+      }),
+    )
+    .max(10)
+    .optional(),
 })
 
 export async function POST(
@@ -33,7 +43,18 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid policy action payload', issues: parsed.error.flatten() }, { status: 400 })
     }
 
-    const { userId, actionType, decision, reason, correlationId, targetMode, actionId, actionTitle, actionKind } =
+    const {
+      userId,
+      actionType,
+      decision,
+      reason,
+      correlationId,
+      targetMode,
+      actionId,
+      actionTitle,
+      actionKind,
+      factors,
+    } =
       parsed.data
     const auth = requireSelf(request, userId)
     if ('error' in auth) return auth.error
@@ -58,6 +79,9 @@ export async function POST(
       at: now,
       policyCorrelationId: correlationId || null,
       policyActionType: actionType,
+      actionId: actionId || null,
+      actionTitle: actionTitle || null,
+      factors: factors || [],
       note: reason || null,
     })
 
@@ -91,6 +115,9 @@ export async function POST(
                 mode: targetMode as LeakPlanMode,
                 policyCorrelationId: correlationId || null,
                 policyActionType: actionType,
+                actionId: actionId || null,
+                actionTitle: actionTitle || null,
+                factors: factors || [],
               },
             ),
           )
@@ -127,6 +154,7 @@ export async function POST(
           actionTitle: actionTitle || null,
           policyCorrelationId: correlationId || null,
           policyActionType: actionType,
+          factors: factors || [],
           note: reason || null,
         })
         executed = true
