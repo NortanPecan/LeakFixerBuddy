@@ -31,6 +31,22 @@ const PolicyActSchema = z.object({
     .optional(),
 })
 
+function getPolicyAttempt(
+  snapshot: Record<string, unknown>,
+  correlationId: string | null | undefined,
+  decision: 'accepted' | 'rejected',
+) {
+  if (!correlationId) return 1
+  const journal = Array.isArray(snapshot.runJournal) ? snapshot.runJournal : []
+  const eventType = decision === 'accepted' ? 'policy_accepted' : 'policy_rejected'
+  const count = journal.filter((item) => {
+    if (!item || typeof item !== 'object') return false
+    const event = item as Record<string, unknown>
+    return event.type === eventType && event.policyCorrelationId === correlationId
+  }).length
+  return count + 1
+}
+
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ leakId: string }> },
@@ -74,6 +90,7 @@ export async function POST(
     let snapshot = normalizeSnapshot(leak.contextSnapshot)
     const now = new Date().toISOString()
     const eventType = decision === 'accepted' ? 'policy_accepted' : 'policy_rejected'
+    const attempt = getPolicyAttempt(snapshot, correlationId || null, decision)
     snapshot = appendRunJournal(snapshot, {
       type: eventType,
       at: now,
@@ -81,6 +98,10 @@ export async function POST(
       policyActionType: actionType,
       actionId: actionId || null,
       actionTitle: actionTitle || null,
+      actionKind: actionKind || null,
+      actor: 'user',
+      decision,
+      attempt,
       factors: factors || [],
       note: reason || null,
     })
@@ -92,6 +113,8 @@ export async function POST(
       snapshot.activePolicyCorrelationId = correlationId || null
       snapshot.activePolicyActionType = actionType
       snapshot.activePolicyAcceptedAt = now
+      snapshot.activePolicyDecision = decision
+      snapshot.activePolicyAttempt = attempt
       if (actionType === 'switch_mode') {
         if (!targetMode) {
           return NextResponse.json({ error: 'targetMode is required for switch_mode' }, { status: 400 })
@@ -120,6 +143,9 @@ export async function POST(
                 policyActionType: actionType,
                 actionId: actionId || null,
                 actionTitle: actionTitle || null,
+                actionKind: actionKind || null,
+                actor: 'user',
+                attempt,
                 factors: factors || [],
               },
             ),
@@ -155,8 +181,11 @@ export async function POST(
           at: now,
           actionId: actionId || null,
           actionTitle: actionTitle || null,
+          actionKind: actionKind || null,
           policyCorrelationId: correlationId || null,
           policyActionType: actionType,
+          actor: 'user',
+          attempt,
           factors: factors || [],
           note: reason || null,
         })
@@ -189,6 +218,7 @@ export async function POST(
       success: true,
       executed,
       requiresRegenerate,
+      attempt,
       snapshot,
     })
   } catch (error) {

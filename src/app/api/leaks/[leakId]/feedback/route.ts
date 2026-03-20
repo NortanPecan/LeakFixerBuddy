@@ -21,6 +21,8 @@ type FeedbackLogEntry = {
   mode: string
   result: LeakFeedbackResult
   comment: string | null
+  policyCorrelationId?: string | null
+  feedbackSource?: 'manual' | 'policy'
   updatedAt: string
 }
 
@@ -60,6 +62,12 @@ function normalizeFeedbackLog(raw: unknown): FeedbackLogEntry[] {
         mode: candidate.mode,
         result: candidate.result,
         comment: typeof candidate.comment === 'string' ? candidate.comment : null,
+        policyCorrelationId:
+          typeof candidate.policyCorrelationId === 'string' ? candidate.policyCorrelationId : null,
+        feedbackSource:
+          candidate.feedbackSource === 'manual' || candidate.feedbackSource === 'policy'
+            ? candidate.feedbackSource
+            : undefined,
         updatedAt: candidate.updatedAt,
       }
     })
@@ -383,6 +391,15 @@ export async function POST(
         }
 
         const linkedEntity = linkedEntityByActionId.get(action.id) || null
+        const linkedMetadata =
+          linkedEntity?.metadata && typeof linkedEntity.metadata === 'object' && !Array.isArray(linkedEntity.metadata)
+            ? (linkedEntity.metadata as Record<string, unknown>)
+            : null
+        const linkedPolicyCorrelationId =
+          typeof linkedMetadata?.policyCorrelationId === 'string'
+            ? linkedMetadata.policyCorrelationId
+            : null
+        const actionPolicyCorrelationId = effectivePolicyCorrelationId || linkedPolicyCorrelationId
         const workedValue = result === 'worked' ? true : result === 'not_worked' ? false : null
         const existingIndex = triedSolutions.findIndex((item) => item.text === action.title)
         if (existingIndex >= 0) {
@@ -418,6 +435,8 @@ export async function POST(
           mode: action.plan.mode,
           result,
           comment: normalizedComment,
+          policyCorrelationId: actionPolicyCorrelationId || null,
+          feedbackSource: actionPolicyCorrelationId ? 'policy' : 'manual',
           updatedAt,
         })
         if (feedbackLog.length > 80) {
@@ -432,23 +451,26 @@ export async function POST(
           actionTitle: action.title,
           result,
           note: normalizedComment,
-          policyCorrelationId: effectivePolicyCorrelationId || null,
+          policyCorrelationId: actionPolicyCorrelationId || null,
         })
         Object.assign(snapshot, withFeedback)
-        if (effectivePolicyCorrelationId) {
+        if (actionPolicyCorrelationId) {
           const withOutcome = appendRunJournal(snapshot, {
             type: 'policy_outcome',
             at: updatedAt,
             mode: action.plan.mode as 'minimum' | 'base' | 'maximum',
             actionId: action.id,
             actionTitle: action.title,
+            actionKind: action.kind,
             result,
-            policyCorrelationId: effectivePolicyCorrelationId,
+            policyCorrelationId: actionPolicyCorrelationId,
             note: normalizedComment,
           })
           Object.assign(snapshot, withOutcome)
           snapshot.lastPolicyOutcomeAt = updatedAt
           snapshot.lastPolicyOutcomeResult = result
+          snapshot.lastPolicyOutcomeActionId = action.id
+          snapshot.lastPolicyOutcomeCorrelationId = actionPolicyCorrelationId
         }
       }
 

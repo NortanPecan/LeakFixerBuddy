@@ -19,10 +19,14 @@ export interface RunJournalEvent {
   mode?: LeakPlanMode | null
   actionId?: string | null
   actionTitle?: string | null
+  actionKind?: string | null
   result?: LeakFeedbackResult | null
   note?: string | null
   policyCorrelationId?: string | null
   policyActionType?: NextBestAction['type'] | null
+  actor?: 'user' | 'system' | null
+  decision?: 'accepted' | 'rejected' | null
+  attempt?: number | null
   factors?: Array<{ key: string; weight: number; detail?: string }>
 }
 

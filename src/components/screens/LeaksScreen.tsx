@@ -188,11 +188,15 @@ interface LeakPolicyHint {
     type: string
     at: string
     actionId?: string | null
+    actionKind?: string | null
     note?: string | null
     policyCorrelationId?: string | null
     policyActionType?: string | null
     actionTitle?: string | null
     result?: string | null
+    actor?: string | null
+    decision?: string | null
+    attempt?: number | null
     factors?: Array<{ key: string; weight: number; detail?: string }>
   }>
   summary?: {
@@ -238,6 +242,8 @@ type FeedbackLogItem = {
   mode: string | null
   result: LeakPlanFeedback['result']
   comment: string | null
+  policyCorrelationId?: string | null
+  feedbackSource?: 'manual' | 'policy'
   updatedAt: string
 }
 
@@ -1150,6 +1156,12 @@ function getFeedbackLogFromSnapshot(contextSnapshot?: Record<string, unknown> | 
         mode: typeof candidate.mode === 'string' ? candidate.mode : null,
         result: candidate.result as LeakPlanFeedback['result'],
         comment: typeof candidate.comment === 'string' ? candidate.comment : null,
+        policyCorrelationId:
+          typeof candidate.policyCorrelationId === 'string' ? candidate.policyCorrelationId : null,
+        feedbackSource:
+          candidate.feedbackSource === 'manual' || candidate.feedbackSource === 'policy'
+            ? candidate.feedbackSource
+            : undefined,
         updatedAt: candidate.updatedAt,
       }
     })
@@ -1165,6 +1177,8 @@ function getLeakFeedbackByAction(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
     mode: LeakSolutionPlan['mode'] | null
     result: LeakPlanFeedback['result']
     comment: string | null
+    policyCorrelationId: string | null
+    feedbackSource: 'manual' | 'policy' | null
     updatedAt: string
     attempts: number
     linkedEntity: LeakActionLink | null
@@ -1196,6 +1210,8 @@ function getLeakFeedbackByAction(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
               : (item.actionId ? planActionsById.get(item.actionId)?.mode || null : null),
           result: item.result,
           comment: item.comment,
+          policyCorrelationId: item.policyCorrelationId || null,
+          feedbackSource: item.feedbackSource || null,
           updatedAt: item.updatedAt,
           attempts: 1,
           linkedEntity,
@@ -1216,6 +1232,8 @@ function getLeakFeedbackByAction(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
           mode: item.mode,
           result: item.result,
           comment: item.comment,
+          policyCorrelationId: null,
+          feedbackSource: null,
           updatedAt: item.updatedAt,
           attempts: 1,
           linkedEntity: item.linkedEntity,
@@ -1709,6 +1727,7 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
               type: event.type,
               at: event.at,
               actionId: typeof event.actionId === 'string' ? event.actionId : null,
+              actionKind: typeof event.actionKind === 'string' ? event.actionKind : null,
               note: typeof event.note === 'string' ? event.note : null,
               policyCorrelationId:
                 typeof event.policyCorrelationId === 'string' ? event.policyCorrelationId : null,
@@ -1716,6 +1735,9 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
                 typeof event.policyActionType === 'string' ? event.policyActionType : null,
               actionTitle: typeof event.actionTitle === 'string' ? event.actionTitle : null,
               result: typeof event.result === 'string' ? event.result : null,
+              actor: typeof event.actor === 'string' ? event.actor : null,
+              decision: typeof event.decision === 'string' ? event.decision : null,
+              attempt: typeof event.attempt === 'number' ? Math.round(event.attempt) : null,
               factors: Array.isArray(event.factors)
                 ? event.factors
                     .map((factor) => {
@@ -1814,6 +1836,7 @@ export function LeaksScreen() {
   const [loadingPlansLeakId, setLoadingPlansLeakId] = useState<string | null>(null)
   const [generatingPlansLeakId, setGeneratingPlansLeakId] = useState<string | null>(null)
   const [selectingPlanLeakId, setSelectingPlanLeakId] = useState<string | null>(null)
+  const [executingPolicyLeakId, setExecutingPolicyLeakId] = useState<string | null>(null)
   const [applyingPlanLeakId, setApplyingPlanLeakId] = useState<string | null>(null)
   const [applyingPlanActionId, setApplyingPlanActionId] = useState<string | null>(null)
   const [savingFeedbackActionId, setSavingFeedbackActionId] = useState<string | null>(null)
@@ -2464,6 +2487,8 @@ export function LeaksScreen() {
     },
   ) => {
     if (!user?.id) return false
+    if (executingPolicyLeakId === leak.id) return false
+    setExecutingPolicyLeakId(leak.id)
     try {
       const response = await fetch(`/api/leaks/${leak.id}/policy/act`, {
         method: 'POST',
@@ -2492,6 +2517,8 @@ export function LeaksScreen() {
     } catch (error) {
       showErrorToast(error, 'execute leak policy action')
       return false
+    } finally {
+      setExecutingPolicyLeakId(null)
     }
   }
 
@@ -2826,7 +2853,15 @@ export function LeaksScreen() {
   ) => {
     if (!user?.id) return
     const normalizedComment = comment?.trim() || ''
-    const policyCorrelationId = policyByLeak[leakId]?.nextBestAction?.correlationId || null
+    const leakEntity = leaks.find((item) => item.id === leakId) || null
+    const linkedCorrelationMeta = leakEntity?.actions
+      .map((item) => getLeakActionMetadata(item))
+      .find((metadata) => metadata?.sourceActionId === actionId && typeof metadata.policyCorrelationId === 'string')
+    const linkedCorrelationId =
+      linkedCorrelationMeta && typeof linkedCorrelationMeta.policyCorrelationId === 'string'
+        ? linkedCorrelationMeta.policyCorrelationId
+        : null
+    const policyCorrelationId = linkedCorrelationId || policyByLeak[leakId]?.nextBestAction?.correlationId || null
     const actionIds = Array.from(
       new Set([actionId, ...(options?.additionalActionIds || [])].map((item) => item.trim()).filter(Boolean)),
     )
@@ -3640,6 +3675,7 @@ export function LeaksScreen() {
                 },
               }
               const adaptiveModeSuggestion = policy?.adaptiveModeSuggestion || null
+              const policyActionBusy = executingPolicyLeakId === leak.id
               const selectedModeForChain =
                 policy?.selectedMode || selectedPlan?.mode || selectedModeFromSnapshot || null
               const createdEntityCountForChain = leak.actions.length
@@ -3649,6 +3685,23 @@ export function LeaksScreen() {
               }).length
               const feedbackCountForChain = feedbackByAction.length
               const workedCountForChain = feedbackByAction.filter((item) => item.result === 'worked').length
+              const recentFeedbackWindow = feedbackByAction.slice(0, 6)
+              const recentWorkedCount = recentFeedbackWindow.filter((item) => item.result === 'worked').length
+              const recentPartialCount = recentFeedbackWindow.filter((item) => item.result === 'partially').length
+              const recentFailedCount = recentFeedbackWindow.filter((item) => item.result === 'not_worked').length
+              const policyLinkedCreatedWithoutFeedback = leak.actions.filter((item) => {
+                const metadata = getLeakActionMetadata(item)
+                if (!metadata) return false
+                const policyCorrelationId =
+                  typeof metadata.policyCorrelationId === 'string' ? metadata.policyCorrelationId : null
+                if (!policyCorrelationId) return false
+                const sourceActionId = typeof metadata.sourceActionId === 'string' ? metadata.sourceActionId : null
+                if (!sourceActionId) return true
+                return !feedbackByActionId.has(sourceActionId)
+              }).length
+              const latestPolicyFailedOutcome = policyEvents.find(
+                (event) => event.type === 'policy_outcome' && event.result === 'not_worked',
+              ) || null
               const contextPulse = {
                 energyAvg: getContextMetricNumber(leak.contextSnapshot, 'energyAvg'),
                 stressAvg: getContextMetricNumber(leak.contextSnapshot, 'stressAvg'),
@@ -3995,20 +4048,85 @@ export function LeaksScreen() {
                               : ' Динамика пока смешанная.'}
                           </div>
                         )}
-                        <div className="mt-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2 text-xs text-white/75">
-                          Цепочка выполнения:
-                          {' '}
-                          leak
-                          {' → '}
-                          {selectedModeForChain ? `режим ${PLAN_MODE_LABELS[selectedModeForChain]}` : 'режим не выбран'}
-                          {' → '}
-                          создано сущностей {createdEntityCountForChain}
-                          {' → '}
-                          feedback {feedbackCountForChain}
-                          {' → '}
-                          worked {workedCountForChain}
-                          {' • '}
-                          policy-linked entities {policyLinkedCreatedCount}
+                        <div className="mt-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2 space-y-2">
+                          <div className="text-xs text-white/75">
+                            Цепочка выполнения:
+                            {' '}
+                            leak
+                            {' → '}
+                            {selectedModeForChain ? `режим ${PLAN_MODE_LABELS[selectedModeForChain]}` : 'режим не выбран'}
+                            {' → '}
+                            создано сущностей {createdEntityCountForChain}
+                            {' → '}
+                            feedback {feedbackCountForChain}
+                            {' → '}
+                            worked {workedCountForChain}
+                          </div>
+                          <div className="grid gap-2 md:grid-cols-4">
+                            <div className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5">
+                              <div className="text-[11px] text-white/50">Leak</div>
+                              <div className="text-xs text-white/75">captured</div>
+                            </div>
+                            <div className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5">
+                              <div className="text-[11px] text-white/50">Mode</div>
+                              <div className="text-xs text-white/75">
+                                {selectedModeForChain ? PLAN_MODE_LABELS[selectedModeForChain] : 'не выбран'}
+                              </div>
+                            </div>
+                            <div className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5">
+                              <div className="text-[11px] text-white/50">Entities</div>
+                              <div className="text-xs text-white/75">
+                                {createdEntityCountForChain} всего, policy-linked {policyLinkedCreatedCount}
+                              </div>
+                              {policyLinkedCreatedWithoutFeedback > 0 && (
+                                <div className="mt-1 text-[11px] text-amber-200">
+                                  Без feedback: {policyLinkedCreatedWithoutFeedback}
+                                </div>
+                              )}
+                            </div>
+                            <div className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5">
+                              <div className="text-[11px] text-white/50">Feedback</div>
+                              <div className="text-xs text-white/75">
+                                {feedbackCountForChain} событий • worked {workedCountForChain}
+                              </div>
+                            </div>
+                          </div>
+                          {latestPolicyFailedOutcome && (
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={async () => {
+                                  const action = latestPolicyFailedOutcome.actionId
+                                    ? planActionsById.get(latestPolicyFailedOutcome.actionId) || null
+                                    : null
+                                  await executePolicyAction(leak, {
+                                    actionType: 'retry',
+                                    correlationId: latestPolicyFailedOutcome.policyCorrelationId || null,
+                                    actionId: action?.id || latestPolicyFailedOutcome.actionId || null,
+                                    actionTitle: action?.title || latestPolicyFailedOutcome.actionTitle || null,
+                                    actionKind: action?.kind || latestPolicyFailedOutcome.actionKind || null,
+                                    reason: latestPolicyFailedOutcome.note || 'policy_outcome_failed',
+                                  })
+                                  await retryLeakPlanning(leak, {
+                                    action,
+                                    failureReason: latestPolicyFailedOutcome.note || null,
+                                  })
+                                }}
+                                disabled={policyActionBusy || retryingLeakId === leak.id}
+                                className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
+                              >
+                                {policyActionBusy || retryingLeakId === leak.id ? 'Обновляю...' : 'Retry from policy failure'}
+                              </Button>
+                              <div className="self-center text-[11px] text-white/55">
+                                Последний провал:
+                                {' '}
+                                {latestPolicyFailedOutcome.actionTitle || 'шаг не указан'}
+                                {' • '}
+                                {formatDate(latestPolicyFailedOutcome.at)}
+                              </div>
+                            </div>
+                          )}
                         </div>
                         {contextDriftHint && (
                           <div
@@ -4025,6 +4143,18 @@ export function LeaksScreen() {
                             {contextDriftHint.changedMetrics.length > 0 && (
                               <div className="mt-1 text-[11px] text-white/60">
                                 Изменилось: {contextDriftHint.changedMetrics.map((item) => `${item.key} (${item.deltaPct > 0 ? '+' : ''}${item.deltaPct}%)`).join(', ')}
+                              </div>
+                            )}
+                            {contextDriftHint.changedMetrics.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {contextDriftHint.changedMetrics.slice(0, 4).map((item) => (
+                                  <Badge
+                                    key={`${item.key}-${item.deltaPct}`}
+                                    className="bg-white/10 text-white/70 border-white/10"
+                                  >
+                                    {item.key}: {item.before} → {item.now} ({item.deltaPct > 0 ? '+' : ''}{item.deltaPct}%)
+                                  </Badge>
+                                ))}
                               </div>
                             )}
                           </div>
@@ -4070,10 +4200,10 @@ export function LeaksScreen() {
                                   size="sm"
                                   variant="outline"
                                   onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan || null, planActionsById)}
-                                  disabled={selectingPlanLeakId === leak.id}
+                                  disabled={selectingPlanLeakId === leak.id || policyActionBusy}
                                   className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
                                 >
-                                  {selectingPlanLeakId === leak.id
+                                  {selectingPlanLeakId === leak.id || policyActionBusy
                                     ? 'Переключаю...'
                                     : `Переключить: ${PLAN_MODE_LABELS[nextBestActionHint.targetMode]}`}
                                 </Button>
@@ -4083,9 +4213,10 @@ export function LeaksScreen() {
                                   size="sm"
                                   variant="outline"
                                   onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan || null, planActionsById)}
+                                  disabled={policyActionBusy}
                                   className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
                                 >
-                                  Создать рекомендуемый шаг
+                                  {policyActionBusy ? 'Выполняю...' : 'Создать рекомендуемый шаг'}
                                 </Button>
                               )}
                               {nextBestActionHint.type === 'give_feedback' && nextBestActionHint.actionId && (
@@ -4093,9 +4224,10 @@ export function LeaksScreen() {
                                   size="sm"
                                   variant="outline"
                                   onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan || null, planActionsById)}
+                                  disabled={policyActionBusy}
                                   className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
                                 >
-                                  Перейти к feedback
+                                  {policyActionBusy ? 'Выполняю...' : 'Перейти к feedback'}
                                 </Button>
                               )}
                               {nextBestActionHint.type === 'retry' && nextBestActionHint.actionId && (
@@ -4103,10 +4235,10 @@ export function LeaksScreen() {
                                   size="sm"
                                   variant="outline"
                                   onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan || null, planActionsById)}
-                                  disabled={retryingLeakId === leak.id}
+                                  disabled={retryingLeakId === leak.id || policyActionBusy}
                                   className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
                                 >
-                                  {retryingLeakId === leak.id ? 'Обновляю...' : 'Retry по рекомендации'}
+                                  {retryingLeakId === leak.id || policyActionBusy ? 'Обновляю...' : 'Retry по рекомендации'}
                                 </Button>
                               )}
                               {(nextBestActionHint.type === 'generate' || nextBestActionHint.type === 'regenerate_context') && (
@@ -4114,19 +4246,20 @@ export function LeaksScreen() {
                                   size="sm"
                                   variant="outline"
                                   onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan || null, planActionsById)}
-                                  disabled={generatingPlansLeakId === leak.id}
+                                  disabled={generatingPlansLeakId === leak.id || policyActionBusy}
                                   className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
                                 >
-                                  {generatingPlansLeakId === leak.id ? 'Собираю...' : 'Пересобрать планы'}
+                                  {generatingPlansLeakId === leak.id || policyActionBusy ? 'Собираю...' : 'Пересобрать планы'}
                                 </Button>
                               )}
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan || null, planActionsById)}
+                                disabled={policyActionBusy}
                                 className="border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-200"
                               >
-                                Принять совет
+                                {policyActionBusy ? 'Фиксирую...' : 'Принять совет'}
                               </Button>
                               {[
                                 { key: 'not_now', label: 'Не сейчас' },
@@ -4137,6 +4270,7 @@ export function LeaksScreen() {
                                   key={`reject-${reject.key}`}
                                   size="sm"
                                   variant="outline"
+                                  disabled={policyActionBusy}
                                   onClick={() =>
                                     executePolicyAction(leak, {
                                       actionType: nextBestActionHint.type === 'switch_mode'
@@ -4156,7 +4290,7 @@ export function LeaksScreen() {
                                   }
                                   className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
                                 >
-                                  {reject.label}
+                                  {policyActionBusy ? 'Фиксирую...' : reject.label}
                                 </Button>
                               ))}
                             </div>
@@ -4292,6 +4426,8 @@ export function LeaksScreen() {
                                         {getPolicyEventLabel(event.type)} • {formatDate(event.at)}
                                         {event.policyActionType ? ` • ${getPolicyActionLabel(event.policyActionType)}` : ''}
                                         {event.result ? ` • ${getPolicyResultLabel(event.result)}` : ''}
+                                        {event.attempt ? ` • attempt ${event.attempt}` : ''}
+                                        {event.actor ? ` • ${event.actor}` : ''}
                                         {event.note ? ` • ${event.note}` : ''}
                                         {event.actionTitle ? ` • ${event.actionTitle}` : ''}
                                         {event.factors && event.factors.length > 0
@@ -4308,6 +4444,33 @@ export function LeaksScreen() {
                                           К шагу
                                         </Button>
                                       )}
+                                      {event.type === 'policy_outcome' &&
+                                        event.result === 'not_worked' &&
+                                        event.actionId && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={async () => {
+                                              const action = planActionsById.get(event.actionId || '') || null
+                                              await executePolicyAction(leak, {
+                                                actionType: 'retry',
+                                                correlationId: event.policyCorrelationId || null,
+                                                actionId: action?.id || event.actionId || null,
+                                                actionTitle: action?.title || event.actionTitle || null,
+                                                actionKind: action?.kind || event.actionKind || null,
+                                                reason: event.note || 'policy_outcome_failed',
+                                              })
+                                              await retryLeakPlanning(leak, {
+                                                action,
+                                                failureReason: event.note || null,
+                                              })
+                                            }}
+                                            disabled={policyActionBusy || retryingLeakId === leak.id}
+                                            className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
+                                          >
+                                            Retry
+                                          </Button>
+                                        )}
                                     </div>
                                   ))}
                               </div>
@@ -4347,10 +4510,10 @@ export function LeaksScreen() {
                                     targetMode: adaptiveModeSuggestion.targetMode,
                                   })
                                 }
-                                disabled={selectingPlanLeakId === leak.id}
+                                disabled={selectingPlanLeakId === leak.id || policyActionBusy}
                                 className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
                               >
-                                {selectingPlanLeakId === leak.id
+                                {selectingPlanLeakId === leak.id || policyActionBusy
                                   ? 'Переключаю...'
                                   : `Adaptive: ${PLAN_MODE_LABELS[adaptiveModeSuggestion.targetMode]}`}
                               </Button>
@@ -4579,6 +4742,30 @@ export function LeaksScreen() {
                                 </div>
                               ))}
                             </div>
+                          </div>
+                        </div>
+                      )}
+                      {recentFeedbackWindow.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="text-xs uppercase tracking-wide text-white/40">
+                            Learning summary
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Badge className="bg-white/10 text-white/70 border-white/10">
+                              Recent: {recentFeedbackWindow.length}
+                            </Badge>
+                            <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
+                              Worked: {recentWorkedCount}
+                            </Badge>
+                            <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
+                              Partial: {recentPartialCount}
+                            </Badge>
+                            <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
+                              Failed: {recentFailedCount}
+                            </Badge>
+                            <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                              Без feedback по policy-created: {policyLinkedCreatedWithoutFeedback}
+                            </Badge>
                           </div>
                         </div>
                       )}
@@ -5107,6 +5294,16 @@ export function LeaksScreen() {
                                     >
                                       {getFeedbackResultLabel(item.result)}
                                     </Badge>
+                                    {item.feedbackSource === 'policy' && (
+                                      <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                                        Policy outcome
+                                      </Badge>
+                                    )}
+                                    {item.policyCorrelationId && (
+                                      <Badge className="bg-white/10 text-white/60 border-white/10">
+                                        Corr: {item.policyCorrelationId.slice(0, 18)}
+                                      </Badge>
+                                    )}
                                     <div className="text-xs text-white/40">{formatDate(item.updatedAt)}</div>
                                   </div>
                                   <div className="mt-1 text-sm text-white">{item.actionTitle}</div>
@@ -5243,6 +5440,11 @@ export function LeaksScreen() {
                                           {sourcePolicyCorrelationId && (
                                             <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
                                               Policy-linked
+                                            </Badge>
+                                          )}
+                                          {sourcePolicyCorrelationId && !feedback && (
+                                            <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
+                                              Без feedback
                                             </Badge>
                                           )}
                                           {feedback && (
