@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuthenticatedUser, requireSelf } from '@/lib/server-auth'
 
 // POST /api/content/link - Create a link from content to entity (note, ritual, chain)
 // Also creates the entity if createEntity is true
@@ -11,6 +12,15 @@ export async function POST(request: NextRequest) {
     if (!contentId || !entity) {
       return NextResponse.json({ error: 'contentId and entity required' }, { status: 400 })
     }
+
+    const content = await db.contentItem.findUnique({
+      where: { id: contentId },
+      select: { userId: true },
+    })
+    if (!content) {
+      return NextResponse.json({ error: 'Content not found' }, { status: 404 })
+    }
+    await requireSelf(request, content.userId)
 
     // Validate entity type
     const validEntities = ['note', 'task', 'ritual', 'chain']
@@ -25,7 +35,7 @@ export async function POST(request: NextRequest) {
       if (entity === 'note') {
         const note = await db.note.create({
           data: {
-            userId: entityData.userId,
+            userId: content.userId,
             text: entityData.text || fragment || 'New note',
             type: entityData.type || 'content',
             zone: entityData.zone || 'general',
@@ -45,7 +55,7 @@ export async function POST(request: NextRequest) {
       } else if (entity === 'task') {
         const task = await db.task.create({
           data: {
-            userId: entityData.userId,
+            userId: content.userId,
             text: entityData.text || fragment || 'New task',
             contentId: contentId,
             zone: entityData.zone || null,
@@ -56,7 +66,7 @@ export async function POST(request: NextRequest) {
       } else if (entity === 'ritual') {
         const ritual = await db.ritual.create({
           data: {
-            userId: entityData.userId,
+            userId: content.userId,
             title: entityData.title || fragment || 'New ritual',
             category: entityData.category || 'health',
             type: entityData.type || 'regular',
@@ -68,7 +78,7 @@ export async function POST(request: NextRequest) {
       } else if (entity === 'chain') {
         const chain = await db.chain.create({
           data: {
-            userId: entityData.userId,
+            userId: content.userId,
             title: entityData.title || fragment || 'New chain',
           }
         })
@@ -105,6 +115,22 @@ export async function DELETE(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
+    }
+
+    const auth = await requireAuthenticatedUser(request)
+    const link = await db.contentLink.findUnique({
+      where: { id },
+      include: {
+        content: {
+          select: { userId: true },
+        },
+      },
+    })
+    if (!link) {
+      return NextResponse.json({ error: 'Link not found' }, { status: 404 })
+    }
+    if (link.content.userId !== auth.session.userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     await db.contentLink.delete({

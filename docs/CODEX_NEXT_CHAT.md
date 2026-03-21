@@ -376,3 +376,48 @@
 ## Рекомендуемый стартовый prompt для следующего чата
 
 `Прочитай CLAUDE.md и docs/CODEX_NEXT_CHAT.md. Продолжай leaks-модуль с текущего состояния без возврата к security-rollout. Сначала быстро проверь docs/LEAKS_DEV_ROADMAP.md и src/components/screens/LeaksScreen.tsx, потом вноси следующие продуктовые правки.`
+
+---
+
+## 2026-03-21 — pause note: leaks UX audit + Phase 1
+
+В этом чате шли по модулю `leaks`.
+
+Что сделали:
+
+- сначала провели полный audit модуля в режиме без кода;
+- отдельно собрали UX audit с фокусом на exhausted user и основной loop `notice → act → feedback → improvement`;
+- затем начали безопасный `UX Phase 1` только в `src/components/screens/LeaksScreen.tsx`.
+
+Что уже внесено в UI:
+
+- скрыты internal / analytics блоки:
+  - `Policy inspector`
+  - `Current funnels`
+  - `Recent funnels`
+  - `Priority pending queue`
+  - `pattern analytics`
+- упрощён capture:
+  - оставлен один primary CTA `Сохранить`
+  - AI-разбор оставлен как secondary action после сохранения
+- улучшен фокус leak card:
+  - блок `Следующий шаг` визуально поднят наверх карточки
+  - вторичные блоки оставлены ниже
+
+Что осталось следующим минимальным шагом в Phase 1:
+
+- спрятать или свернуть верхний блок фильтров / control strip;
+- визуально снизить приоритет `Signals` и `Patterns`, не удаляя их;
+- при необходимости дочистить user-facing wording в главном leaks flow.
+
+Техническое состояние на паузе:
+
+- работали в текущей ветке `main`;
+- перед паузой локально прошли:
+  - `npm run check:encoding`
+  - `npm run check:prepush`
+- новых миграций в этом чате не добавляли.
+
+Старт для следующего чата:
+
+`Прочитай CLAUDE.md и docs/CODEX_NEXT_CHAT.md. Продолжай leaks UX Phase 1 с текущего состояния. Сначала проверь src/components/screens/LeaksScreen.tsx, затем доведи верхние filters и снизь визуальный приоритет Signals/Patterns без backend-изменений.`

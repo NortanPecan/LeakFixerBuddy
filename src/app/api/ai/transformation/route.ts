@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { callAI } from '@/lib/ai-provider'
+import { requireSelf } from '@/lib/server-auth'
 
 const TRANSFORMATION_SYSTEM = `Ты персональный коуч по саморазвитию в приложении LeakFixer Buddy.
 Тебе дают сравнение показателей пользователя: первые 30 дней vs последние 30 дней.
@@ -27,6 +28,9 @@ export async function GET(request: NextRequest) {
   const userId = searchParams.get('userId')
   if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
 
+  const auth = requireSelf(request, userId)
+  if ('error' in auth) return auth.error
+
   // Cache: 7 days
   const sevenDaysAgo = new Date()
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
@@ -41,7 +45,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Need at least 30 days of data
-  const user = await db.user.findUnique({
+  const user = await db.appUser.findUnique({
     where: { id: userId },
     select: { day: true, createdAt: true, firstName: true, streak: true },
   })

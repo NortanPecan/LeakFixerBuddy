@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 // TDEE: Harris-Benedict BMR × activity multiplier
 function calcTDEE(weight: number, height: number, age: number, sex: string, workProfile?: string | null): number {
@@ -21,6 +22,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const userId = searchParams.get('userId')
   if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+  await requireSelf(request, userId)
 
   const profile = await db.userProfile.findUnique({ where: { userId } })
   if (!profile) return NextResponse.json({ goal: null, profile: null })
@@ -157,6 +159,7 @@ export async function PATCH(request: NextRequest) {
     const { userId, targetWeight, deadline, startWeight, clearGoal } = body
 
     if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+    await requireSelf(request, userId)
 
     if (clearGoal) {
       await db.userProfile.upsert({

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { normalizeToDate } from '@/lib/date-utils'
+import { requireSelf } from '@/lib/server-auth'
 
 // ─── Day score formula (mirrors DailySummaryScreen) ───────────────────────────
 // rituals 25%, water 20%, mood 20%, energy 15%, morning checkin 10%, evening 10%
@@ -202,6 +203,7 @@ export async function POST(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const today = normalizeToDate(new Date())
     const todayScore = await calcDayScore(userId, today)
@@ -235,6 +237,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
     if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+    await requireSelf(request, userId)
 
     const achievements = await db.achievement.findMany({
       where: { userId },

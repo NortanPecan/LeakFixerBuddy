@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { normalizeToDate, parseDateKey, formatDateKey, getDaysAgo } from '@/lib/date-utils'
 import { getMoodStatusText } from '@/lib/mood-utils'
+import { requireSelf } from '@/lib/server-auth'
 
 /**
  * Save or update daily state (mood, energy)
@@ -16,6 +17,9 @@ export async function POST(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     const targetDate = date ? parseDateKey(date) : normalizeToDate(new Date())
 
@@ -69,6 +73,9 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     // If date is provided, get state for that specific date
     if (dateParam) {

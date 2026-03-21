@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { normalizeToDate, parseDateKey, formatDateKey } from '@/lib/date-utils'
 import { calculateStreak, type CompletionEntry } from '@/lib/streak-utils'
+import { requireAuthenticatedUser, requireSelf } from '@/lib/server-auth'
 
 // POST - Mark ritual as complete/incomplete for a date
 // Body: { ritualId, userId, date?: string, completed: boolean, note?: string, mood?: string }
@@ -14,6 +15,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'ritualId and userId required' }, { status: 400 })
     }
 
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
+
     // Get the ritual to check attributes
     const ritual = await db.ritual.findUnique({
       where: { id: ritualId }
@@ -21,6 +25,10 @@ export async function POST(request: NextRequest) {
 
     if (!ritual) {
       return NextResponse.json({ error: 'Ritual not found' }, { status: 404 })
+    }
+
+    if (ritual.userId !== userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     // Parse date or use today - normalize to start of day
@@ -115,9 +123,11 @@ export async function POST(request: NextRequest) {
 // /api/rituals/complete?ritualId=xxx&days=30
 export async function GET(request: NextRequest) {
   try {
+    const auth = requireAuthenticatedUser(request)
+    if ('error' in auth) return auth.error
+
     const { searchParams } = new URL(request.url)
     const ritualId = searchParams.get('ritualId')
-    const userId = searchParams.get('userId')
     const days = parseInt(searchParams.get('days') || '30')
 
     if (!ritualId) {
@@ -140,6 +150,14 @@ export async function GET(request: NextRequest) {
     const ritual = await db.ritual.findUnique({
       where: { id: ritualId }
     })
+
+    if (!ritual) {
+      return NextResponse.json({ error: 'Ritual not found' }, { status: 404 })
+    }
+
+    if (ritual.userId !== auth.session.userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     // Calculate streak using the utility
     let streak = 0

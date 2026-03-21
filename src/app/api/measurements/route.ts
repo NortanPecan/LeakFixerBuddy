@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { safeParseFloat } from '@/lib/network-utils'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET - Fetch measurements for user
 export async function GET(request: NextRequest) {
@@ -13,6 +14,9 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     const where: { userId: string; type?: string } = { userId }
     if (type) where.type = type
@@ -74,6 +78,9 @@ export async function POST(request: NextRequest) {
     if (!userId || !type || value === undefined) {
       return NextResponse.json({ error: 'userId, type, and value required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     const parsedValue = safeParseFloat(value)
     if (parsedValue === null) {

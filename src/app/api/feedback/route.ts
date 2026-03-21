@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET /api/feedback?userId=xxx - Get user feedbacks (optional, for admin)
 export async function GET(request: NextRequest) {
@@ -10,6 +11,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const feedbacks = await db.feedback.findMany({
       where: { userId },
@@ -32,6 +34,7 @@ export async function POST(request: NextRequest) {
     if (!userId || !type || !message) {
       return NextResponse.json({ error: 'userId, type, and message are required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const validTypes = ['bug', 'idea', 'question', 'review']
     if (!validTypes.includes(type)) {

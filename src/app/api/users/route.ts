@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET - Fetch all users (excluding current user)
 export async function GET(request: NextRequest) {
@@ -11,6 +12,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     // Get all users excluding current user
     const users = await db.appUser.findMany({

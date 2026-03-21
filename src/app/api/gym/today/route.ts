@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET - Fetch today's workout plan (v1.3 enhanced)
 export async function GET(request: NextRequest) {
@@ -11,6 +12,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     // Get active period
     const activePeriod = await db.gymPeriod.findFirst({
@@ -251,6 +253,9 @@ export async function POST(request: NextRequest) {
     const currentWorkout = await db.gymWorkout.findUnique({
       where: { id: workoutId },
       include: {
+        period: {
+          select: { userId: true }
+        },
         exercises: {
           include: {
             template: true,
@@ -263,6 +268,7 @@ export async function POST(request: NextRequest) {
     if (!currentWorkout) {
       return NextResponse.json({ error: 'Workout not found' }, { status: 404 })
     }
+    await requireSelf(request, currentWorkout.period.userId)
 
     // Quick complete mode: mark as completed, set nextWeight if missing
     if (mode === 'quickComplete') {
@@ -570,6 +576,23 @@ export async function PATCH(request: NextRequest) {
     if (!exerciseId) {
       return NextResponse.json({ error: 'exerciseId required' }, { status: 400 })
     }
+
+    const existingExercise = await db.gymExercise.findUnique({
+      where: { id: exerciseId },
+      select: {
+        workout: {
+          select: {
+            period: {
+              select: { userId: true }
+            }
+          }
+        }
+      }
+    })
+    if (!existingExercise?.workout?.period?.userId) {
+      return NextResponse.json({ error: 'Exercise not found' }, { status: 404 })
+    }
+    await requireSelf(request, existingExercise.workout.period.userId)
 
     // Update exercise
     const exercise = await db.gymExercise.update({

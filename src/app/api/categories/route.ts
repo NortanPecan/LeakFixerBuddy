@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 // Default categories for new users
 const DEFAULT_CATEGORIES = [
@@ -20,6 +21,9 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     let categories = await db.category.findMany({
       where: { userId },
@@ -75,6 +79,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'userId and name are required' }, { status: 400 })
     }
 
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
+
     const category = await db.category.create({
       data: {
         userId,
@@ -104,6 +111,18 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
 
+    const existingCategory = await db.category.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+
+    if (!existingCategory) {
+      return NextResponse.json({ error: 'Category not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, existingCategory.userId)
+    if ('error' in auth) return auth.error
+
     const category = await db.category.update({
       where: { id },
       data
@@ -125,6 +144,18 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
+
+    const existingCategory = await db.category.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+
+    if (!existingCategory) {
+      return NextResponse.json({ error: 'Category not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, existingCategory.userId)
+    if ('error' in auth) return auth.error
 
     // Set categoryId to null for all transactions in this category
     await db.transaction.updateMany({

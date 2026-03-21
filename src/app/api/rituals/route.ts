@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { normalizeToDate, parseDateKey, formatDateKey, getDayOfWeek } from '@/lib/date-utils'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET - Fetch user's rituals with completions for a specific date
 // /api/rituals?userId=xxx - Get rituals with today's completions
@@ -16,6 +17,9 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     // Parse target date (default to today)
     const targetDate = dateParam ? parseDateKey(dateParam) : normalizeToDate(new Date())
@@ -111,6 +115,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'userId, title, and category required' }, { status: 400 })
     }
 
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
+
     // Check for duplicate title (case insensitive, active rituals only)
     const existingRitual = await db.ritual.findFirst({
       where: {
@@ -186,6 +193,18 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'ritualId required' }, { status: 400 })
     }
 
+    const existingRitual = await db.ritual.findUnique({
+      where: { id: ritualId },
+      select: { userId: true },
+    })
+
+    if (!existingRitual) {
+      return NextResponse.json({ error: 'Ritual not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, existingRitual.userId)
+    if ('error' in auth) return auth.error
+
     const updateData: Record<string, unknown> = {}
     if (title !== undefined) updateData.title = title
     if (days !== undefined) updateData.days = JSON.stringify(days)
@@ -222,6 +241,18 @@ export async function DELETE(request: NextRequest) {
     if (!ritualId) {
       return NextResponse.json({ error: 'ritualId required' }, { status: 400 })
     }
+
+    const existingRitual = await db.ritual.findUnique({
+      where: { id: ritualId },
+      select: { userId: true },
+    })
+
+    if (!existingRitual) {
+      return NextResponse.json({ error: 'Ritual not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, existingRitual.userId)
+    if ('error' in auth) return auth.error
 
     if (permanent) {
       // Permanently delete ritual and all its completions (cascade in schema)

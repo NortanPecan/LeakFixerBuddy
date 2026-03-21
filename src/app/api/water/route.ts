@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { normalizeToDate, getStartOfDay, getEndOfDay, formatDateKey, parseDateKey } from '@/lib/date-utils'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET /api/water?userId=xxx - Get water for today
 // GET /api/water?userId=xxx&date=YYYY-MM-DD - Get water for specific date
@@ -12,6 +13,9 @@ export async function GET(request: NextRequest) {
   if (!userId) {
     return NextResponse.json({ error: 'userId is required' }, { status: 400 })
   }
+
+  const auth = requireSelf(request, userId)
+  if ('error' in auth) return auth.error
 
   try {
     const targetDate = dateParam ? parseDateKey(dateParam) : normalizeToDate(new Date())
@@ -64,6 +68,9 @@ export async function PATCH(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     const targetDate = date ? parseDateKey(date) : normalizeToDate(new Date())
 

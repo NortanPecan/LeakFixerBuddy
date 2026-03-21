@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 /**
  * GET /api/skills?userId=...&category=...&importance=...
@@ -15,6 +16,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const where: Record<string, unknown> = { userId, isArchived: false }
     if (category) where.category = category
@@ -47,6 +49,7 @@ export async function POST(request: NextRequest) {
     if (!userId || !name?.trim()) {
       return NextResponse.json({ error: 'userId and name required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const skill = await db.skill.create({
       data: {
@@ -78,6 +81,15 @@ export async function PATCH(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
+
+    const existingSkill = await db.skill.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+    if (!existingSkill) {
+      return NextResponse.json({ error: 'Skill not found' }, { status: 404 })
+    }
+    await requireSelf(request, existingSkill.userId)
 
     // XP gain path
     if (typeof xpGained === 'number' && xpGained > 0) {
@@ -152,6 +164,15 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
+
+    const existingSkill = await db.skill.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+    if (!existingSkill) {
+      return NextResponse.json({ error: 'Skill not found' }, { status: 404 })
+    }
+    await requireSelf(request, existingSkill.userId)
 
     await db.skill.update({
       where: { id },

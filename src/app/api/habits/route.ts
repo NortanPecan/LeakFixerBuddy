@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { calculateHabitStreak, type CompletionEntry } from '@/lib/streak-utils'
 import { z } from 'zod'
+import { requireSelf } from '@/lib/server-auth'
 
 const CreateHabitSchema = z.object({
   userId: z.string().min(1),
@@ -35,6 +36,9 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     // Get all active habits for user
     const habits = await db.habit.findMany({
@@ -175,6 +179,9 @@ export async function POST(request: NextRequest) {
     }
     const { userId, name, icon, color, frequency, target } = parsed.data
 
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
+
     const habit = await db.habit.create({
       data: {
         userId,
@@ -225,6 +232,21 @@ export async function PATCH(request: NextRequest) {
     }
     const { habitId, name, icon, color, target } = parsed.data
 
+    const existingHabit = await db.habit.findUnique({
+      where: { id: habitId },
+      select: { userId: true },
+    })
+
+    if (!existingHabit) {
+      return NextResponse.json(
+        { error: 'Habit not found' },
+        { status: 404 }
+      )
+    }
+
+    const auth = requireSelf(request, existingHabit.userId)
+    if ('error' in auth) return auth.error
+
     const habit = await db.habit.update({
       where: { id: habitId },
       data: {
@@ -269,6 +291,21 @@ export async function DELETE(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    const existingHabit = await db.habit.findUnique({
+      where: { id: habitId },
+      select: { userId: true },
+    })
+
+    if (!existingHabit) {
+      return NextResponse.json(
+        { error: 'Habit not found' },
+        { status: 404 }
+      )
+    }
+
+    const auth = requireSelf(request, existingHabit.userId)
+    if ('error' in auth) return auth.error
 
     // Delete habit (cascade deletes logs automatically via schema)
     await db.habit.delete({

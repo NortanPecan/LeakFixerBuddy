@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET /api/settings?userId=xxx - Get user settings
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
-
-    if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 })
-    }
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     // Get or create settings
     let settings = await db.userSettings.findUnique({
@@ -34,10 +33,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { userId, ...data } = body
-
-    if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 })
-    }
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     // Check if exists
     const existing = await db.userSettings.findUnique({
@@ -67,10 +64,8 @@ export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
     const { userId, ...data } = body
-
-    if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 })
-    }
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     // Check if exists, create if not
     let settings = await db.userSettings.findUnique({

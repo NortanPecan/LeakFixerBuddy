@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 /**
  * Get measurements history
@@ -20,6 +21,7 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       )
     }
+    await requireSelf(request, userId)
 
     const where: Record<string, unknown> = { userId }
     if (type) where.type = type
@@ -72,6 +74,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+    await requireSelf(request, userId)
 
     const measurement = await db.measurement.create({
       data: {
@@ -118,6 +121,15 @@ export async function DELETE(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    const measurement = await db.measurement.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+    if (!measurement) {
+      return NextResponse.json({ error: 'Measurement not found' }, { status: 404 })
+    }
+    await requireSelf(request, measurement.userId)
 
     await db.measurement.delete({
       where: { id }

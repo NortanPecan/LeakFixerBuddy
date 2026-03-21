@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuthenticatedUser, requireSelf } from '@/lib/server-auth'
 
 // GET /api/content - Get all content items with filters or single item by id
 export async function GET(request: NextRequest) {
@@ -15,6 +16,7 @@ export async function GET(request: NextRequest) {
 
     // Get single item by id
     if (id) {
+      const auth = await requireAuthenticatedUser(request)
       const item = await db.contentItem.findUnique({
         where: { id },
         include: {
@@ -47,6 +49,9 @@ export async function GET(request: NextRequest) {
       if (!item) {
         return NextResponse.json({ error: 'Content not found' }, { status: 404 })
       }
+      if (item.userId !== auth.session.userId) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
 
       return NextResponse.json({ items: [item], total: 1 })
     }
@@ -54,6 +59,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const where: {
       userId: string
@@ -139,6 +145,7 @@ export async function POST(request: NextRequest) {
     if (!userId || !type || !title) {
       return NextResponse.json({ error: 'userId, type, and title required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const item = await db.contentItem.create({
       data: {

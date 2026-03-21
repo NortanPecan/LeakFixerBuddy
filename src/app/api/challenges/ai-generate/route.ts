@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { callAI } from '@/lib/ai-provider'
+import { requireSelf } from '@/lib/server-auth'
 
 // Leak type → base template for challenge
 const LEAK_TEMPLATES: Record<string, { name: string; duration: number; zone: string; type: string; config: Record<string, unknown> }> = {
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
   try {
     const { userId, leakType, leakMessage } = await request.json()
     if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+    await requireSelf(request, userId)
 
     const activeCount = await db.challenge.count({ where: { userId, status: 'active' } })
     if (activeCount >= 3) {

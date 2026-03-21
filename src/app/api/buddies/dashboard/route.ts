@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET /api/buddies/dashboard?userId=xxx&buddyId=xxx
 // Returns the buddy's shared stats (public data)
@@ -12,6 +13,7 @@ export async function GET(request: NextRequest) {
     if (!userId || !buddyId) {
       return NextResponse.json({ error: 'userId and buddyId required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     // Verify they are actually buddies
     const buddyRelation = await db.buddy.findFirst({

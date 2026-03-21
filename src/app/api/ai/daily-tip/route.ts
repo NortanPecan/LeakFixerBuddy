@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { callAI } from '@/lib/ai-provider'
+import { requireSelf } from '@/lib/server-auth'
 
 const DAILY_TIP_SYSTEM = `Ты персональный коуч по саморазвитию. Пишешь на русском языке.
 Тебе дают данные о пользователе за последнюю неделю.
@@ -17,7 +18,7 @@ async function buildUserContext(userId: string): Promise<string> {
 
   const [profile, userProfile, fitnessDays, dailyStates, ritualCompletions, activeRituals, gymWorkouts] =
     await Promise.all([
-      db.user.findUnique({ where: { id: userId }, select: { streak: true, points: true, day: true, firstName: true } }),
+      db.appUser.findUnique({ where: { id: userId }, select: { streak: true, points: true, day: true, firstName: true } }),
       db.userProfile.findUnique({ where: { userId } }),
       db.fitnessDaily.findMany({ where: { userId, date: { gte: sevenDaysAgo } } }),
       db.dailyState.findMany({ where: { userId, date: { gte: sevenDaysAgo } } }),
@@ -65,6 +66,9 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const userId = searchParams.get('userId')
   if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+
+  const auth = requireSelf(request, userId)
+  if ('error' in auth) return auth.error
 
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
@@ -136,7 +140,7 @@ export async function POST(request: NextRequest) {
     const todayStart = new Date()
     todayStart.setHours(0, 0, 0, 0)
 
-    const activeUsers = await db.user.findMany({
+    const activeUsers = await db.appUser.findMany({
       where: {
         updatedAt: { gte: sevenDaysAgo },
         // Skip users who already got a tip today

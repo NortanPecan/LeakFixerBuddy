@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuthenticatedUser, requireSelf } from '@/lib/server-auth'
 
 // GET /api/buddy-challenges?userId=xxx
 // Returns invites received (pending) + active buddy challenges
@@ -7,6 +8,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const userId = searchParams.get('userId')
   if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+  await requireSelf(request, userId)
 
   try {
     const [received, sent] = await Promise.all([
@@ -43,6 +45,7 @@ export async function POST(request: NextRequest) {
     if (!challengeId || !initiatorId || !partnerId) {
       return NextResponse.json({ error: 'challengeId, initiatorId, partnerId required' }, { status: 400 })
     }
+    await requireSelf(request, initiatorId)
 
     // Validate challenge belongs to initiator
     const challenge = await db.challenge.findUnique({ where: { id: challengeId } })
@@ -78,6 +81,7 @@ export async function PATCH(request: NextRequest) {
     if (!id || !userId) {
       return NextResponse.json({ error: 'id and userId required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const bc = await db.buddyChallenge.findUnique({ where: { id } })
     if (!bc) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -114,6 +118,15 @@ export async function DELETE(request: NextRequest) {
   const id = new URL(request.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   try {
+    const auth = await requireAuthenticatedUser(request)
+    const existing = await db.buddyChallenge.findUnique({
+      where: { id },
+      select: { initiatorId: true, partnerId: true },
+    })
+    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (existing.initiatorId !== auth.session.userId && existing.partnerId !== auth.session.userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
     await db.buddyChallenge.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {

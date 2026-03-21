@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 const OWNER_EMAIL = 'owner@leakfixer.local'
 
@@ -17,6 +18,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     // Verify caller is owner
     const caller = await db.appUser.findUnique({
@@ -75,6 +77,7 @@ export async function PATCH(request: NextRequest) {
     if (!userId || !feedbackId || !status) {
       return NextResponse.json({ error: 'userId, feedbackId, status required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const caller = await db.appUser.findUnique({
       where: { id: userId },

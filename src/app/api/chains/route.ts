@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET /api/chains - Get all chains for a user
 export async function GET(request: NextRequest) {
@@ -11,6 +12,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const chains = await db.chain.findMany({
       where: {
@@ -73,6 +75,7 @@ export async function POST(request: NextRequest) {
     if (!userId || !title) {
       return NextResponse.json({ error: 'userId and title are required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     // Create chain with first step
     const chain = await db.chain.create({
@@ -111,6 +114,15 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'chainId is required' }, { status: 400 })
     }
 
+    const existingChain = await db.chain.findUnique({
+      where: { id: chainId },
+      select: { userId: true },
+    })
+    if (!existingChain) {
+      return NextResponse.json({ error: 'Chain not found' }, { status: 404 })
+    }
+    await requireSelf(request, existingChain.userId)
+
     const chain = await db.chain.update({
       where: { id: chainId },
       data: {
@@ -135,6 +147,15 @@ export async function DELETE(request: NextRequest) {
     if (!chainId) {
       return NextResponse.json({ error: 'chainId is required' }, { status: 400 })
     }
+
+    const existingChain = await db.chain.findUnique({
+      where: { id: chainId },
+      select: { userId: true },
+    })
+    if (!existingChain) {
+      return NextResponse.json({ error: 'Chain not found' }, { status: 404 })
+    }
+    await requireSelf(request, existingChain.userId)
 
     // Delete all tasks first
     await db.task.deleteMany({

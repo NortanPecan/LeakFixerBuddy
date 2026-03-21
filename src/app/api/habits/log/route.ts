@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 /**
  * Log habit completion
@@ -15,6 +16,18 @@ export async function POST(request: NextRequest) {
         { error: 'Habit ID and User ID required' },
         { status: 400 }
       )
+    }
+    await requireSelf(request, userId)
+
+    const habit = await db.habit.findUnique({
+      where: { id: habitId },
+      select: { userId: true, target: true },
+    })
+    if (!habit) {
+      return NextResponse.json({ error: 'Habit not found' }, { status: 404 })
+    }
+    if (habit.userId !== userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const today = new Date()
@@ -54,11 +67,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get habit to check target
-    const habit = await db.habit.findUnique({
-      where: { id: habitId }
-    })
-
-    const isCompleted = habit ? log.count >= (habit.target || 1) : completed
+    const isCompleted = log.count >= (habit.target || 1)
 
     return NextResponse.json({
       success: true,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 /**
  * GET /api/checkin?userId=...&date=YYYY-MM-DD
@@ -13,6 +14,9 @@ export async function GET(request: NextRequest) {
   if (!userId || !date) {
     return NextResponse.json({ error: 'userId and date required' }, { status: 400 })
   }
+
+  const auth = requireSelf(request, userId)
+  if ('error' in auth) return auth.error
 
   try {
     const dateObj = new Date(date)
@@ -45,6 +49,9 @@ export async function POST(request: NextRequest) {
     if (!userId || !date || !type) {
       return NextResponse.json({ error: 'userId, date, type required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     if (type !== 'morning' && type !== 'evening') {
       return NextResponse.json({ error: 'type must be morning or evening' }, { status: 400 })

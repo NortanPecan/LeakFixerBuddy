@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getPresetById, SWAMP_ESCAPE_PRESET } from '@/lib/rituals/presets'
 import type { Prisma } from '@prisma/client'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET - Get available presets
 export async function GET() {
@@ -23,6 +24,9 @@ export async function POST(request: NextRequest) {
     if (!userId || !presetId) {
       return NextResponse.json({ error: 'userId and presetId required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     const preset = getPresetById(presetId)
     if (!preset) {

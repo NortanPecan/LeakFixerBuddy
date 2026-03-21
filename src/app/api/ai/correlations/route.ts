@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { callAI } from '@/lib/ai-provider'
+import { requireSelf } from '@/lib/server-auth'
 
 export interface CorrelationPattern {
   pattern: string        // "В дни тренировок настроение выше на 1.5 балла"
@@ -112,6 +113,9 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const userId = searchParams.get('userId')
   if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+
+  const auth = requireSelf(request, userId)
+  if ('error' in auth) return auth.error
 
   // Cache: 24 hours
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)

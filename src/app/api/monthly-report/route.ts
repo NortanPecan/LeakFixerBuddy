@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 /**
  * GET /api/monthly-report?userId=...&monthStart=YYYY-MM-DD
@@ -14,6 +15,7 @@ export async function GET(request: NextRequest) {
   if (!userId) {
     return NextResponse.json({ error: 'userId required' }, { status: 400 })
   }
+  await requireSelf(request, userId)
 
   try {
     const monthStart = monthStartParam ? new Date(monthStartParam) : get30DaysAgo()

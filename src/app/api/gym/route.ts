@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 interface DayScheduleItem {
   type: 'workout' | 'rest'
@@ -18,6 +19,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const periods = await db.gymPeriod.findMany({
       where: { userId },
@@ -45,6 +47,15 @@ export async function PATCH(request: NextRequest) {
     if (!periodId) {
       return NextResponse.json({ error: 'periodId required' }, { status: 400 })
     }
+
+    const existingPeriod = await db.gymPeriod.findUnique({
+      where: { id: periodId },
+      select: { userId: true },
+    })
+    if (!existingPeriod) {
+      return NextResponse.json({ error: 'Period not found' }, { status: 404 })
+    }
+    await requireSelf(request, existingPeriod.userId)
 
     // Update the period's daySchedule
     const period = await db.gymPeriod.update({
@@ -126,6 +137,7 @@ export async function POST(request: NextRequest) {
     if (!userId || !name) {
       return NextResponse.json({ error: 'userId and name required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     // Deactivate other periods for this user
     await db.gymPeriod.updateMany({

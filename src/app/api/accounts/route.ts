@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET /api/accounts?userId=xxx - Get user accounts
 export async function GET(request: NextRequest) {
@@ -10,6 +11,9 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     const accounts = await db.account.findMany({
       where: { userId, isActive: true },
@@ -49,6 +53,9 @@ export async function POST(request: NextRequest) {
     if (!userId || !name) {
       return NextResponse.json({ error: 'userId and name are required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     // Check for duplicate account name
     const existingAccount = await db.account.findFirst({
@@ -96,6 +103,18 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
 
+    const existingAccount = await db.account.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+
+    if (!existingAccount) {
+      return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, existingAccount.userId)
+    if ('error' in auth) return auth.error
+
     const account = await db.account.update({
       where: { id },
       data
@@ -117,6 +136,18 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
+
+    const existingAccount = await db.account.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+
+    if (!existingAccount) {
+      return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, existingAccount.userId)
+    if ('error' in auth) return auth.error
 
     // Soft delete by setting isActive to false
     const account = await db.account.update({

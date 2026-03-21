@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { normalizeToDate, getStartOfDay, getEndOfDay, parseDateKey } from '@/lib/date-utils'
+import { requireSelf } from '@/lib/server-auth'
 
 import { getStartOfDay as getStartOfDayOld, getEndOfDay as getEndOfDayOld } from '@/lib/date-utils'
 
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest) {
   if (!userId) {
     return NextResponse.json({ error: 'userId is required' }, { status: 400 })
   }
+  await requireSelf(request, userId)
 
   try {
     const targetDate = dateParam ? parseDateKey(dateParam) : normalizeToDate(new Date())

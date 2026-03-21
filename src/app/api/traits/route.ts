@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET - Fetch all traits for user
 export async function GET(request: NextRequest) {
@@ -10,6 +11,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const traits = await db.trait.findMany({
       where: { userId, isArchived: false },
@@ -54,6 +56,7 @@ export async function POST(request: NextRequest) {
     if (!userId || !name || !name.trim()) {
       return NextResponse.json({ error: 'userId and name required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const trait = await db.trait.create({
       data: {
@@ -85,6 +88,15 @@ export async function PATCH(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
+
+    const existingTrait = await db.trait.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+    if (!existingTrait) {
+      return NextResponse.json({ error: 'Trait not found' }, { status: 404 })
+    }
+    await requireSelf(request, existingTrait.userId)
 
     // If score change via delta
     if (scoreChange !== undefined) {
@@ -147,6 +159,15 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
+
+    const existingTrait = await db.trait.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+    if (!existingTrait) {
+      return NextResponse.json({ error: 'Trait not found' }, { status: 404 })
+    }
+    await requireSelf(request, existingTrait.userId)
 
     await db.trait.delete({ where: { id } })
 

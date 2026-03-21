@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { createHmac } from 'crypto'
 import { getMoodStatusText } from '@/lib/mood-utils'
+import { setAuthSession } from '@/lib/server-auth'
 
 interface TelegramUser {
   id: number
@@ -302,7 +303,7 @@ export async function POST(request: NextRequest) {
         }
       : null
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       shieldApplied,
       user: {
@@ -337,6 +338,8 @@ export async function POST(request: NextRequest) {
         : null,
       globalState,
     })
+
+    return setAuthSession(response, user.id, 'telegram')
   } catch (error) {
     console.error('[Telegram Auth] Error:', error)
     const mapped = classifyAuthError('auth', error)
@@ -445,7 +448,7 @@ export async function GET(request: NextRequest) {
       status: getMoodStatusText(todayState.mood || 7),
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       isDemo: true,
       isOwner: false,
@@ -481,6 +484,8 @@ export async function GET(request: NextRequest) {
         : null,
       globalState,
     })
+
+    return setAuthSession(response, user.id, 'demo')
   } catch (error) {
     console.error('[Demo Auth] Error:', error)
     const mapped = classifyAuthError('demo', error)

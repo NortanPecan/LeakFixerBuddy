@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { normalizeToDate, formatDateKey, parseDateKey, getDayOfWeek } from '@/lib/date-utils'
+import { requireSelf } from '@/lib/server-auth'
 
 /**
  * Get fitness data for a date
@@ -18,6 +19,9 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     const targetDate = dateParam ? parseDateKey(dateParam) : normalizeToDate(new Date())
 
@@ -115,6 +119,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     const targetDate = parseDateKey(date)
 

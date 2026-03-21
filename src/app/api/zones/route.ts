@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 // Default zones that every user gets on first load
 const DEFAULT_ZONES = [
@@ -21,6 +22,9 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     let zones = await db.zone.findMany({
       where: { userId },
@@ -61,6 +65,9 @@ export async function POST(request: NextRequest) {
     if (!userId || !key || !name) {
       return NextResponse.json({ error: 'userId, key, and name are required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     // Check for duplicate key
     const existing = await db.zone.findFirst({
@@ -104,9 +111,17 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
 
+    const existingZone = await db.zone.findUnique({ where: { id } })
+    if (!existingZone) {
+      return NextResponse.json({ error: 'Zone not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, existingZone.userId)
+    if ('error' in auth) return auth.error
+
     // Check if zone is default (can't change key of default zones)
     if (data.key) {
-      const existing = await db.zone.findUnique({ where: { id } })
+      const existing = existingZone
       if (existing?.isDefault && existing.key !== data.key) {
         return NextResponse.json(
           { error: 'Нельзя изменить ключ стандартной зоны' },
@@ -139,6 +154,13 @@ export async function DELETE(request: NextRequest) {
 
     // Check if zone is default
     const zone = await db.zone.findUnique({ where: { id } })
+    if (!zone) {
+      return NextResponse.json({ error: 'Zone not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, zone.userId)
+    if ('error' in auth) return auth.error
+
     if (zone?.isDefault) {
       return NextResponse.json(
         { error: 'Нельзя удалить стандартную зону. Можно только скрыть её.' },

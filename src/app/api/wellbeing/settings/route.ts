@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { PRESET_INFO, PresetLevel } from '@/lib/wellbeing-config'
+import { requireSelf } from '@/lib/server-auth'
 
 /**
  * GET /api/wellbeing/settings?userId=xxx
@@ -14,6 +15,9 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     let settings = await db.userWellbeingSettings.findUnique({
       where: { userId }
@@ -59,6 +63,9 @@ export async function PATCH(request: NextRequest) {
     if (!userId || !preset) {
       return NextResponse.json({ error: 'userId and preset required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     const validPresets = ['core', 'expanded', 'full']
     if (!validPresets.includes(preset)) {

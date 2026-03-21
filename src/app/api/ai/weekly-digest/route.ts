@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { callAI } from '@/lib/ai-provider'
+import { requireSelf } from '@/lib/server-auth'
 
 const WEEKLY_DIGEST_SYSTEM = `Ты персональный коуч по саморазвитию в приложении LeakFixer Buddy.
 Тебе дают статистику пользователя за прошедшую неделю.
@@ -25,7 +26,7 @@ async function buildWeeklyContext(userId: string): Promise<string> {
     transactions,
     topLeakPattern,
   ] = await Promise.all([
-    db.user.findUnique({
+    db.appUser.findUnique({
       where: { id: userId },
       select: { streak: true, day: true, firstName: true },
     }),
@@ -128,6 +129,9 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const userId = searchParams.get('userId')
   if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+
+  const auth = requireSelf(request, userId)
+  if ('error' in auth) return auth.error
 
   const weekStart = getWeekStart()
 

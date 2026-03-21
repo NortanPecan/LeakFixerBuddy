@@ -1,24 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuthenticatedUser, requireSelf } from '@/lib/server-auth'
 
 /**
  * Get user profile
  * GET /api/user?id=<userId>
  */
 export async function GET(request: NextRequest) {
+  const auth = requireAuthenticatedUser(request)
+  if ('error' in auth) {
+    return auth.error
+  }
+
   try {
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('id')
+    const requestedUserId = searchParams.get('id') || auth.session.userId
 
-    if (!userId) {
+    if (requestedUserId !== auth.session.userId) {
       return NextResponse.json(
-        { error: 'User ID required' },
-        { status: 400 }
+        { error: 'Forbidden', hint: 'You can only access your own profile' },
+        { status: 403 }
       )
     }
 
     const user = await db.appUser.findUnique({
-      where: { id: userId },
+      where: { id: requestedUserId },
       include: {
         profile: true,
       }
@@ -74,12 +80,9 @@ export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
     const { userId, day, streak, points, profile } = body
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'User ID required' },
-        { status: 400 }
-      )
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) {
+      return auth.error
     }
 
     // Update user fields

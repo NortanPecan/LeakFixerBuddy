@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 /**
  * GET /api/ai/recommendations?userId=...
@@ -13,6 +14,9 @@ export async function GET(request: NextRequest) {
   if (!userId) {
     return NextResponse.json({ error: 'userId required' }, { status: 400 })
   }
+
+  const auth = requireSelf(request, userId)
+  if ('error' in auth) return auth.error
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 

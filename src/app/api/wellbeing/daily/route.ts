@@ -11,6 +11,7 @@ import {
   calculateWellbeingScore, 
   countAnsweredQuestions
 } from '@/lib/wellbeing-utils'
+import { requireSelf } from '@/lib/server-auth'
 
 /**
  * GET /api/wellbeing/daily?userId=xxx&date=YYYY-MM-DD
@@ -27,6 +28,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const targetDate = dateStr ? parseDateKey(dateStr) : new Date()
     const dateKey = formatDateKey(targetDate)
@@ -103,6 +105,7 @@ export async function POST(request: NextRequest) {
     if (!userId || !preset || !answers) {
       return NextResponse.json({ error: 'userId, preset, and answers required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const validPresets = ['core', 'expanded', 'full']
     if (!validPresets.includes(preset)) {
@@ -194,6 +197,7 @@ export async function DELETE(request: NextRequest) {
     if (!userId || !date) {
       return NextResponse.json({ error: 'userId and date required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const targetDate = parseDateKey(date)
 
@@ -228,6 +232,7 @@ export async function PUT(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const startDate = new Date()
     startDate.setDate(startDate.getDate() - days)

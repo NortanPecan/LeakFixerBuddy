@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { normalizeToDate, getStartOfDay, getEndOfDay, formatDateKey, parseDateKey } from '@/lib/date-utils'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET /api/food?userId=xxx - Get food entries for today
 // GET /api/food?userId=xxx&date=YYYY-MM-DD - Get food for specific date
@@ -12,6 +13,9 @@ export async function GET(request: NextRequest) {
   if (!userId) {
     return NextResponse.json({ error: 'userId is required' }, { status: 400 })
   }
+
+  const auth = requireSelf(request, userId)
+  if ('error' in auth) return auth.error
 
   try {
     const targetDate = dateParam ? parseDateKey(dateParam) : normalizeToDate(new Date())
@@ -83,6 +87,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'userId and name are required' }, { status: 400 })
     }
 
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
+
     const targetDate = date ? parseDateKey(date) : normalizeToDate(new Date())
 
     const entry = await db.foodEntry.create({
@@ -119,6 +126,18 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
+    const existingEntry = await db.foodEntry.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+
+    if (!existingEntry) {
+      return NextResponse.json({ error: 'Food entry not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, existingEntry.userId)
+    if ('error' in auth) return auth.error
+
     await db.foodEntry.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -136,6 +155,18 @@ export async function PATCH(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
+
+    const existingEntry = await db.foodEntry.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+
+    if (!existingEntry) {
+      return NextResponse.json({ error: 'Food entry not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, existingEntry.userId)
+    if ('error' in auth) return auth.error
 
     const updateData: Record<string, unknown> = {}
     if (name !== undefined) updateData.name = name

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { parseDateKey, getStartOfDay, getEndOfDay, getDayOfWeek } from '@/lib/date-utils'
+import { requireSelf } from '@/lib/server-auth'
 
 interface DailySummary {
   date: string
@@ -74,6 +75,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const targetDate = dateStr ? parseDateKey(dateStr) : new Date()
     const dateKey = targetDate.toISOString().split('T')[0]

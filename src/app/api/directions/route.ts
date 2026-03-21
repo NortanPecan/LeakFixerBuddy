@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET - Fetch all directions for user
 export async function GET(request: NextRequest) {
@@ -10,6 +11,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const directions = await db.direction.findMany({
       where: { userId },
@@ -35,6 +37,7 @@ export async function POST(request: NextRequest) {
     if (!userId || !title) {
       return NextResponse.json({ error: 'userId and title required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const maxOrder = await db.direction.aggregate({
       where: { userId },
@@ -70,6 +73,15 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
 
+    const existingDirection = await db.direction.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+    if (!existingDirection) {
+      return NextResponse.json({ error: 'Direction not found' }, { status: 404 })
+    }
+    await requireSelf(request, existingDirection.userId)
+
     const direction = await db.direction.update({
       where: { id },
       data: {
@@ -98,6 +110,15 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
+
+    const existingDirection = await db.direction.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+    if (!existingDirection) {
+      return NextResponse.json({ error: 'Direction not found' }, { status: 404 })
+    }
+    await requireSelf(request, existingDirection.userId)
 
     await db.direction.delete({ where: { id } })
 

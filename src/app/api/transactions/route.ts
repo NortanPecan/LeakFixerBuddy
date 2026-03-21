@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { safeParseFloat } from '@/lib/network-utils'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET /api/transactions?userId=xxx&accountId=xxx&categoryId=xxx&from=xxx&to=xxx
 export async function GET(request: NextRequest) {
@@ -16,6 +17,9 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     const where: Record<string, unknown> = { userId }
 
@@ -53,6 +57,9 @@ export async function POST(request: NextRequest) {
     if (!userId || !accountId || amount === undefined) {
       return NextResponse.json({ error: 'userId, accountId, and amount are required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     const parsedAmount = safeParseFloat(amount)
     if (parsedAmount === null) {
@@ -102,6 +109,18 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
 
+    const existingTransaction = await db.transaction.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+
+    if (!existingTransaction) {
+      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, existingTransaction.userId)
+    if ('error' in auth) return auth.error
+
     // Update zone if categoryId changed
     if (data.categoryId !== undefined) {
       if (data.categoryId) {
@@ -149,6 +168,18 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
+
+    const existingTransaction = await db.transaction.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+
+    if (!existingTransaction) {
+      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, existingTransaction.userId)
+    if ('error' in auth) return auth.error
 
     await db.transaction.delete({
       where: { id }

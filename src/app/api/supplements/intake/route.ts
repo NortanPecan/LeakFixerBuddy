@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { normalizeToDate, parseDateKey } from '@/lib/date-utils'
+import { requireSelf } from '@/lib/server-auth'
 
 // POST /api/supplements/intake - Toggle intake checked status
 // Body: { supplementId, userId, date?: string, checked: boolean }
@@ -11,6 +12,18 @@ export async function POST(request: NextRequest) {
 
     if (!supplementId || !userId) {
       return NextResponse.json({ error: 'supplementId and userId are required' }, { status: 400 })
+    }
+    await requireSelf(request, userId)
+
+    const supplement = await db.supplement.findUnique({
+      where: { id: supplementId },
+      select: { userId: true },
+    })
+    if (!supplement) {
+      return NextResponse.json({ error: 'Supplement not found' }, { status: 404 })
+    }
+    if (supplement.userId !== userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     // Parse date or use today - normalize to start of day

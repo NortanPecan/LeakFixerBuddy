@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { z } from 'zod'
+import { requireSelf } from '@/lib/server-auth'
 
 const CreateTaskSchema = z.object({
   userId: z.string().min(1),
@@ -39,6 +40,9 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     const where: {
       userId: string
@@ -92,6 +96,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid request', details: parsed.error.flatten() }, { status: 400 })
     }
     const { userId, chainId, text, date, time, zone, ritualId, notes, order } = parsed.data
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     // If adding to a chain, get the next order number
     let taskOrder = order ?? 0
@@ -138,6 +144,18 @@ export async function PATCH(request: NextRequest) {
     }
     const { taskId, text, status, date, time, zone, notes, order, chainId } = parsed.data
 
+    const existingTask = await db.task.findUnique({
+      where: { id: taskId },
+      select: { userId: true },
+    })
+
+    if (!existingTask) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, existingTask.userId)
+    if ('error' in auth) return auth.error
+
     const task = await db.task.update({
       where: { id: taskId },
       data: {
@@ -171,6 +189,18 @@ export async function DELETE(request: NextRequest) {
     if (!taskId) {
       return NextResponse.json({ error: 'taskId is required' }, { status: 400 })
     }
+
+    const existingTask = await db.task.findUnique({
+      where: { id: taskId },
+      select: { userId: true },
+    })
+
+    if (!existingTask) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, existingTask.userId)
+    if ('error' in auth) return auth.error
 
     // Use transaction for atomic delete + reorder
     await db.$transaction(async (tx) => {

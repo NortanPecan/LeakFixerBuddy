@@ -1,0 +1,6 @@
+[0319/224846.191:ERROR:third_party\crashpad\crashpad\util\win\registration_protocol_win.cc:108] CreateFile: Отказано в доступе. (0x5)
+[16140:117064:0319/224849.137:ERROR:net\base\network_change_notifier_win.cc:263] WSALookupServiceBegin failed with: -1
+[16140:72448:0319/224849.192:ERROR:chrome\installer\util\google_update_settings.cc:508] Failed opening key Software\Microsoft\EdgeUpdate\ClientStateMedium\{56EB18F8-B008-4CBD-B6D2-8C97FE7E9062} to set usagestats; result: 5
+[16140:27284:0319/224849.192:FATAL:mojo\public\cpp\platform\platform_channel.cc:170] Check failed: . : Отказано в доступе. (0x5)
+[16140:72448:0319/224849.207:ERROR:chrome\installer\util\google_update_settings.cc:541] Failed opening key Software\Microsoft\EdgeUpdate\ClientStateMedium\{56EB18F8-B008-4CBD-B6D2-8C97FE7E9062} to set urlstats; result: 5
+[0319/224849.207:ERROR:third_party\crashpad\crashpad\client\crashpad_client_win.cc:154] crash server failed to launch

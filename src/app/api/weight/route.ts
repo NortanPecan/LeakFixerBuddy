@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { safeParseFloat } from '@/lib/network-utils'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET - Get today's weight and summary
 export async function GET(request: NextRequest) {
@@ -11,6 +12,9 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -136,6 +140,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'userId and value required' }, { status: 400 })
     }
 
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
+
     const parsedWeight = safeParseFloat(value)
     if (parsedWeight === null) {
       return NextResponse.json({ error: 'value must be a valid number' }, { status: 400 })
@@ -193,6 +200,18 @@ export async function DELETE(request: NextRequest) {
     if (!measurementId) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
+
+    const measurement = await db.measurement.findUnique({
+      where: { id: measurementId },
+      select: { userId: true, type: true },
+    })
+
+    if (!measurement || measurement.type !== 'weight') {
+      return NextResponse.json({ error: 'Weight measurement not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, measurement.userId)
+    if ('error' in auth) return auth.error
 
     await db.measurement.delete({
       where: { id: measurementId }

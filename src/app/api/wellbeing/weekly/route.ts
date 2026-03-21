@@ -12,6 +12,7 @@ import {
   getISOWeek,
   getISOWeekDates
 } from '@/lib/wellbeing-utils'
+import { requireSelf } from '@/lib/server-auth'
 
 /**
  * GET /api/wellbeing/weekly?userId=xxx&year=2025&week=23
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     // Determine target week
     let year: number
@@ -145,6 +147,7 @@ export async function POST(request: NextRequest) {
     if (!userId || !preset || !answers) {
       return NextResponse.json({ error: 'userId, preset, and answers required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const validPresets = ['expanded', 'full']
     if (!validPresets.includes(preset)) {
@@ -233,6 +236,7 @@ export async function PUT(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     // Get user settings
     let settings = await db.userWellbeingSettings.findUnique({

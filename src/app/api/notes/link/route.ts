@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuthenticatedUser, requireSelf } from '@/lib/server-auth'
 
 // POST /api/notes/link - Create a link from note to entity (task/ritual/chain)
 // Also creates the entity if entityId is not provided
@@ -11,6 +12,15 @@ export async function POST(request: NextRequest) {
     if (!noteId || !entity) {
       return NextResponse.json({ error: 'noteId and entity required' }, { status: 400 })
     }
+
+    const note = await db.note.findUnique({
+      where: { id: noteId },
+      select: { userId: true },
+    })
+    if (!note) {
+      return NextResponse.json({ error: 'Note not found' }, { status: 404 })
+    }
+    await requireSelf(request, note.userId)
 
     // Validate entity type
     const validEntities = ['task', 'ritual', 'chain']
@@ -25,7 +35,7 @@ export async function POST(request: NextRequest) {
       if (entity === 'task') {
         const task = await db.task.create({
           data: {
-            userId: entityData.userId,
+            userId: note.userId,
             text: entityData.text || fragment || 'New task',
             chainId: entityData.chainId,
             zone: entityData.zone,
@@ -37,7 +47,7 @@ export async function POST(request: NextRequest) {
       } else if (entity === 'ritual') {
         const ritual = await db.ritual.create({
           data: {
-            userId: entityData.userId,
+            userId: note.userId,
             title: entityData.title || fragment || 'New ritual',
             category: entityData.category || 'health',
             type: entityData.type || 'regular',
@@ -49,7 +59,7 @@ export async function POST(request: NextRequest) {
       } else if (entity === 'chain') {
         const chain = await db.chain.create({
           data: {
-            userId: entityData.userId,
+            userId: note.userId,
             title: entityData.title || fragment || 'New chain',
           }
         })
@@ -86,6 +96,22 @@ export async function DELETE(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
+    }
+
+    const auth = await requireAuthenticatedUser(request)
+    const link = await db.noteLink.findUnique({
+      where: { id },
+      include: {
+        note: {
+          select: { userId: true },
+        },
+      },
+    })
+    if (!link) {
+      return NextResponse.json({ error: 'Link not found' }, { status: 404 })
+    }
+    if (link.note.userId !== auth.session.userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     await db.noteLink.delete({

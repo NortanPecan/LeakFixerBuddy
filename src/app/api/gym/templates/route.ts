@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET - Fetch all exercise templates for user
 export async function GET(request: NextRequest) {
@@ -12,6 +13,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const where: {
       userId: string
@@ -69,6 +71,7 @@ export async function POST(request: NextRequest) {
     if (!userId || !name) {
       return NextResponse.json({ error: 'userId and name required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const template = await db.gymExerciseTemplate.create({
       data: {
@@ -117,6 +120,15 @@ export async function PATCH(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
+
+    const existingTemplate = await db.gymExerciseTemplate.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+    if (!existingTemplate) {
+      return NextResponse.json({ error: 'Template not found' }, { status: 404 })
+    }
+    await requireSelf(request, existingTemplate.userId)
 
     const updateData: {
       name?: string
@@ -168,6 +180,15 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
+
+    const existingTemplate = await db.gymExerciseTemplate.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+    if (!existingTemplate) {
+      return NextResponse.json({ error: 'Template not found' }, { status: 404 })
+    }
+    await requireSelf(request, existingTemplate.userId)
 
     if (hardDelete) {
       await db.gymExerciseTemplate.delete({

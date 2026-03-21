@@ -445,6 +445,11 @@ const LEAK_GUIDANCE_STYLES = {
   amber: 'border-amber-500/20 bg-amber-500/10',
 } as const
 
+const SHOW_POLICY_INSPECTOR = false
+const SHOW_FUNNELS = false
+const SHOW_PRIORITY_PENDING_QUEUE = false
+const SHOW_PATTERN_ANALYTICS = false
+
 function getCurrentMonday(): string {
   const today = new Date()
   const day = today.getDay()
@@ -2420,7 +2425,7 @@ export function LeaksScreen() {
       .slice(0, 3)
   }, [leaks])
 
-  const createLeak = async (prepareAnalysis: boolean) => {
+  const createLeak = async () => {
     if (!user?.id || !hasDraft) return
 
     const nextTitle = title.trim() || details.trim().slice(0, 80) || 'Новый лик'
@@ -2472,15 +2477,9 @@ export function LeaksScreen() {
       setActiveTab('inbox')
       setStatusFilter('all')
 
-      if (prepareAnalysis) {
-        setSelectedDraft({
-          leakType: createdLeak.title,
-          leakMessage: buildLeakMessage(createdLeak),
-          severity: createdLeak.severity,
-        })
-      }
+      setSelectedDraft(null)
 
-      showSuccessToast(prepareAnalysis ? 'Лик сохранён и готов к разбору' : 'Лик сохранён')
+      showSuccessToast('Лик сохранён')
     } catch (error) {
       showErrorToast(error, 'create leak')
     } finally {
@@ -3731,21 +3730,16 @@ export function LeaksScreen() {
 
           <div className="flex flex-wrap gap-2">
             <Button
-              onClick={() => createLeak(true)}
+              onClick={() => createLeak()}
               disabled={!hasDraft || submitting}
               className="bg-indigo-600 hover:bg-indigo-500 text-white"
             >
-              Сохранить и разобрать
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => createLeak(false)}
-              disabled={!hasDraft || submitting}
-              className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-            >
-              Сохранить в inbox
+              Сохранить
             </Button>
           </div>
+          <p className="text-xs text-white/45">
+            AI-разбор доступен после сохранения внутри карточки leak.
+          </p>
         </CardContent>
       </Card>
 
@@ -4191,153 +4185,7 @@ export function LeaksScreen() {
               const prevGroupKey =
                 index > 0 ? getLeakGroupKey(filteredLeaks[index - 1], groupBy) : null
               const showGroupHeader = groupBy !== 'none' && groupKey !== prevGroupKey
-
-              return (
-                <div key={leak.id} className="space-y-2">
-                {showGroupHeader && (
-                    <div className="px-1">
-                      <div className="text-[11px] uppercase tracking-wide text-white/35">
-                      {getLeakGroupLabel(groupKey, groupBy)} ({groupCounts[groupKey] || 0})
-                      </div>
-                    </div>
-                )}
-                <Card style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  <CardContent className="pt-4 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-white font-medium">{leak.title}</div>
-                      <div className="text-xs text-white/35 mt-1">
-                        Создан: {formatDate(leak.createdAt)}
-                        {leak.resolvedAt ? ` • Решён: ${formatDate(leak.resolvedAt)}` : ''}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap justify-end gap-2">
-                      {isFocusLeak(leak) && (
-                        <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
-                          Фокус
-                        </Badge>
-                      )}
-                      <Badge className={STATUS_STYLES[leak.status]}>{STATUS_LABELS[leak.status]}</Badge>
-                      <Badge className={SEVERITY_STYLES[leak.severity]}>{leak.severity}</Badge>
-                      {leak.actions.length > 0 && (
-                        <Badge className="bg-white/10 text-white/75 border-white/10">
-                          Действий: {leak.actions.length}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-
-                  {leak.description && (
-                    <p className="text-sm text-white/72 whitespace-pre-wrap">{leak.description}</p>
-                  )}
-
-                  {leak.actions.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {leak.actions.map((action) => (
-                        <button
-                          key={action.id}
-                          type="button"
-                          onClick={() => setScreen(getActionScreen(action.entityType))}
-                          className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70 hover:bg-white/10"
-                        >
-                          {getActionLabel(action.entityType)}: {action.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap gap-2">
-                    {leak.status === 'new' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => updateLeakStatus(leak.id, 'in_progress')}
-                        disabled={updatingLeakId === leak.id}
-                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                      >
-                        В работу
-                      </Button>
-                    )}
-                    {leak.status !== 'resolved' && leak.status !== 'archived' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => updateLeakStatus(leak.id, 'resolved')}
-                        disabled={updatingLeakId === leak.id}
-                        className="border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-200"
-                      >
-                        Решено
-                      </Button>
-                    )}
-                    {leak.status !== 'archived' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => updateLeakStatus(leak.id, 'archived')}
-                        disabled={updatingLeakId === leak.id}
-                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                      >
-                        В архив
-                      </Button>
-                    )}
-                    {(leak.status === 'resolved' || leak.status === 'archived') && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => updateLeakStatus(leak.id, 'in_progress')}
-                        disabled={updatingLeakId === leak.id}
-                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                      >
-                        Вернуть в работу
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => toggleLeakFocus(leak)}
-                      disabled={updatingLeakId === leak.id}
-                      className={
-                        isFocusLeak(leak)
-                          ? 'border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200'
-                          : 'border-white/15 bg-white/5 hover:bg-white/10 text-white'
-                      }
-                    >
-                      {isFocusLeak(leak) ? 'Убрать из фокуса' : 'В фокус'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => toggleLeakDetails(leak.id)}
-                      className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                    >
-                      {expandedLeakId === leak.id ? 'Скрыть детали' : 'Детали'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        setSelectedDraft({
-                          leakType: leak.title,
-                          leakMessage: buildLeakMessage(leak),
-                          severity: leak.severity,
-                        })
-                      }
-                      className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
-                    >
-                      Разобрать
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => startEditingLeak(leak)}
-                      className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                    >
-                      Редактировать
-                    </Button>
-                  </div>
-
-                  {expandedLeakId === leak.id && (
-                    <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+              const mainActionBlock = expandedLeakId === leak.id ? (
                       <div className={`rounded-2xl border p-3 ${LEAK_GUIDANCE_STYLES[guidance.tone]}`}>
                         <div className="text-xs uppercase tracking-wide text-white/45">
                           Следующий шаг
@@ -4775,7 +4623,7 @@ export function LeaksScreen() {
                             </div>
                           </div>
                         )}
-                        {policy && (
+                        {SHOW_POLICY_INSPECTOR && policy && (
                           <div className="mt-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2">
                             <div className="text-xs uppercase tracking-wide text-white/55">Policy inspector</div>
                             <div className="mt-1 text-xs text-white/70">
@@ -4783,7 +4631,7 @@ export function LeaksScreen() {
                               {policy.computedAt ? ` • ${formatDate(policy.computedAt)}` : ''}
                               {policyComputedMinutes !== null ? ` • ${policyComputedMinutes}м назад` : ''}
                             </div>
-                            {currentFunnel && (
+                            {SHOW_FUNNELS && currentFunnel && (
                               <div className="mt-2 rounded-xl border border-white/10 bg-black/10 px-2 py-2">
                                 <div className="text-[11px] text-white/55">
                                   Current funnel: {currentFunnel.correlationId}
@@ -5033,7 +4881,7 @@ export function LeaksScreen() {
                                 </div>
                               </div>
                             )}
-                            {recentFunnels.length > 0 && (
+                            {SHOW_FUNNELS && recentFunnels.length > 0 && (
                               <div className="mt-2 space-y-1">
                                 <div className="text-[11px] text-white/55">Recent funnels</div>
                                 {recentFunnels.map((funnel) => {
@@ -5177,7 +5025,7 @@ export function LeaksScreen() {
                                 </Badge>
                               </div>
                             )}
-                            {priorityPendingQueue.length > 0 && (
+                            {SHOW_PRIORITY_PENDING_QUEUE && priorityPendingQueue.length > 0 && (
                               <div className="mt-2 rounded-xl border border-white/10 bg-black/10 px-2 py-2 space-y-1">
                                 <div className="text-[11px] text-white/55">Priority pending queue</div>
                                 {priorityPendingQueue.slice(0, 3).map((item) => (
@@ -5619,6 +5467,156 @@ export function LeaksScreen() {
                           </div>
                         )}
                       </div>
+              ) : null
+
+              return (
+                <div key={leak.id} className="space-y-2">
+                {showGroupHeader && (
+                    <div className="px-1">
+                      <div className="text-[11px] uppercase tracking-wide text-white/35">
+                      {getLeakGroupLabel(groupKey, groupBy)} ({groupCounts[groupKey] || 0})
+                      </div>
+                    </div>
+                )}
+                <Card style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <CardContent className="pt-4 space-y-3">
+                  {mainActionBlock}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-white font-medium">{leak.title}</div>
+                      <div className="text-xs text-white/35 mt-1">
+                        Создан: {formatDate(leak.createdAt)}
+                        {leak.resolvedAt ? ` • Решён: ${formatDate(leak.resolvedAt)}` : ''}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {isFocusLeak(leak) && (
+                        <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                          Фокус
+                        </Badge>
+                      )}
+                      <Badge className={STATUS_STYLES[leak.status]}>{STATUS_LABELS[leak.status]}</Badge>
+                      <Badge className={SEVERITY_STYLES[leak.severity]}>{leak.severity}</Badge>
+                      {leak.actions.length > 0 && (
+                        <Badge className="bg-white/10 text-white/75 border-white/10">
+                          Действий: {leak.actions.length}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  {leak.description && (
+                    <p className="text-sm text-white/72 whitespace-pre-wrap">{leak.description}</p>
+                  )}
+
+                  {leak.actions.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {leak.actions.map((action) => (
+                        <button
+                          key={action.id}
+                          type="button"
+                          onClick={() => setScreen(getActionScreen(action.entityType))}
+                          className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70 hover:bg-white/10"
+                        >
+                          {getActionLabel(action.entityType)}: {action.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    {leak.status === 'new' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => updateLeakStatus(leak.id, 'in_progress')}
+                        disabled={updatingLeakId === leak.id}
+                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                      >
+                        В работу
+                      </Button>
+                    )}
+                    {leak.status !== 'resolved' && leak.status !== 'archived' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => updateLeakStatus(leak.id, 'resolved')}
+                        disabled={updatingLeakId === leak.id}
+                        className="border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-200"
+                      >
+                        Решено
+                      </Button>
+                    )}
+                    {leak.status !== 'archived' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => updateLeakStatus(leak.id, 'archived')}
+                        disabled={updatingLeakId === leak.id}
+                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                      >
+                        В архив
+                      </Button>
+                    )}
+                    {(leak.status === 'resolved' || leak.status === 'archived') && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => updateLeakStatus(leak.id, 'in_progress')}
+                        disabled={updatingLeakId === leak.id}
+                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                      >
+                        Вернуть в работу
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => toggleLeakFocus(leak)}
+                      disabled={updatingLeakId === leak.id}
+                      className={
+                        isFocusLeak(leak)
+                          ? 'border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200'
+                          : 'border-white/15 bg-white/5 hover:bg-white/10 text-white'
+                      }
+                    >
+                      {isFocusLeak(leak) ? 'Убрать из фокуса' : 'В фокус'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => toggleLeakDetails(leak.id)}
+                      className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                    >
+                      {expandedLeakId === leak.id ? 'Скрыть детали' : 'Детали'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setSelectedDraft({
+                          leakType: leak.title,
+                          leakMessage: buildLeakMessage(leak),
+                          severity: leak.severity,
+                        })
+                      }
+                      className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
+                    >
+                      Разобрать
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => startEditingLeak(leak)}
+                      className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                    >
+                      Редактировать
+                    </Button>
+                  </div>
+
+                  {expandedLeakId === leak.id && (
+                    <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+
 
                       <div className="flex flex-wrap gap-2">
                         <Badge className="bg-white/10 text-white/75 border-white/10">
@@ -5872,7 +5870,7 @@ export function LeaksScreen() {
                         </div>
                       )}
 
-                      {(matchedPattern || selectedPlan) && (
+                      {SHOW_PATTERN_ANALYTICS && (matchedPattern || selectedPlan) && (
                         <div className="space-y-2">
                           <div className="text-xs uppercase tracking-wide text-white/40">
                             Learning слой

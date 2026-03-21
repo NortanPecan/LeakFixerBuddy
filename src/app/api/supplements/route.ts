@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { normalizeToDate, parseDateKey, formatDateKey, getDayOfWeek } from '@/lib/date-utils'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET /api/supplements?userId=xxx - Get all supplements with today's intake status
 // GET /api/supplements?userId=xxx&date=YYYY-MM-DD - Get supplements for specific date
@@ -12,6 +13,7 @@ export async function GET(request: NextRequest) {
   if (!userId) {
     return NextResponse.json({ error: 'userId is required' }, { status: 400 })
   }
+  await requireSelf(request, userId)
 
   try {
     // Get all active supplements for user
@@ -80,6 +82,7 @@ export async function POST(request: NextRequest) {
     if (!userId || !name) {
       return NextResponse.json({ error: 'userId and name are required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const supplement = await db.supplement.create({
       data: {
@@ -110,6 +113,15 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
 
+    const existingSupplement = await db.supplement.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+    if (!existingSupplement) {
+      return NextResponse.json({ error: 'Supplement not found' }, { status: 404 })
+    }
+    await requireSelf(request, existingSupplement.userId)
+
     // Convert days array to JSON string if provided
     if (data.days && Array.isArray(data.days)) {
       data.days = JSON.stringify(data.days)
@@ -137,6 +149,14 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
+    const existingSupplement = await db.supplement.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+    if (!existingSupplement) {
+      return NextResponse.json({ error: 'Supplement not found' }, { status: 404 })
+    }
+    await requireSelf(request, existingSupplement.userId)
     // Delete all intakes first
     await db.supplementIntake.deleteMany({ where: { supplementId: id } })
     // Delete supplement

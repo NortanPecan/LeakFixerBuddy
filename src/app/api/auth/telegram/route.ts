@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateTelegramUser, verifyTelegramInitData } from '@/lib/auth-telegram'
 import { db } from '@/lib/db'
+import { setAuthSession } from '@/lib/server-auth'
 
 function isDemoModeEnabled() {
   return process.env.DEMO_MODE === 'true'
@@ -113,7 +114,7 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       user: {
         id: localUser.id,
@@ -137,6 +138,8 @@ export async function POST(request: NextRequest) {
       isDemo: isDemo || false,
       supabaseUserId: user.id
     })
+
+    return setAuthSession(response, localUser.id, isDemo ? 'demo' : 'telegram')
   } catch (error) {
     console.error('Telegram auth error:', error)
     return NextResponse.json(

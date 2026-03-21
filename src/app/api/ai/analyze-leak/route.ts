@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { analyzeLeakWithAI } from '@/lib/ai-analyze-leak'
+import { requireSelf } from '@/lib/server-auth'
 
 /**
  * POST /api/ai/analyze-leak
@@ -21,6 +22,9 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     )
   }
+
+  const auth = requireSelf(request, userId)
+  if ('error' in auth) return auth.error
 
   try {
     const { analysis, provider } = await analyzeLeakWithAI({
@@ -56,6 +60,9 @@ export async function PATCH(request: NextRequest) {
       { status: 400 }
     )
   }
+
+  const auth = requireSelf(request, userId)
+  if ('error' in auth) return auth.error
 
   const pattern = await db.userAiPattern.findUnique({
     where: { userId_leakType: { userId, leakType } },
@@ -102,6 +109,9 @@ export async function GET(request: NextRequest) {
   if (!userId || !leakType) {
     return NextResponse.json({ error: 'userId and leakType required' }, { status: 400 })
   }
+
+  const auth = requireSelf(request, userId)
+  if ('error' in auth) return auth.error
 
   const pattern = await db.userAiPattern.findUnique({
     where: { userId_leakType: { userId, leakType } },

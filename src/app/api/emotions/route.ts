@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 const VALID_EMOTIONS = ['joy', 'calm', 'excited', 'anxiety', 'anger', 'sad', 'tired', 'focused']
 
@@ -13,6 +14,7 @@ export async function GET(request: NextRequest) {
   const dateParam = searchParams.get('date')
 
   if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+  await requireSelf(request, userId)
 
   const date = dateParam ? new Date(dateParam) : new Date()
   const start = new Date(date)
@@ -44,6 +46,7 @@ export async function POST(request: NextRequest) {
     if (!userId || !emotion) {
       return NextResponse.json({ error: 'userId and emotion required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
     if (!VALID_EMOTIONS.includes(emotion)) {
       return NextResponse.json({ error: 'Invalid emotion' }, { status: 400 })
     }
@@ -70,6 +73,14 @@ export async function DELETE(request: NextRequest) {
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
   try {
+    const existingLog = await db.emotionLog.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+    if (!existingLog) {
+      return NextResponse.json({ error: 'Emotion not found' }, { status: 404 })
+    }
+    await requireSelf(request, existingLog.userId)
     await db.emotionLog.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {

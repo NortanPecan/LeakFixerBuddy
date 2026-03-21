@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 // GET /api/notes - Get all notes for a user
 export async function GET(request: NextRequest) {
@@ -14,6 +15,9 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     const where: {
       userId: string
@@ -148,6 +152,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'userId and text required' }, { status: 400 })
     }
 
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
+
     const note = await db.note.create({
       data: {
         userId,
@@ -177,6 +184,18 @@ export async function PATCH(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
+
+    const existingNote = await db.note.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+
+    if (!existingNote) {
+      return NextResponse.json({ error: 'Note not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, existingNote.userId)
+    if ('error' in auth) return auth.error
 
     const updateData: {
       text?: string
@@ -214,6 +233,18 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
+
+    const existingNote = await db.note.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+
+    if (!existingNote) {
+      return NextResponse.json({ error: 'Note not found' }, { status: 404 })
+    }
+
+    const auth = requireSelf(request, existingNote.userId)
+    if ('error' in auth) return auth.error
 
     // Delete links first
     await db.noteLink.deleteMany({

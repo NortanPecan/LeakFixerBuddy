@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { createHash, randomBytes } from 'crypto'
 import { getMoodStatusText } from '@/lib/mood-utils'
+import { setAuthSession } from '@/lib/server-auth'
 
 const RESERVED_EMAILS = new Set(['demo@leakfixer.local', 'owner@leakfixer.local'])
 
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
         include: { profile: true },
       })
 
-      return NextResponse.json({
+      const response = NextResponse.json({
         success: true,
         isNew: true,
         user: serializeUser(user),
@@ -83,6 +84,8 @@ export async function POST(request: NextRequest) {
         isDemo: false,
         isOwner: false,
       })
+
+      return setAuthSession(response, user.id, 'email')
     }
 
     if (action === 'signin') {
@@ -132,7 +135,7 @@ export async function POST(request: NextRequest) {
           }
         : null
 
-      return NextResponse.json({
+      const response = NextResponse.json({
         success: true,
         isNew: false,
         user: serializeUser(user),
@@ -141,6 +144,8 @@ export async function POST(request: NextRequest) {
         isDemo: false,
         isOwner: false,
       })
+
+      return setAuthSession(response, user.id, 'email')
     }
 
     return NextResponse.json({ error: 'action must be signup or signin' }, { status: 400 })

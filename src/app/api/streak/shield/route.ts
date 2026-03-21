@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSelf } from '@/lib/server-auth'
 
 const SHIELD_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
@@ -19,6 +20,7 @@ export async function GET(request: NextRequest) {
   if (!userId) {
     return NextResponse.json({ error: 'userId required' }, { status: 400 })
   }
+  await requireSelf(request, userId)
 
   try {
     const user = await db.appUser.findUnique({
@@ -60,6 +62,7 @@ export async function POST(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
+    await requireSelf(request, userId)
 
     const user = await db.appUser.findUnique({
       where: { id: userId },
