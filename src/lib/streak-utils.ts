@@ -1,17 +1,36 @@
 /**
- * Streak calculation utilities
+ * Deterministic streak calculation utilities.
  *
- * Provides consistent streak calculation across different entity types:
- * - Rituals: respects scheduled days (e.g., weekdays only)
- * - Habits: respects frequency (e.g., 3 times per week)
- * - Challenges: generic streak based on consecutive completions
+ * The pure object-based APIs require an explicit referenceDate so the engine
+ * can be replayed reliably for historical dates and tests. Legacy wrappers are
+ * kept for compatibility and default to the current system date.
  */
 
-import { normalizeToDate, formatDateKey, getDayOfWeek } from './date-utils'
+import type {
+  CompletionStatus,
+  DateInput,
+  DateKey,
+  HabitFrequency,
+  RequiredDateContext,
+  Schedule,
+  Weekday,
+} from './date-types'
+import { EVERY_DAY_SCHEDULE } from './date-types'
+import {
+  addDaysToDateKey,
+  enumerateDateKeys,
+  formatDateKey,
+  getDayOfWeek,
+  getStartOfDay,
+  getWeekStartDateKey,
+  normalizeWeekdaySchedule,
+  parseDateKey,
+} from './date-utils'
 
 export interface CompletionEntry {
-  date: Date | string
+  date: DateInput
   completed: boolean
+  count?: number
 }
 
 export interface StreakResult {
@@ -19,169 +38,356 @@ export interface StreakResult {
   streak: number
   /** Maximum streak in the period */
   maxStreak: number
-  /** Number of scheduled days in the period */
+  /** Number of scheduled units in the period */
   scheduledDays: number
-  /** Number of completed scheduled days */
+  /** Number of completed scheduled units */
   completedScheduledDays: number
-  /** Completion rate for scheduled days only */
+  /** Completion rate for scheduled units only */
   completionRate: number
 }
 
-/**
- * Calculate streak for an entity with scheduled days
- *
- * @param completions - Array of completion records with date and completed flag
- * @param scheduledDays - Array of day numbers (1=Monday, 7=Sunday) when the entity is scheduled
- * @param periodDays - Number of days to look back (default 30)
- * @returns StreakResult with streak, maxStreak, and completion metrics
- */
-export function calculateStreak(
-  completions: CompletionEntry[],
-  scheduledDays: number[] = [1, 2, 3, 4, 5, 6, 7], // Default: every day
-  periodDays: number = 30
-): StreakResult {
-  const today = normalizeToDate(new Date())
+export interface RitualStreakInput extends RequiredDateContext {
+  completions: readonly CompletionEntry[]
+  scheduledDays?: readonly number[]
+  periodDays?: number
+  dailyTarget?: number
+}
 
-  // Build a map of completions by date
-  const completionMap = new Map<string, boolean>()
-  for (const c of completions) {
-    const dateKey = formatDateKey(normalizeToDate(c.date))
-    completionMap.set(dateKey, c.completed)
+export interface HabitStreakInput extends RequiredDateContext {
+  completions: readonly CompletionEntry[]
+  frequency?: HabitFrequency
+  periodDays?: number
+  dailyTarget?: number
+  weeklyTarget?: number
+}
+
+interface LegacyStreakOptions {
+  referenceDate?: DateInput
+  timeZone?: string
+  periodDays?: number
+  dailyTarget?: number
+}
+
+interface LegacyHabitOptions extends LegacyStreakOptions {
+  weeklyTarget?: number
+}
+
+interface NormalizedCompletionDay extends CompletionStatus {
+  dateKey: DateKey
+}
+
+interface DailyStreakCalculationInput extends RequiredDateContext {
+  completions: readonly CompletionEntry[]
+  scheduledDays?: readonly number[]
+  periodDays: number
+  target: number
+}
+
+function assertPositiveInteger(value: number, label: string): number {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new RangeError(`${label} must be a positive integer`)
   }
 
-  // Calculate streak: go backwards from today
+  return value
+}
+
+function normalizeCount(entry: CompletionEntry): number {
+  if (entry.count === undefined) {
+    return entry.completed ? 1 : 0
+  }
+
+  if (!Number.isFinite(entry.count) || entry.count < 0) {
+    throw new RangeError(`Invalid completion count for ${String(entry.date)}`)
+  }
+
+  return Math.floor(entry.count)
+}
+
+function buildCompletionMap(
+  completions: readonly CompletionEntry[],
+  target: number,
+  timeZone?: string
+): Map<DateKey, NormalizedCompletionDay> {
+  const completionMap = new Map<DateKey, NormalizedCompletionDay>()
+
+  for (const completion of completions) {
+    const dateKey = formatDateKey(completion.date, { timeZone })
+    const count = normalizeCount(completion)
+    const existing = completionMap.get(dateKey)
+    const nextCount = (existing?.count ?? 0) + count
+    const nextCompleted = Boolean(existing?.completed) || completion.completed || nextCount >= target
+
+    completionMap.set(dateKey, {
+      dateKey,
+      count: nextCount,
+      completed: nextCompleted,
+      target,
+    })
+  }
+
+  return completionMap
+}
+
+function normalizePeriodDays(periodDays?: number): number {
+  return assertPositiveInteger(periodDays ?? 30, 'periodDays')
+}
+
+function normalizeTarget(target: number | undefined, label: string): number {
+  return assertPositiveInteger(target ?? 1, label)
+}
+
+export function parseScheduleDays(serializedDays: string | null | undefined): Schedule {
+  if (!serializedDays) {
+    return EVERY_DAY_SCHEDULE
+  }
+
+  try {
+    const parsed = JSON.parse(serializedDays) as unknown
+    return Array.isArray(parsed) ? normalizeWeekdaySchedule(parsed) : EVERY_DAY_SCHEDULE
+  } catch {
+    return EVERY_DAY_SCHEDULE
+  }
+}
+
+export function isScheduledDay(
+  date: DateInput,
+  scheduledDays: readonly number[] = EVERY_DAY_SCHEDULE,
+  timeZone?: string
+): boolean {
+  const schedule = normalizeWeekdaySchedule(scheduledDays)
+  return schedule.includes(getDayOfWeek(date, { timeZone }))
+}
+
+function calculateDailyScheduledStreak(input: DailyStreakCalculationInput): StreakResult {
+  const periodDays = normalizePeriodDays(input.periodDays)
+  const target = normalizeTarget(input.target, 'target')
+  const schedule = normalizeWeekdaySchedule(input.scheduledDays)
+  const referenceDateKey = formatDateKey(input.referenceDate, { timeZone: input.timeZone })
+  const startDateKey = addDaysToDateKey(referenceDateKey, -(periodDays - 1))
+  const completionMap = buildCompletionMap(input.completions, target, input.timeZone)
+
   let streak = 0
-  let checkDate = new Date(today)
-
-  for (let i = 0; i < periodDays; i++) {
-    const dateStr = formatDateKey(checkDate)
-    const dayOfWeek = getDayOfWeek(checkDate)
-
-    // Only check days that are scheduled
-    if (scheduledDays.includes(dayOfWeek)) {
-      const isCompleted = completionMap.get(dateStr)
-
-      if (isCompleted) {
-        streak++
-      } else if (checkDate < today) {
-        // Past scheduled day without completion breaks streak
-        break
-      }
-      // Future or today without completion doesn't break streak yet
+  for (let offset = 0; offset < periodDays; offset += 1) {
+    const dateKey = addDaysToDateKey(referenceDateKey, -offset)
+    if (!schedule.includes(getDayOfWeek(dateKey))) {
+      continue
     }
 
-    // Move to previous day
-    checkDate.setDate(checkDate.getDate() - 1)
+    const completion = completionMap.get(dateKey)
+    if (completion?.completed) {
+      streak += 1
+      continue
+    }
+
+    if (offset === 0) {
+      continue
+    }
+
+    break
   }
 
-  // Calculate max streak and scheduled days count
   let maxStreak = 0
   let currentStreak = 0
-  let scheduledDaysCount = 0
+  let scheduledDays = 0
   let completedScheduledDays = 0
 
-  // Go through the entire period to count scheduled days and find max streak
-  checkDate = new Date(today)
-  checkDate.setDate(checkDate.getDate() - periodDays + 1)
-
-  for (let i = 0; i < periodDays; i++) {
-    const dateStr = formatDateKey(checkDate)
-    const dayOfWeek = getDayOfWeek(checkDate)
-
-    if (scheduledDays.includes(dayOfWeek)) {
-      scheduledDaysCount++
-      const isCompleted = completionMap.get(dateStr)
-
-      if (isCompleted) {
-        completedScheduledDays++
-        currentStreak++
-        maxStreak = Math.max(maxStreak, currentStreak)
-      } else {
-        currentStreak = 0
-      }
+  for (const dateKey of enumerateDateKeys(startDateKey, referenceDateKey)) {
+    if (!schedule.includes(getDayOfWeek(dateKey))) {
+      continue
     }
 
-    checkDate.setDate(checkDate.getDate() + 1)
+    scheduledDays += 1
+    const completion = completionMap.get(dateKey)
+    if (completion?.completed) {
+      completedScheduledDays += 1
+      currentStreak += 1
+      maxStreak = Math.max(maxStreak, currentStreak)
+    } else {
+      currentStreak = 0
+    }
   }
 
-  const completionRate = scheduledDaysCount > 0
-    ? Math.round((completedScheduledDays / scheduledDaysCount) * 100)
-    : 0
+  const completionRate = scheduledDays === 0
+    ? 0
+    : Math.round((completedScheduledDays / scheduledDays) * 100)
 
   return {
     streak,
     maxStreak,
-    scheduledDays: scheduledDaysCount,
+    scheduledDays,
     completedScheduledDays,
-    completionRate
+    completionRate,
   }
 }
 
-/**
- * Calculate streak for habits with frequency support
- *
- * @param completions - Array of completion records
- * @param frequency - 'daily' or 'weekly'
- * @param weeklyTarget - If frequency is 'weekly', how many times per week
- * @param periodDays - Number of days to look back
- * @returns StreakResult
- */
-export function calculateHabitStreak(
-  completions: CompletionEntry[],
-  frequency: 'daily' | 'weekly' = 'daily',
-  weeklyTarget: number = 7,
-  periodDays: number = 30
-): StreakResult {
-  if (frequency === 'daily') {
-    // Daily habits: every day is a scheduled day
-    return calculateStreak(completions, [1, 2, 3, 4, 5, 6, 7], periodDays)
+function calculateWeeklyTargetStreak(input: HabitStreakInput): StreakResult {
+  const periodDays = normalizePeriodDays(input.periodDays)
+  const weeklyTarget = normalizeTarget(input.weeklyTarget, 'weeklyTarget')
+  const referenceDateKey = formatDateKey(input.referenceDate, { timeZone: input.timeZone })
+  const startDateKey = addDaysToDateKey(referenceDateKey, -(periodDays - 1))
+  const referenceWeekStartKey = getWeekStartDateKey(referenceDateKey)
+  const completionMap = buildCompletionMap(input.completions, 1, input.timeZone)
+
+  const weeklyCounts = new Map<DateKey, number>()
+  for (const dateKey of enumerateDateKeys(startDateKey, referenceDateKey)) {
+    const weekStartKey = getWeekStartDateKey(dateKey)
+    const count = completionMap.get(dateKey)?.count ?? 0
+    weeklyCounts.set(weekStartKey, (weeklyCounts.get(weekStartKey) ?? 0) + count)
   }
 
-  // Weekly habits: more complex logic
-  // For now, treat as daily but adjust completion rate
-  const result = calculateStreak(completions, [1, 2, 3, 4, 5, 6, 7], periodDays)
+  const weekStartKeys = Array.from(weeklyCounts.keys()).sort((left, right) => left.localeCompare(right))
+  if (weekStartKeys.length === 0) {
+    weekStartKeys.push(referenceWeekStartKey)
+    weeklyCounts.set(referenceWeekStartKey, 0)
+  }
 
-  // Adjust completion rate based on weekly target
-  // For weekly habits, we expect `weeklyTarget` completions per 7 days
-  const weeksInPeriod = Math.ceil(periodDays / 7)
-  const expectedCompletions = weeksInPeriod * weeklyTarget
-  const actualCompletions = completions.filter(c => c.completed).length
+  let streak = 0
+  for (let index = weekStartKeys.length - 1; index >= 0; index -= 1) {
+    const weekStartKey = weekStartKeys[index]
+    const weekCount = weeklyCounts.get(weekStartKey) ?? 0
+    const isCompletedWeek = weekCount >= weeklyTarget
 
-  const adjustedCompletionRate = expectedCompletions > 0
-    ? Math.min(100, Math.round((actualCompletions / expectedCompletions) * 100))
-    : 0
+    if (isCompletedWeek) {
+      streak += 1
+      continue
+    }
+
+    if (weekStartKey === referenceWeekStartKey) {
+      continue
+    }
+
+    break
+  }
+
+  let maxStreak = 0
+  let currentStreak = 0
+  let completedScheduledDays = 0
+
+  for (const weekStartKey of weekStartKeys) {
+    const weekCount = weeklyCounts.get(weekStartKey) ?? 0
+    completedScheduledDays += Math.min(weekCount, weeklyTarget)
+
+    if (weekCount >= weeklyTarget) {
+      currentStreak += 1
+      maxStreak = Math.max(maxStreak, currentStreak)
+    } else {
+      currentStreak = 0
+    }
+  }
+
+  const scheduledDays = weekStartKeys.length * weeklyTarget
+  const completionRate = scheduledDays === 0
+    ? 0
+    : Math.round((completedScheduledDays / scheduledDays) * 100)
 
   return {
-    ...result,
-    completionRate: adjustedCompletionRate,
-    scheduledDays: expectedCompletions,
-    completedScheduledDays: actualCompletions
+    streak,
+    maxStreak,
+    scheduledDays,
+    completedScheduledDays,
+    completionRate,
   }
 }
 
-/**
- * Check if a date is a scheduled day for the given schedule
- */
-export function isScheduledDay(date: Date, scheduledDays: number[]): boolean {
-  const dayOfWeek = getDayOfWeek(date)
-  return scheduledDays.includes(dayOfWeek)
+export function calculateRitualStreak(input: RitualStreakInput): StreakResult {
+  return calculateDailyScheduledStreak({
+    completions: input.completions,
+    scheduledDays: input.scheduledDays,
+    periodDays: normalizePeriodDays(input.periodDays),
+    target: normalizeTarget(input.dailyTarget, 'dailyTarget'),
+    referenceDate: input.referenceDate,
+    timeZone: input.timeZone,
+  })
 }
 
 /**
- * Get the next scheduled date after a given date
+ * Legacy wrapper kept for compatibility.
+ * Prefer calculateRitualStreak for deterministic usage.
  */
-export function getNextScheduledDate(fromDate: Date, scheduledDays: number[]): Date {
-  const nextDate = new Date(fromDate)
-  nextDate.setDate(nextDate.getDate() + 1)
+export function calculateStreak(
+  completions: readonly CompletionEntry[],
+  scheduledDays?: readonly number[],
+  periodDays?: number | LegacyStreakOptions,
+  legacyOptions?: LegacyStreakOptions
+): StreakResult {
+  const options = typeof periodDays === 'number'
+    ? legacyOptions
+    : periodDays
 
-  // Look for next scheduled day within 7 days
-  for (let i = 0; i < 7; i++) {
-    if (isScheduledDay(nextDate, scheduledDays)) {
-      return nextDate
+  return calculateRitualStreak({
+    completions,
+    scheduledDays,
+    periodDays: typeof periodDays === 'number' ? periodDays : options?.periodDays,
+    dailyTarget: options?.dailyTarget,
+    referenceDate: options?.referenceDate ?? new Date(),
+    timeZone: options?.timeZone,
+  })
+}
+
+function calculateHabitStreakFromInput(input: HabitStreakInput): StreakResult {
+  const frequency = input.frequency ?? 'daily'
+
+  if (frequency === 'daily') {
+    return calculateDailyScheduledStreak({
+      completions: input.completions,
+      scheduledDays: EVERY_DAY_SCHEDULE,
+      periodDays: normalizePeriodDays(input.periodDays),
+      target: normalizeTarget(input.dailyTarget, 'dailyTarget'),
+      referenceDate: input.referenceDate,
+      timeZone: input.timeZone,
+    })
+  }
+
+  return calculateWeeklyTargetStreak(input)
+}
+
+export function calculateHabitStreak(input: HabitStreakInput): StreakResult
+export function calculateHabitStreak(
+  completions: readonly CompletionEntry[],
+  frequency?: HabitFrequency,
+  weeklyTarget?: number,
+  periodDays?: number | LegacyHabitOptions,
+  legacyOptions?: LegacyHabitOptions
+): StreakResult
+export function calculateHabitStreak(
+  inputOrCompletions: HabitStreakInput | readonly CompletionEntry[],
+  frequency: HabitFrequency = 'daily',
+  weeklyTarget: number = 7,
+  periodDays?: number | LegacyHabitOptions,
+  legacyOptions?: LegacyHabitOptions
+): StreakResult {
+  if (!Array.isArray(inputOrCompletions)) {
+    return calculateHabitStreakFromInput(inputOrCompletions)
+  }
+
+  const options = typeof periodDays === 'number'
+    ? legacyOptions
+    : periodDays
+
+  return calculateHabitStreakFromInput({
+    completions: inputOrCompletions,
+    frequency,
+    weeklyTarget,
+    periodDays: typeof periodDays === 'number' ? periodDays : options?.periodDays,
+    dailyTarget: options?.dailyTarget,
+    referenceDate: options?.referenceDate ?? new Date(),
+    timeZone: options?.timeZone,
+  })
+}
+
+/**
+ * Get the next scheduled date after a given date.
+ */
+export function getNextScheduledDate(fromDate: Date, scheduledDays: readonly number[] = EVERY_DAY_SCHEDULE): Date {
+  const schedule = normalizeWeekdaySchedule(scheduledDays)
+  const fromDateKey = formatDateKey(getStartOfDay(fromDate))
+
+  for (let offset = 1; offset <= 7; offset += 1) {
+    const nextDateKey = addDaysToDateKey(fromDateKey, offset)
+    if (schedule.includes(getDayOfWeek(nextDateKey))) {
+      return parseDateKey(nextDateKey)
     }
-    nextDate.setDate(nextDate.getDate() + 1)
   }
 
-  // Fallback: return the date a week later
-  return nextDate
+  return parseDateKey(addDaysToDateKey(fromDateKey, 1))
 }

@@ -17,6 +17,7 @@
     "db:studio": "prisma studio --schema prisma/schema.prisma",
     "db:validate": "prisma validate --schema prisma/schema.prisma",
     "test:leak-policy": "bun test src/lib/leak-policy.test.ts",
+    "test:vitest": "vitest run",
     "postinstall": "prisma generate --schema prisma/schema.prisma"
   },
   "dependencies": {
@@ -97,6 +98,7 @@
     "eslint-config-next": "^16.1.1",
     "tailwindcss": "^4",
     "tw-animate-css": "^1.3.5",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.4"
   }
 }

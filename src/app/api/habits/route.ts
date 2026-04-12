@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { calculateHabitStreak, type CompletionEntry } from '@/lib/streak-utils'
 import { z } from 'zod'
+import { db } from '@/lib/db'
+import {
+  formatDateKey,
+  getStartOfDay,
+  getStartOfNextDay,
+} from '@/lib/date-utils'
+import { calculateHabitStreak, type CompletionEntry } from '@/lib/streak-utils'
 import { requireSelf } from '@/lib/server-auth'
 
 const CreateHabitSchema = z.object({
@@ -20,6 +25,8 @@ const UpdateHabitSchema = z.object({
   color: z.string().optional(),
   target: z.number().int().min(1).max(100).optional(),
 })
+
+type HabitFrequency = 'daily' | 'weekly'
 
 /**
  * Get user's habits with today's logs and weekly stats
@@ -40,119 +47,113 @@ export async function GET(request: NextRequest) {
     const auth = requireSelf(request, userId)
     if ('error' in auth) return auth.error
 
-    // Get all active habits for user
     const habits = await db.habit.findMany({
       where: { userId, active: true },
-      orderBy: { createdAt: 'asc' }
+      orderBy: { createdAt: 'asc' },
     })
 
-    // Get today's logs
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = getStartOfDay(new Date())
+    const tomorrow = getStartOfNextDay(today)
 
     const todayLogs = await db.habitLog.findMany({
       where: {
         userId,
-        date: { gte: today }
-      }
+        date: {
+          gte: today,
+          lt: tomorrow,
+        },
+      },
     })
 
-    // Get logs for the last 7 days for weekly stats
-    const sevenDaysAgo = new Date()
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6) // 6 days ago + today = 7 days
-    sevenDaysAgo.setHours(0, 0, 0, 0)
+    const sevenDaysAgo = new Date(today)
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
 
     const weeklyLogs = await db.habitLog.findMany({
       where: {
         userId,
-        date: { gte: sevenDaysAgo },
-        completed: true
+        date: { gte: sevenDaysAgo, lt: tomorrow },
+        completed: true,
       },
-      orderBy: { date: 'asc' }
+      orderBy: { date: 'asc' },
     })
 
-    // Build weekly stats array (7 days)
     const weeklyStats: { date: string; completed: number; total: number }[] = []
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(sevenDaysAgo)
-      date.setDate(date.getDate() + i)
-      date.setHours(0, 0, 0, 0)
+    for (let index = 0; index < 7; index += 1) {
+      const currentDate = new Date(sevenDaysAgo)
+      currentDate.setDate(currentDate.getDate() + index)
+      const dateKey = formatDateKey(currentDate)
 
-      // Count completed habits for this date
-      const completedForDate = weeklyLogs.filter(log => {
-        const logDate = new Date(log.date)
-        logDate.setHours(0, 0, 0, 0)
-        return logDate.getTime() === date.getTime()
-      }).length
+      const completedForDate = weeklyLogs.filter((log) => (
+        formatDateKey(log.date) === dateKey
+      )).length
 
       weeklyStats.push({
-        date: date.toISOString().split('T')[0],
+        date: dateKey,
         completed: completedForDate,
-        total: habits.length
+        total: habits.length,
       })
     }
 
-    // Calculate streak for each habit
     const habitsWithStats = await Promise.all(habits.map(async (habit) => {
-      // Get logs for this habit (last 30 days)
-      const thirtyDaysAgo = new Date()
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-      thirtyDaysAgo.setHours(0, 0, 0, 0)
+      const thirtyDaysAgo = new Date(today)
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29)
 
       const logs = await db.habitLog.findMany({
         where: {
           habitId: habit.id,
-          date: { gte: thirtyDaysAgo }
+          date: { gte: thirtyDaysAgo, lt: tomorrow },
         },
-        orderBy: { date: 'desc' }
+        orderBy: { date: 'desc' },
       })
 
-      // Convert logs to completion entries for streak calculation
-      const completionEntries: CompletionEntry[] = logs.map(l => ({
-        date: l.date,
-        completed: l.completed
+      const frequency: HabitFrequency = habit.frequency === 'weekly' ? 'weekly' : 'daily'
+      const targetCount = habit.target || 1
+      const completionEntries: CompletionEntry[] = logs.map((log) => ({
+        date: log.date,
+        completed: log.completed,
+        count: log.count,
       }))
 
-      // Calculate streak using the utility
-      // Note: habit.frequency can be 'daily' or 'weekly'
-      const frequency = (habit.frequency as 'daily' | 'weekly') || 'daily'
-      const streakResult = calculateHabitStreak(completionEntries, frequency, habit.target || 7, 30)
-
-      // Find today's log
-      const todayLog = todayLogs.find(l => l.habitId === habit.id)
-
-      // Build last 7 days completion map
-      const today7 = new Date()
-      today7.setHours(0, 0, 0, 0)
-      const last7Days = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(today7)
-        d.setDate(d.getDate() - (6 - i))
-        const dateStr = d.toISOString().split('T')[0]
-        const log = logs.find(l => l.date.toISOString().split('T')[0] === dateStr)
-        return { date: dateStr, completed: log?.completed || false }
+      const streakResult = calculateHabitStreak({
+        completions: completionEntries,
+        frequency,
+        referenceDate: today,
+        periodDays: 30,
+        dailyTarget: frequency === 'daily' ? targetCount : 1,
+        weeklyTarget: frequency === 'weekly' ? targetCount : 1,
       })
 
-      // 30-day completion rate
-      const completedDays30 = logs.filter(l => l.completed).length
-      const completionRate30d = Math.round((completedDays30 / 30) * 100)
+      const todayLog = todayLogs.find((log) => log.habitId === habit.id)
+
+      const last7Days = Array.from({ length: 7 }, (_, index) => {
+        const currentDate = new Date(today)
+        currentDate.setDate(currentDate.getDate() - (6 - index))
+        const dateKey = formatDateKey(currentDate)
+        const log = logs.find((entry) => formatDateKey(entry.date) === dateKey)
+        const completed = frequency === 'weekly'
+          ? (log?.count ?? 0) > 0
+          : (log?.count ?? 0) >= targetCount
+
+        return { date: dateKey, completed }
+      })
 
       return {
         id: habit.id,
         name: habit.name,
-        icon: habit.icon || '✨',
+        icon: habit.icon || '*',
         color: habit.color || '#10b981',
-        target: habit.target || 1,
+        target: targetCount,
         streak: streakResult.streak,
         completed: todayLog?.count || 0,
         isCompleted: todayLog?.completed || false,
         last7Days,
-        completionRate30d,
+        completionRate30d: streakResult.completionRate,
       }
     }))
 
     return NextResponse.json({
       habits: habitsWithStats,
-      weeklyStats
+      weeklyStats,
     })
   } catch (error) {
     console.error('Get habits error:', error)
@@ -177,6 +178,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
     const { userId, name, icon, color, frequency, target } = parsed.data
 
     const auth = requireSelf(request, userId)
@@ -186,12 +188,12 @@ export async function POST(request: NextRequest) {
       data: {
         userId,
         name,
-        icon: icon || '✨',
+        icon: icon || '*',
         color: color || '#10b981',
         frequency: frequency || 'daily',
         target: target || 1,
-        active: true
-      }
+        active: true,
+      },
     })
 
     return NextResponse.json({
@@ -204,8 +206,8 @@ export async function POST(request: NextRequest) {
         target: habit.target,
         streak: 0,
         completed: 0,
-        isCompleted: false
-      }
+        isCompleted: false,
+      },
     })
   } catch (error) {
     console.error('Create habit error:', error)
@@ -230,6 +232,7 @@ export async function PATCH(request: NextRequest) {
         { status: 400 }
       )
     }
+
     const { habitId, name, icon, color, target } = parsed.data
 
     const existingHabit = await db.habit.findUnique({
@@ -254,7 +257,7 @@ export async function PATCH(request: NextRequest) {
         ...(icon !== undefined && { icon }),
         ...(color !== undefined && { color }),
         ...(target !== undefined && { target }),
-      }
+      },
     })
 
     return NextResponse.json({
@@ -265,7 +268,7 @@ export async function PATCH(request: NextRequest) {
         icon: habit.icon,
         color: habit.color,
         target: habit.target,
-      }
+      },
     })
   } catch (error) {
     console.error('Update habit error:', error)
@@ -307,9 +310,8 @@ export async function DELETE(request: NextRequest) {
     const auth = requireSelf(request, existingHabit.userId)
     if ('error' in auth) return auth.error
 
-    // Delete habit (cascade deletes logs automatically via schema)
     await db.habit.delete({
-      where: { id: habitId }
+      where: { id: habitId },
     })
 
     return NextResponse.json({ success: true })
