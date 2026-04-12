@@ -1,8 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { normalizeToDate, parseDateKey, formatDateKey } from '@/lib/date-utils'
-import { calculateStreak, type CompletionEntry } from '@/lib/streak-utils'
+import {
+  addDaysToDateKey,
+  compareDateKeys,
+  formatDateKey,
+  getStartOfDay,
+  normalizeToDate,
+  parseDateKey,
+} from '@/lib/date-utils'
+import {
+  calculateRitualStreak,
+  parseScheduleDays,
+  type CompletionEntry,
+} from '@/lib/streak-utils'
 import { requireAuthenticatedUser, requireSelf } from '@/lib/server-auth'
+
+interface StringArrayContainer {
+  readonly attributes?: string | null
+  readonly days?: string | null
+}
+
+function parseStringArray(serialized: string | null | undefined): string[] {
+  if (!serialized) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(serialized) as unknown
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function resolvePeriodDays(value: string | null): number {
+  const parsed = Number.parseInt(value || '30', 10)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 30
+}
 
 // POST - Mark ritual as complete/incomplete for a date
 // Body: { ritualId, userId, date?: string, completed: boolean, note?: string, mood?: string }
@@ -18,9 +52,8 @@ export async function POST(request: NextRequest) {
     const auth = requireSelf(request, userId)
     if ('error' in auth) return auth.error
 
-    // Get the ritual to check attributes
     const ritual = await db.ritual.findUnique({
-      where: { id: ritualId }
+      where: { id: ritualId },
     })
 
     if (!ritual) {
@@ -31,21 +64,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // Parse date or use today - normalize to start of day
     const targetDate = date ? parseDateKey(date) : normalizeToDate(new Date())
 
-    // Upsert completion using unique constraint
     const completion = await db.ritualCompletion.upsert({
       where: {
         ritualId_date: {
           ritualId,
-          date: targetDate
-        }
+          date: targetDate,
+        },
       },
       update: {
         completed,
         note,
-        mood
+        mood,
       },
       create: {
         ritualId,
@@ -53,65 +84,58 @@ export async function POST(request: NextRequest) {
         date: targetDate,
         completed,
         note,
-        mood
-      }
+        mood,
+      },
     })
 
-    // Update user attributes if completed
     if (completed && ritual.attributes) {
-      const attributes = JSON.parse(ritual.attributes as string) as string[]
+      const attributes = parseStringArray(ritual.attributes)
       for (const attr of attributes) {
         await db.userAttribute.upsert({
           where: {
             userId_key: {
               userId,
-              key: attr
-            }
+              key: attr,
+            },
           },
           update: {
-            points: { increment: 10 }
+            points: { increment: 10 },
           },
           create: {
             userId,
             key: attr,
             points: 10,
-            level: 1
-          }
+            level: 1,
+          },
         })
       }
 
-      // Update level if points threshold reached
       const attrRecords = await db.userAttribute.findMany({
-        where: { userId }
+        where: { userId },
       })
-      
+
       for (const attrRecord of attrRecords) {
         const newLevel = Math.floor(attrRecord.points / 100) + 1
         if (newLevel > attrRecord.level) {
           await db.userAttribute.update({
             where: { id: attrRecord.id },
-            data: { level: newLevel }
+            data: { level: newLevel },
           })
         }
       }
     }
 
-    // Check achievements
     if (completed) {
-      await checkAchievements(userId, ritualId)
-    }
-
-    // Auto-increment ChallengeProgress for active challenges linked to this ritual
-    if (completed) {
-      await incrementLinkedChallenges(userId, ritualId).catch(() => {/* non-critical */})
+      await checkAchievements(userId, ritual)
+      await incrementLinkedChallenges(userId, ritualId, targetDate).catch(() => undefined)
     }
 
     return NextResponse.json({
       success: true,
       completion: {
         ...completion,
-        date: formatDateKey(completion.date)
-      }
+        date: formatDateKey(completion.date),
+      },
     })
   } catch (error) {
     console.error('Complete ritual error:', error)
@@ -128,27 +152,26 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const ritualId = searchParams.get('ritualId')
-    const days = parseInt(searchParams.get('days') || '30')
+    const days = resolvePeriodDays(searchParams.get('days'))
 
     if (!ritualId) {
       return NextResponse.json({ error: 'ritualId required' }, { status: 400 })
     }
 
-    const startDate = new Date()
-    startDate.setDate(startDate.getDate() - days)
-    startDate.setHours(0, 0, 0, 0)
+    const referenceDate = getStartOfDay(new Date())
+    const startDate = new Date(referenceDate)
+    startDate.setDate(startDate.getDate() - (days - 1))
 
     const completions = await db.ritualCompletion.findMany({
       where: {
         ritualId,
-        date: { gte: startDate }
+        date: { gte: startDate },
       },
-      orderBy: { date: 'asc' }
+      orderBy: { date: 'asc' },
     })
 
-    // Get ritual to check scheduled days
     const ritual = await db.ritual.findUnique({
-      where: { id: ritualId }
+      where: { id: ritualId },
     })
 
     if (!ritual) {
@@ -159,46 +182,34 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // Calculate streak using the utility
-    let streak = 0
-    let maxStreak = 0
-    let completionRate = 0
-    let scheduledDays = days
-    let completedScheduledDays = 0
+    const completionEntries: CompletionEntry[] = completions.map((completion) => ({
+      date: completion.date,
+      completed: completion.completed,
+    }))
 
-    if (ritual) {
-      const ritualDays = JSON.parse(ritual.days as string) as number[]
-
-      // Convert completions to the format expected by streak utils
-      const completionEntries: CompletionEntry[] = completions.map(c => ({
-        date: c.date,
-        completed: c.completed
-      }))
-
-      const streakResult = calculateStreak(completionEntries, ritualDays, days)
-      streak = streakResult.streak
-      maxStreak = streakResult.maxStreak
-      completionRate = streakResult.completionRate
-      scheduledDays = streakResult.scheduledDays
-      completedScheduledDays = streakResult.completedScheduledDays
-    }
+    const streakResult = calculateRitualStreak({
+      completions: completionEntries,
+      scheduledDays: parseScheduleDays(ritual.days),
+      periodDays: days,
+      referenceDate,
+    })
 
     const stats = {
-      streak,
-      maxStreak,
-      completedDays: completedScheduledDays,
-      scheduledDays,
+      streak: streakResult.streak,
+      maxStreak: streakResult.maxStreak,
+      completedDays: streakResult.completedScheduledDays,
+      scheduledDays: streakResult.scheduledDays,
       totalDays: days,
-      completionRate
+      completionRate: streakResult.completionRate,
     }
 
     return NextResponse.json({
       success: true,
-      completions: completions.map(c => ({
-        ...c,
-        date: formatDateKey(c.date)
+      completions: completions.map((completion) => ({
+        ...completion,
+        date: formatDateKey(completion.date),
       })),
-      stats
+      stats,
     })
   } catch (error) {
     console.error('Fetch completions error:', error)
@@ -206,59 +217,102 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Auto-increment ChallengeProgress for challenges linked to this ritual
-async function incrementLinkedChallenges(userId: string, ritualId: string) {
+async function incrementLinkedChallenges(userId: string, ritualId: string, completionDate: Date) {
   const activeChallenges = await db.challenge.findMany({
     where: { userId, status: 'active', type: 'ritual' },
     select: { id: true, config: true, duration: true },
   })
 
-  for (const ch of activeChallenges) {
-    try {
-      const config = JSON.parse(ch.config || '{}') as { selectedRitualIds?: string[]; linkedRitualIds?: string[] }
-      const linked = config.selectedRitualIds ?? config.linkedRitualIds ?? []
-      // Empty means track all rituals; non-empty means only specific ones
-      if (linked.length > 0 && !linked.includes(ritualId)) continue
+  const completionDateKey = formatDateKey(completionDate)
 
-      // Upsert ChallengeProgress — at most one increment per calendar day
-      const todayStr = new Date().toISOString().split('T')[0]
-      const existing = await db.challengeProgress.findFirst({ where: { challengeId: ch.id } })
+  for (const challenge of activeChallenges) {
+    try {
+      const config = JSON.parse(challenge.config || '{}') as {
+        linkedRitualIds?: string[]
+        selectedRitualIds?: string[]
+      }
+      const linked = config.selectedRitualIds ?? config.linkedRitualIds ?? []
+      if (linked.length > 0 && !linked.includes(ritualId)) {
+        continue
+      }
+
+      const existing = await db.challengeProgress.findFirst({
+        where: { challengeId: challenge.id },
+      })
+
       if (existing) {
-        const lastChecked = existing.lastCheckedAt.toISOString().split('T')[0]
-        if (lastChecked === todayStr) continue // already counted today
+        const lastCheckedKey = formatDateKey(existing.lastCheckedAt)
+        if (lastCheckedKey === completionDateKey) {
+          continue
+        }
+
+        const shouldAdvanceReference = compareDateKeys(completionDateKey, lastCheckedKey) > 0
+        const nextCurrentStreak = shouldAdvanceReference && completionDateKey === addDaysToDateKey(lastCheckedKey, 1)
+          ? existing.currentStreak + 1
+          : shouldAdvanceReference
+            ? 1
+            : existing.currentStreak
 
         await db.challengeProgress.update({
           where: { id: existing.id },
           data: {
             daysCompleted: { increment: 1 },
-            currentStreak: { increment: 1 },
-            lastCheckedAt: new Date(),
+            currentStreak: nextCurrentStreak,
+            ...(shouldAdvanceReference ? { lastCheckedAt: completionDate } : {}),
           },
         })
-        // Mark challenge completed if goal reached
-        if (existing.daysCompleted + 1 >= ch.duration) {
-          await db.challenge.update({ where: { id: ch.id }, data: { status: 'completed', progress: 100 } })
+
+        if (existing.daysCompleted + 1 >= challenge.duration) {
+          await db.challenge.update({
+            where: { id: challenge.id },
+            data: { status: 'completed', progress: 100 },
+          })
         }
       } else {
         await db.challengeProgress.create({
-          data: { challengeId: ch.id, daysCompleted: 1, currentStreak: 1 },
+          data: {
+            challengeId: challenge.id,
+            daysCompleted: 1,
+            currentStreak: 1,
+            lastCheckedAt: completionDate,
+          },
         })
       }
     } catch {
-      // Per-challenge errors are non-critical
+      // Per-challenge errors are non-critical.
     }
   }
 }
 
-// Check and award achievements
-async function checkAchievements(userId: string, ritualId: string) {
+async function checkAchievements(userId: string, ritual: StringArrayContainer & { id: string }) {
   try {
-    // Get total completions for this ritual
-    const completions = await db.ritualCompletion.count({
-      where: { ritualId, completed: true }
+    const completions = await db.ritualCompletion.findMany({
+      where: { ritualId: ritual.id, completed: true },
+      select: { date: true, completed: true },
+      orderBy: { date: 'asc' },
     })
 
-    // Streak achievements
+    if (completions.length === 0) {
+      return
+    }
+
+    const earliestDate = getStartOfDay(completions[0].date)
+    const referenceDate = getStartOfDay(new Date())
+    const periodDays = Math.max(
+      1,
+      Math.floor((referenceDate.getTime() - earliestDate.getTime()) / 86400000) + 1
+    )
+
+    const streakResult = calculateRitualStreak({
+      completions: completions.map((completion) => ({
+        date: completion.date,
+        completed: completion.completed,
+      })),
+      scheduledDays: parseScheduleDays(ritual.days),
+      periodDays,
+      referenceDate,
+    })
+
     const streakAchievements = [
       { code: 'RITUAL_STREAK_3', threshold: 3 },
       { code: 'RITUAL_STREAK_7', threshold: 7 },
@@ -266,11 +320,11 @@ async function checkAchievements(userId: string, ritualId: string) {
     ]
 
     for (const achievement of streakAchievements) {
-      if (completions >= achievement.threshold) {
+      if (streakResult.maxStreak >= achievement.threshold) {
         await db.achievement.upsert({
           where: { userId_code: { userId, code: achievement.code } },
           update: {},
-          create: { userId, code: achievement.code }
+          create: { userId, code: achievement.code },
         })
       }
     }

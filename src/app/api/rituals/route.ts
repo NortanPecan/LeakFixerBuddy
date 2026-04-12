@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { normalizeToDate, parseDateKey, formatDateKey, getDayOfWeek } from '@/lib/date-utils'
+import {
+  formatDateKey,
+  getDayOfWeek,
+  normalizeToDate,
+  parseDateKey,
+} from '@/lib/date-utils'
+import { isScheduledDay, parseScheduleDays } from '@/lib/streak-utils'
 import { requireSelf } from '@/lib/server-auth'
 
-// GET - Fetch user's rituals with completions for a specific date
-// /api/rituals?userId=xxx - Get rituals with today's completions
-// /api/rituals?userId=xxx&date=YYYY-MM-DD - Get rituals with completions for specific date
-// /api/rituals?userId=xxx&status=all - Get all rituals (including archived)
+/**
+ * GET /api/rituals?userId=xxx
+ * GET /api/rituals?userId=xxx&date=YYYY-MM-DD
+ * GET /api/rituals?userId=xxx&status=all
+ */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -21,55 +28,43 @@ export async function GET(request: NextRequest) {
     const auth = requireSelf(request, userId)
     if ('error' in auth) return auth.error
 
-    // Parse target date (default to today)
     const targetDate = dateParam ? parseDateKey(dateParam) : normalizeToDate(new Date())
     const targetDayOfWeek = getDayOfWeek(targetDate)
 
-    // Get all rituals for user
     const rituals = await db.ritual.findMany({
-      where: { 
+      where: {
         userId,
-        status: status === 'all' ? undefined : status 
+        status: status === 'all' ? undefined : status,
       },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
       include: {
         completions: {
           where: {
-            date: targetDate
-          }
-        }
-      }
+            date: targetDate,
+          },
+        },
+      },
     })
 
-    // Filter rituals by day of week and add completion status
-    const ritualsData = rituals.map(ritual => {
-      // Safe JSON parse with fallback
-      let days: number[] = []
-      try {
-        days = ritual.days ? JSON.parse(ritual.days as string) : []
-      } catch {
-        days = []
-      }
+    const ritualsData = rituals.map((ritual) => {
+      const days = parseScheduleDays(ritual.days)
       const isScheduledToday = days.length === 0 || days.includes(targetDayOfWeek)
-      
-      // Check completed for target date
       const completion = ritual.completions[0]
       const completedToday = completion?.completed ?? false
 
       return {
         ...ritual,
-        days: days, // Return as array for frontend
+        days,
         isScheduledToday,
         completedToday,
         completionNote: completion?.note,
         completionMood: completion?.mood,
-        completions: undefined // Remove from response
+        completions: undefined,
       }
     })
 
-    // Filter to only scheduled rituals for today view
-    const todayRituals = ritualsData.filter(r => r.isScheduledToday)
-    const completedCount = todayRituals.filter(r => r.completedToday).length
+    const todayRituals = ritualsData.filter((ritual) => ritual.isScheduledToday)
+    const completedCount = todayRituals.filter((ritual) => ritual.completedToday).length
 
     return NextResponse.json({
       success: true,
@@ -78,10 +73,12 @@ export async function GET(request: NextRequest) {
       stats: {
         total: todayRituals.length,
         completed: completedCount,
-        percentage: todayRituals.length > 0 ? Math.round((completedCount / todayRituals.length) * 100) : 0
+        percentage: todayRituals.length > 0
+          ? Math.round((completedCount / todayRituals.length) * 100)
+          : 0,
       },
       rituals: ritualsData,
-      todayRituals
+      todayRituals,
     })
   } catch (error) {
     console.error('Fetch rituals error:', error)
@@ -89,26 +86,25 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create new ritual
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { 
-      userId, 
-      title, 
-      type, 
-      category, 
-      days, 
-      timeWindow, 
-      reminder, 
-      reminderTime, 
-      goalShort, 
-      description, 
+    const {
+      userId,
+      title,
+      type,
+      category,
+      days,
+      timeWindow,
+      reminder,
+      reminderTime,
+      goalShort,
+      description,
       attributes,
       isFromPreset,
       presetId,
       sortOrder,
-      contentId
+      contentId,
     } = body
 
     if (!userId || !title || !category) {
@@ -118,18 +114,17 @@ export async function POST(request: NextRequest) {
     const auth = requireSelf(request, userId)
     if ('error' in auth) return auth.error
 
-    // Check for duplicate title (case insensitive, active rituals only)
     const existingRitual = await db.ritual.findFirst({
       where: {
         userId,
         title: { equals: title, mode: 'insensitive' },
-        status: 'active'
-      }
+        status: 'active',
+      },
     })
 
     if (existingRitual) {
       return NextResponse.json(
-        { error: `Ритуал с названием "${title}" уже существует` },
+        { error: `Ritual with title "${title}" already exists` },
         { status: 400 }
       )
     }
@@ -151,16 +146,15 @@ export async function POST(request: NextRequest) {
         presetId,
         sortOrder: sortOrder || 0,
         contentId: contentId || null,
-      }
+      },
     })
 
-    // Initialize user attributes if not exists
     const attrKeys = ['health', 'mind', 'will']
     for (const key of attrKeys) {
       await db.userAttribute.upsert({
         where: { userId_key: { userId, key } },
         update: {},
-        create: { userId, key, points: 0, level: 1 }
+        create: { userId, key, points: 0, level: 1 },
       })
     }
 
@@ -171,22 +165,21 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PATCH - Update ritual
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { 
-      ritualId, 
-      title, 
-      days, 
-      timeWindow, 
-      reminder, 
-      reminderTime, 
-      goalShort, 
-      description, 
+    const {
+      ritualId,
+      title,
+      days,
+      timeWindow,
+      reminder,
+      reminderTime,
+      goalShort,
+      description,
       attributes,
       status,
-      sortOrder
+      sortOrder,
     } = body
 
     if (!ritualId) {
@@ -219,7 +212,7 @@ export async function PATCH(request: NextRequest) {
 
     const ritual = await db.ritual.update({
       where: { id: ritualId },
-      data: updateData
+      data: updateData,
     })
 
     return NextResponse.json({ success: true, ritual })
@@ -229,9 +222,6 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-// DELETE - Archive or permanently delete ritual
-// ?ritualId=xxx — archive (soft delete)
-// ?ritualId=xxx&permanent=true — permanent delete
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -255,15 +245,13 @@ export async function DELETE(request: NextRequest) {
     if ('error' in auth) return auth.error
 
     if (permanent) {
-      // Permanently delete ritual and all its completions (cascade in schema)
       await db.ritual.delete({ where: { id: ritualId } })
       return NextResponse.json({ success: true, deleted: true })
     }
 
-    // Archive instead of delete (default)
     const ritual = await db.ritual.update({
       where: { id: ritualId },
-      data: { status: 'archived' }
+      data: { status: 'archived' },
     })
 
     return NextResponse.json({ success: true, ritual })

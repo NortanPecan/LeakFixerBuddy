@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { normalizeToDate, getDayOfWeek } from '@/lib/date-utils'
+import { formatDateKey, normalizeToDate } from '@/lib/date-utils'
+import { isScheduledDay, parseScheduleDays } from '@/lib/streak-utils'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const CRON_SECRET = process.env.CRON_SECRET
 
 async function sendTelegramMessage(chatId: bigint, text: string): Promise<boolean> {
   if (!BOT_TOKEN) return false
+
   try {
     const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
@@ -24,8 +26,6 @@ async function sendTelegramMessage(chatId: bigint, text: string): Promise<boolea
   }
 }
 
-// GET — cron-compatible (called by cron job or Vercel cron)
-// POST — manual trigger with optional userId filter
 export async function GET(request: NextRequest) {
   return handleReminder(request)
 }
@@ -35,7 +35,6 @@ export async function POST(request: NextRequest) {
 }
 
 async function handleReminder(request: NextRequest) {
-  // Optional secret protection for cron calls
   const authHeader = request.headers.get('authorization')
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -46,9 +45,7 @@ async function handleReminder(request: NextRequest) {
   }
 
   const today = normalizeToDate(new Date())
-  const dayOfWeek = getDayOfWeek(today)
 
-  // Get all users with telegram_id and ritual reminders enabled
   const usersWithSettings = await db.userSettings.findMany({
     where: { ritualReminders: true },
     select: {
@@ -73,11 +70,10 @@ async function handleReminder(request: NextRequest) {
   for (const settings of usersWithSettings) {
     const { user } = settings
     if (!user?.telegramId) {
-      results.skipped++
+      results.skipped += 1
       continue
     }
 
-    // Get active rituals for today's day of week
     const rituals = await db.ritual.findMany({
       where: { userId: settings.userId, status: 'active' },
       include: {
@@ -87,46 +83,48 @@ async function handleReminder(request: NextRequest) {
       },
     })
 
-    // Filter by day of week schedule
-    const todayRituals = rituals.filter(r => {
-      if (!r.daysOfWeek || (r.daysOfWeek as number[]).length === 0) return true
-      return (r.daysOfWeek as number[]).includes(dayOfWeek)
-    })
+    const todayRituals = rituals.filter((ritual) => (
+      isScheduledDay(today, parseScheduleDays(ritual.days))
+    ))
 
-    const incomplete = todayRituals.filter(r => r.completions.length === 0)
+    const incomplete = todayRituals.filter((ritual) => (
+      !ritual.completions.some((completion) => completion.completed)
+    ))
 
     if (incomplete.length === 0) {
-      results.skipped++
+      results.skipped += 1
       continue
     }
 
-    const firstName = user.telegramFirstName || 'друг'
+    const firstName = user.telegramFirstName || 'friend'
     const streak = user.streak ?? 0
-    const streakLine = streak > 0 ? `🔥 Стрик: <b>${streak} дней</b> — не прерывай!\n\n` : ''
+    const streakLine = streak > 0
+      ? `Current streak: <b>${streak} day${streak === 1 ? '' : 's'}</b>\n\n`
+      : ''
 
     const ritualList = incomplete
       .slice(0, 5)
-      .map(r => `• ${r.title}`)
+      .map((ritual) => `• ${ritual.title}`)
       .join('\n')
-    const more = incomplete.length > 5 ? `\n...и ещё ${incomplete.length - 5}` : ''
+    const more = incomplete.length > 5 ? `\n...and ${incomplete.length - 5} more` : ''
 
     const message =
-      `⏰ <b>${firstName}</b>, осталось выполнить ${incomplete.length} ритуал${incomplete.length === 1 ? '' : incomplete.length < 5 ? 'а' : 'ов'} сегодня:\n\n` +
+      `<b>${firstName}</b>, you still have ${incomplete.length} ritual${incomplete.length === 1 ? '' : 's'} scheduled for today.\n\n` +
       `${ritualList}${more}\n\n` +
       `${streakLine}` +
-      `📱 Открой <b>LeakFixer Buddy</b> и отметь выполненные.`
+      'Open <b>LeakFixer Buddy</b> and check them off.'
 
     const sent = await sendTelegramMessage(user.telegramId, message)
     if (sent) {
-      results.sent++
+      results.sent += 1
     } else {
-      results.errors++
+      results.errors += 1
     }
   }
 
   return NextResponse.json({
     success: true,
-    date: today.toISOString().split('T')[0],
+    date: formatDateKey(today),
     ...results,
   })
 }

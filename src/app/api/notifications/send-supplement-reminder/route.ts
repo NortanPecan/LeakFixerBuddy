@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { normalizeToDate, getDayOfWeek } from '@/lib/date-utils'
+import { formatDateKey, normalizeToDate } from '@/lib/date-utils'
+import { isScheduledDay, parseScheduleDays } from '@/lib/streak-utils'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const CRON_SECRET = process.env.CRON_SECRET
 
 async function sendTelegramMessage(chatId: bigint, text: string): Promise<boolean> {
   if (!BOT_TOKEN) return false
+
   try {
     const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
@@ -43,7 +45,6 @@ async function handleReminder(request: NextRequest) {
   }
 
   const today = normalizeToDate(new Date())
-  const dayOfWeek = getDayOfWeek(today)
 
   const usersWithSettings = await db.userSettings.findMany({
     where: { supplementReminders: true },
@@ -68,11 +69,10 @@ async function handleReminder(request: NextRequest) {
   for (const settings of usersWithSettings) {
     const { user } = settings
     if (!user?.telegramId) {
-      results.skipped++
+      results.skipped += 1
       continue
     }
 
-    // Get active supplements for today's day of week
     const supplements = await db.supplement.findMany({
       where: { userId: settings.userId, isActive: true },
       include: {
@@ -82,49 +82,45 @@ async function handleReminder(request: NextRequest) {
       },
     })
 
-    // Filter by day of week schedule
-    const todaySupplements = supplements.filter(s => {
-      try {
-        const days = JSON.parse(s.days as string) as number[]
-        return days.includes(dayOfWeek) || days.length === 0
-      } catch {
-        return true
-      }
-    })
+    const todaySupplements = supplements.filter((supplement) => (
+      isScheduledDay(today, parseScheduleDays(supplement.days))
+    ))
 
-    const unchecked = todaySupplements.filter(s => !s.intakes.some(i => i.checked))
+    const unchecked = todaySupplements.filter((supplement) => (
+      !supplement.intakes.some((intake) => intake.checked)
+    ))
 
     if (unchecked.length === 0) {
-      results.skipped++
+      results.skipped += 1
       continue
     }
 
-    const firstName = user.telegramFirstName || 'друг'
-    const suppList = unchecked
+    const firstName = user.telegramFirstName || 'friend'
+    const supplementList = unchecked
       .slice(0, 5)
-      .map(s => {
-        const dosage = s.dosage ? ` (${s.dosage} ${s.unit})` : ''
-        return `• ${s.name}${dosage}`
+      .map((supplement) => {
+        const dosage = supplement.dosage ? ` (${supplement.dosage} ${supplement.unit})` : ''
+        return `• ${supplement.name}${dosage}`
       })
       .join('\n')
-    const more = unchecked.length > 5 ? `\n...и ещё ${unchecked.length - 5}` : ''
+    const more = unchecked.length > 5 ? `\n...and ${unchecked.length - 5} more` : ''
 
     const message =
-      `💊 <b>${firstName}</b>, не забудь принять ${unchecked.length} добавк${unchecked.length === 1 ? 'у' : unchecked.length < 5 ? 'и' : ''} сегодня:\n\n` +
-      `${suppList}${more}\n\n` +
-      `📱 Открой <b>LeakFixer Buddy</b> и отметь принятые.`
+      `<b>${firstName}</b>, you still have ${unchecked.length} supplement${unchecked.length === 1 ? '' : 's'} to log today.\n\n` +
+      `${supplementList}${more}\n\n` +
+      'Open <b>LeakFixer Buddy</b> and mark them as taken.'
 
     const sent = await sendTelegramMessage(user.telegramId, message)
     if (sent) {
-      results.sent++
+      results.sent += 1
     } else {
-      results.errors++
+      results.errors += 1
     }
   }
 
   return NextResponse.json({
     success: true,
-    date: today.toISOString().split('T')[0],
+    date: formatDateKey(today),
     ...results,
   })
 }

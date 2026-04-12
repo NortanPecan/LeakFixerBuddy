@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getStartOfDay, getStartOfNextDay } from '@/lib/date-utils'
 import { requireSelf } from '@/lib/server-auth'
+
+function normalizeIncrement(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 1) {
+    return 1
+  }
+
+  return Math.floor(value)
+}
 
 /**
  * Log habit completion
@@ -17,57 +26,66 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    await requireSelf(request, userId)
+
+    const auth = requireSelf(request, userId)
+    if ('error' in auth) return auth.error
 
     const habit = await db.habit.findUnique({
       where: { id: habitId },
       select: { userId: true, target: true },
     })
+
     if (!habit) {
       return NextResponse.json({ error: 'Habit not found' }, { status: 404 })
     }
+
     if (habit.userId !== userId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = getStartOfDay(new Date())
+    const tomorrow = getStartOfNextDay(today)
+    const targetCount = habit.target || 1
+    const increment = normalizeIncrement(count)
 
-    // Check if log exists for today
     const existingLog = await db.habitLog.findFirst({
       where: {
         habitId,
-        date: { gte: today }
-      }
+        date: {
+          gte: today,
+          lt: tomorrow,
+        },
+      },
     })
 
     let log
     if (existingLog) {
-      // Update existing log
+      const nextCount = completed ? existingLog.count + increment : 0
+      const isCompleted = nextCount >= targetCount
+
       log = await db.habitLog.update({
         where: { id: existingLog.id },
         data: {
-          completed,
-          count: completed ? (existingLog.count + 1) : 0,
-          note
-        }
+          completed: isCompleted,
+          count: nextCount,
+          note,
+        },
       })
     } else {
-      // Create new log
+      const initialCount = completed ? increment : 0
+      const isCompleted = initialCount >= targetCount
+
       log = await db.habitLog.create({
         data: {
           habitId,
           userId,
-          completed,
-          count: completed ? count : 0,
+          completed: isCompleted,
+          count: initialCount,
           note,
-          date: today
-        }
+          date: today,
+        },
       })
     }
-
-    // Get habit to check target
-    const isCompleted = log.count >= (habit.target || 1)
 
     return NextResponse.json({
       success: true,
@@ -76,8 +94,8 @@ export async function POST(request: NextRequest) {
         habitId: log.habitId,
         completed: log.completed,
         count: log.count,
-        isCompleted
-      }
+        isCompleted: log.completed,
+      },
     })
   } catch (error) {
     console.error('Log habit error:', error)

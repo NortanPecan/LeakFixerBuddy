@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { parseDateKey, getStartOfDay, getEndOfDay, getDayOfWeek } from '@/lib/date-utils'
+import { formatDateKey, parseDateKey, getStartOfDay, getStartOfNextDay, getDayOfWeek } from '@/lib/date-utils'
+import { isScheduledDay, parseScheduleDays } from '@/lib/streak-utils'
 import { requireSelf } from '@/lib/server-auth'
 
 interface DailySummary {
@@ -77,12 +78,12 @@ export async function GET(request: NextRequest) {
     }
     await requireSelf(request, userId)
 
-    const targetDate = dateStr ? parseDateKey(dateStr) : new Date()
-    const dateKey = targetDate.toISOString().split('T')[0]
+    const targetDate = dateStr ? parseDateKey(dateStr) : getStartOfDay(new Date())
+    const dateKey = formatDateKey(targetDate)
     const dayOfWeek = getDayOfWeek(targetDate)
 
     const startOfDay = getStartOfDay(targetDate)
-    const endOfDay = getEndOfDay(targetDate)
+    const startOfNextDay = getStartOfNextDay(targetDate)
 
     // 7-day rolling window for calorie average
     const sevenDaysAgo = new Date(startOfDay)
@@ -120,7 +121,7 @@ export async function GET(request: NextRequest) {
           userId,
           date: {
             gte: startOfDay,
-            lt: endOfDay
+            lt: startOfNextDay
           }
         }
       }),
@@ -181,7 +182,7 @@ export async function GET(request: NextRequest) {
     // 7-day rolling calorie average (5.5)
     const pastByDay = new Map<string, number>()
     for (const e of pastFoodEntries) {
-      const key = e.date.toISOString().split('T')[0]
+      const key = formatDateKey(e.date)
       pastByDay.set(key, (pastByDay.get(key) || 0) + (e.calories || 0))
     }
     const pastDaysWithFood = Array.from(pastByDay.values()).filter(c => c > 0)
@@ -231,12 +232,7 @@ export async function GET(request: NextRequest) {
     // Calculate rituals
     // Filter rituals for today's day of week
     const todayRituals = activeRituals.filter(r => {
-      try {
-        const days = JSON.parse(r.days as string) as number[]
-        return days.includes(dayOfWeek) || days.length === 0
-      } catch {
-        return true
-      }
+      return isScheduledDay(targetDate, parseScheduleDays(r.days))
     })
 
     const completedRitualsCount = todayRituals.filter(r => {
@@ -261,12 +257,7 @@ export async function GET(request: NextRequest) {
     // Calculate supplements
     // Filter supplements for today's day of week
     const todaySupplements = activeSupplements.filter(s => {
-      try {
-        const days = JSON.parse(s.days as string) as number[]
-        return days.includes(dayOfWeek) || days.length === 0
-      } catch {
-        return true
-      }
+      return isScheduledDay(targetDate, parseScheduleDays(s.days))
     })
 
     const checkedSupplementsCount = todaySupplements.filter(s => {

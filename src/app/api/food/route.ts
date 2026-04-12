@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { normalizeToDate, getStartOfDay, getEndOfDay, formatDateKey, parseDateKey } from '@/lib/date-utils'
+import {
+  formatDateKey,
+  getStartOfDay,
+  getStartOfNextDay,
+  normalizeToDate,
+  parseDateKey,
+} from '@/lib/date-utils'
 import { requireSelf } from '@/lib/server-auth'
 
-// GET /api/food?userId=xxx - Get food entries for today
-// GET /api/food?userId=xxx&date=YYYY-MM-DD - Get food for specific date
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const userId = searchParams.get('userId')
@@ -20,48 +24,48 @@ export async function GET(request: NextRequest) {
   try {
     const targetDate = dateParam ? parseDateKey(dateParam) : normalizeToDate(new Date())
     const startOfTargetDay = getStartOfDay(targetDate)
-    const endOfTargetDay = getEndOfDay(targetDate)
+    const startOfNextDay = getStartOfNextDay(targetDate)
 
     const entries = await db.foodEntry.findMany({
       where: {
         userId,
         date: {
           gte: startOfTargetDay,
-          lt: endOfTargetDay
-        }
+          lt: startOfNextDay,
+        },
       },
-      orderBy: { createdAt: 'asc' }
+      orderBy: { createdAt: 'asc' },
     })
 
-    // Calculate totals
     const totals = {
-      calories: entries.reduce((sum, e) => sum + (e.calories || 0), 0),
-      protein: entries.reduce((sum, e) => sum + (e.protein || 0), 0),
-      fat: entries.reduce((sum, e) => sum + (e.fat || 0), 0),
-      carbs: entries.reduce((sum, e) => sum + (e.carbs || 0), 0)
+      calories: entries.reduce((sum, entry) => sum + (entry.calories || 0), 0),
+      protein: entries.reduce((sum, entry) => sum + (entry.protein || 0), 0),
+      fat: entries.reduce((sum, entry) => sum + (entry.fat || 0), 0),
+      carbs: entries.reduce((sum, entry) => sum + (entry.carbs || 0), 0),
     }
 
-    // Group by meal type (including custom types)
     const byMealType: Record<string, typeof entries> = {
       breakfast: [],
       lunch: [],
       dinner: [],
-      snack: []
+      snack: [],
     }
-    
-    entries.forEach(entry => {
+
+    entries.forEach((entry) => {
       if (entry.mealType.startsWith('custom:')) {
-        // Custom meal type - use the full type as key
         if (!byMealType[entry.mealType]) {
           byMealType[entry.mealType] = []
         }
         byMealType[entry.mealType].push(entry)
-      } else if (byMealType[entry.mealType]) {
-        byMealType[entry.mealType].push(entry)
-      } else {
-        // Unknown type - put in snack
-        byMealType.snack.push(entry)
+        return
       }
+
+      if (byMealType[entry.mealType]) {
+        byMealType[entry.mealType].push(entry)
+        return
+      }
+
+      byMealType.snack.push(entry)
     })
 
     return NextResponse.json({
@@ -69,7 +73,7 @@ export async function GET(request: NextRequest) {
       date: formatDateKey(targetDate),
       entries,
       totals,
-      byMealType
+      byMealType,
     })
   } catch (error) {
     console.error('Error fetching food entries:', error)
@@ -77,7 +81,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/food - Create food entry
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -105,8 +108,8 @@ export async function POST(request: NextRequest) {
         amount,
         quality,
         note,
-        date: targetDate
-      }
+        date: targetDate,
+      },
     })
 
     return NextResponse.json({ success: true, entry })
@@ -116,7 +119,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// DELETE /api/food?id=xxx - Delete food entry
 export async function DELETE(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
@@ -146,7 +148,6 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-// PATCH /api/food - Update food entry
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
@@ -183,7 +184,7 @@ export async function PATCH(request: NextRequest) {
 
     const entry = await db.foodEntry.update({
       where: { id },
-      data: updateData
+      data: updateData,
     })
 
     return NextResponse.json({ success: true, entry })
