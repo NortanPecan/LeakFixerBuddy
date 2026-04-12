@@ -91,6 +91,7 @@ export function HomeScreen() {
     isDemoMode,
     selectedDate,
     setScreen,
+    setSelectedContentId,
   } = useAppStore();
   const [isLoading, setIsLoading] = useState(true);
   const [showMoodDialog, setShowMoodDialog] = useState(false);

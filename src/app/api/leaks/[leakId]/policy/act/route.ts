@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireSelf } from "@/lib/server-auth";
 import {
@@ -94,7 +95,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
       type: eventType,
       at: now,
       policyCorrelationId: correlationId || null,
-      policyActionType: actionType,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      policyActionType: actionType as any,
       actionId: actionId || null,
       actionTitle: actionTitle || null,
       actionKind: actionKind || null,
@@ -142,7 +144,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
                 at: now,
                 mode: targetMode as LeakPlanMode,
                 policyCorrelationId: correlationId || null,
-                policyActionType: actionType,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                policyActionType: actionType as any,
                 actionId: actionId || null,
                 actionTitle: actionTitle || null,
                 actionKind: actionKind || null,
@@ -155,7 +158,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
           await tx.leak.update({
             where: { id: leakId },
             data: {
-              contextSnapshot: txSnapshot,
+              contextSnapshot: txSnapshot as unknown as Prisma.InputJsonValue,
             },
           });
         });
@@ -185,7 +188,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
           actionTitle: actionTitle || null,
           actionKind: actionKind || null,
           policyCorrelationId: correlationId || null,
-          policyActionType: actionType,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          policyActionType: actionType as any,
           actor: "user",
           attempt,
           factors: factors || [],
@@ -212,7 +216,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
     await db.leak.update({
       where: { id: leakId },
       data: {
-        contextSnapshot: snapshot,
+        contextSnapshot: snapshot as unknown as Prisma.InputJsonValue,
       },
     });
 

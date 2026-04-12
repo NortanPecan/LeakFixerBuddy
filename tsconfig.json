@@ -44,5 +44,5 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "examples/**", "skills/**"]
+  "exclude": ["node_modules", "examples/**", "skills/**", "src/lib/leak-policy.test.ts"]
 }

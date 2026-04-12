@@ -1197,7 +1197,12 @@ export function FinanceScreen() {
               <Input
                 type="date"
                 value={newTransaction.date}
-                onChange={(e) => setNewTransaction((prev) => ({ ...prev, date: e.target.value }))}
+                onChange={(e) =>
+                  setNewTransaction((prev) => ({
+                    ...prev,
+                    date: e.target.value as `${number}-${number}-${number}`,
+                  }))
+                }
               />
             </div>
             <div className="space-y-2">
@@ -1728,7 +1733,12 @@ export function FinanceScreen() {
               <Input
                 type="date"
                 value={transferForm.date}
-                onChange={(e) => setTransferForm((prev) => ({ ...prev, date: e.target.value }))}
+                onChange={(e) =>
+                  setTransferForm((prev) => ({
+                    ...prev,
+                    date: e.target.value as `${number}-${number}-${number}`,
+                  }))
+                }
               />
             </div>
             <div className="space-y-2">

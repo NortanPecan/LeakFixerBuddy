@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireSelf } from "@/lib/server-auth";
 import { appendRunJournal, compactSnapshot } from "@/lib/leak-policy";
@@ -73,7 +74,7 @@ function normalizeFeedbackLog(raw: unknown): FeedbackLogEntry[] {
         updatedAt: candidate.updatedAt,
       };
     })
-    .filter((item): item is FeedbackLogEntry => Boolean(item));
+    .filter((item): item is NonNullable<typeof item> => Boolean(item)) as FeedbackLogEntry[];
 }
 
 function normalizeTriedSolution(item: unknown): {
@@ -517,22 +518,22 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
       await tx.leak.update({
         where: { id: leakId },
         data: {
-          contextSnapshot: compactedSnapshot,
+          contextSnapshot: compactedSnapshot as unknown as Prisma.InputJsonValue,
         },
       });
 
       const pattern = await tx.userAiPattern.upsert({
         where: { userId_leakType: { userId, leakType: leak.title } },
         update: {
-          triedSolutions,
-          whatWorked,
+          triedSolutions: triedSolutions as unknown as Prisma.InputJsonValue,
+          whatWorked: whatWorked as unknown as Prisma.InputJsonValue,
         },
         create: {
           userId,
           leakType: leak.title,
-          lastAnalysis: null,
-          triedSolutions,
-          whatWorked,
+          lastAnalysis: null as unknown as Prisma.InputJsonValue,
+          triedSolutions: triedSolutions as unknown as Prisma.InputJsonValue,
+          whatWorked: whatWorked as unknown as Prisma.InputJsonValue,
           analysisCount: existingPattern?.analysisCount ?? 1,
           lastProvider: null,
         },

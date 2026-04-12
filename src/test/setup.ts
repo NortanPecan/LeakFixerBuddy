@@ -1,3 +1,4 @@
+/// <reference types="vitest/globals" />
 import "@testing-library/jest-dom";
 
 // Suppress console.error/warn in tests unless explicitly needed

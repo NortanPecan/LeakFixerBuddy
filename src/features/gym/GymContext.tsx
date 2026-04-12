@@ -91,7 +91,8 @@ export interface TodayData {
 
 export interface GymContextValue {
   // user
-  user: ReturnType<typeof useAppStore>["user"];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  user: any;
 
   // Core data
   periods: GymPeriod[];

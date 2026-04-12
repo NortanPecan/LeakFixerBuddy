@@ -58,7 +58,7 @@ export async function generateWeeklyDigest(
   // Collect stats
   const [user, fitnessDays, dailyStates, ritualCompletions, activeRituals, gymWorkouts, topLeak] =
     await Promise.all([
-      db.user.findUnique({
+      db.appUser.findUnique({
         where: { id: userId },
         select: { streak: true, day: true },
       }),
@@ -78,16 +78,22 @@ export async function generateWeeklyDigest(
       }),
     ]);
 
+  type DailyState = (typeof dailyStates)[number];
   const avgMood = dailyStates.length
-    ? (dailyStates.reduce((s, d) => s + (d.mood ?? 5), 0) / dailyStates.length).toFixed(1)
+    ? (
+        dailyStates.reduce((s: number, d: DailyState) => s + (d.mood ?? 5), 0) / dailyStates.length
+      ).toFixed(1)
     : null;
   const avgEnergy = dailyStates.length
-    ? (dailyStates.reduce((s, d) => s + (d.energy ?? 5), 0) / dailyStates.length).toFixed(1)
-    : null;
-  const avgSleep = dailyStates.filter((d) => d.sleepHours).length
     ? (
-        dailyStates.reduce((s, d) => s + (d.sleepHours ?? 0), 0) /
-        dailyStates.filter((d) => d.sleepHours).length
+        dailyStates.reduce((s: number, d: DailyState) => s + (d.energy ?? 5), 0) /
+        dailyStates.length
+      ).toFixed(1)
+    : null;
+  const avgSleep = dailyStates.filter((d: DailyState) => d.sleepHours).length
+    ? (
+        dailyStates.reduce((s: number, d: DailyState) => s + (d.sleepHours ?? 0), 0) /
+        dailyStates.filter((d: DailyState) => d.sleepHours).length
       ).toFixed(1)
     : null;
   const avgCalories: number | null = null; // FitnessDaily has no calories field

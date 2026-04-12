@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
 
     // BUG-5 FIX: Use record's preset if exists
     const recordPreset = weeklyRecord?.preset || null;
-    const preset = recordPreset || currentSettingsPreset;
+    const preset = (recordPreset || currentSettingsPreset) as PresetLevel;
     const presetInfo = PRESET_INFO[preset];
 
     // Only expanded and full presets have weekly questions

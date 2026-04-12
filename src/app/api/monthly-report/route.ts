@@ -79,13 +79,13 @@ export async function GET(request: NextRequest) {
       db.habitLog
         .findMany({
           where: { userId, date: { gte: monthStart, lt: monthEnd } },
-          select: { date: true, value: true, habitId: true },
+          select: { date: true, completed: true, habitId: true },
         })
         .catch(() => []),
       db.transaction
         .findMany({
           where: { userId, date: { gte: monthStart, lt: monthEnd } },
-          select: { date: true, amount: true, type: true },
+          select: { date: true, amount: true },
         })
         .catch(() => []),
       db.task
@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
       );
       const dayHabits = habitLogs.filter((h) => h.date.toISOString().split("T")[0] === dateStr);
       const dayExpenses = transactions
-        .filter((t) => t.date.toISOString().split("T")[0] === dateStr && t.type === "expense")
+        .filter((t) => t.date.toISOString().split("T")[0] === dateStr && t.amount < 0)
         .reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
       const dayTasks = tasks.filter((t) => {
         const td = (t.date || t.updatedAt).toISOString().split("T")[0];

@@ -1,5 +1,6 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireSelf } from "@/lib/server-auth";
 import { generateLeakPlans, type LeakPlanMode } from "@/lib/ai-leak-plan";
@@ -10,6 +11,7 @@ import {
   getNumericMetricsSubset,
   getSnapshotMode,
   normalizeSnapshot,
+  type PolicyPlan,
 } from "@/lib/leak-policy";
 
 const PLAN_MODE_ORDER: LeakPlanMode[] = ["minimum", "base", "maximum"];
@@ -480,7 +482,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ lea
     const plans = await loadPlans(leakId);
     const previousSnapshot = normalizeSnapshot(target.leak.contextSnapshot);
     const liveContext = await buildLiveLeakContext(userId, leakId);
-    const policy = buildLeakPolicy(plans, previousSnapshot, liveContext);
+    const policy = buildLeakPolicy(plans as unknown as PolicyPlan[], previousSnapshot, liveContext);
     return NextResponse.json({ plans, policy });
   } catch (error) {
     console.error("Error fetching leak plans:", error);
@@ -525,7 +527,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
       if (existingPlans.length > 0) {
         const previousSnapshot = normalizeSnapshot(target.leak.contextSnapshot);
         const liveContext = await buildLiveLeakContext(userId, leakId);
-        const policy = buildLeakPolicy(existingPlans, previousSnapshot, liveContext);
+        const policy = buildLeakPolicy(
+          existingPlans as unknown as PolicyPlan[],
+          previousSnapshot,
+          liveContext
+        );
         return NextResponse.json({ plans: existingPlans, cached: true, policy });
       }
     }
@@ -540,7 +546,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
     const previousSnapshot = normalizeSnapshot(target.leak.contextSnapshot);
     const liveContext = await buildLiveLeakContext(userId, leakId);
     const selectedPlanMode = getSnapshotMode(previousSnapshot, "selectedPlanMode") || "base";
-    let mergedSnapshot = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let mergedSnapshot: Record<string, any> = {
       ...previousSnapshot,
       live: liveContext,
       history: liveContext.history,
@@ -581,7 +588,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
     await db.leak.update({
       where: { id: leakId },
       data: {
-        contextSnapshot: mergedSnapshot,
+        contextSnapshot: mergedSnapshot as unknown as Prisma.InputJsonValue,
       },
     });
 
@@ -589,7 +596,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
       userId,
       leak: {
         ...target.leak,
-        contextSnapshot: mergedSnapshot,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        contextSnapshot: mergedSnapshot as any,
       },
       retryFocus,
     });
@@ -627,7 +635,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
                 kind: action.kind,
                 title: action.title,
                 description: action.description ?? null,
-                payload: action.payload ?? null,
+                payload: (action.payload ?? null) as unknown as Prisma.InputJsonValue,
                 sortOrder: index,
               })),
             },
@@ -637,7 +645,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
     });
 
     const storedPlans = await loadPlans(leakId);
-    const policy = buildLeakPolicy(storedPlans, mergedSnapshot, liveContext);
+    const policy = buildLeakPolicy(
+      storedPlans as unknown as PolicyPlan[],
+      mergedSnapshot,
+      liveContext
+    );
     return NextResponse.json({ plans: storedPlans, provider, cached: false, policy });
   } catch (error) {
     console.error("Error generating leak plans:", error);
@@ -697,7 +709,7 @@ export async function PATCH(
       await tx.leak.update({
         where: { id: leakId },
         data: {
-          contextSnapshot: nextSnapshot,
+          contextSnapshot: nextSnapshot as unknown as Prisma.InputJsonValue,
         },
       });
     });
@@ -709,7 +721,7 @@ export async function PATCH(
     });
     const snapshot = normalizeSnapshot(leakState?.contextSnapshot);
     const liveContext = await buildLiveLeakContext(userId, leakId);
-    const policy = buildLeakPolicy(plans, snapshot, liveContext);
+    const policy = buildLeakPolicy(plans as unknown as PolicyPlan[], snapshot, liveContext);
     return NextResponse.json({ plans, selectedMode: mode, policy });
   } catch (error) {
     console.error("Error selecting leak plan:", error);

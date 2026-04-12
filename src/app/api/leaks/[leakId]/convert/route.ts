@@ -229,7 +229,7 @@ async function runLeakActionLinkHealthCheck(
       await tx.leakActionLink.update({
         where: { id: link.id },
         data: {
-          metadata,
+          metadata: metadata as unknown as Prisma.InputJsonValue,
           status: "active",
         },
       });
@@ -676,7 +676,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
             contextSnapshot: compactSnapshot({
               ...snapshot,
               contextUpdatedAt: new Date().toISOString(),
-            }),
+            }) as unknown as Prisma.InputJsonValue,
           },
         });
       } else {
@@ -691,7 +691,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
             contextSnapshot: compactSnapshot({
               ...snapshot,
               contextUpdatedAt: new Date().toISOString(),
-            }),
+            }) as unknown as Prisma.InputJsonValue,
           },
         });
       }

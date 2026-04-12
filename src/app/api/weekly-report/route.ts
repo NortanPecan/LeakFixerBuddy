@@ -78,15 +78,15 @@ export async function GET(request: NextRequest) {
       db.habitLog
         .findMany({
           where: { userId, date: { gte: weekStart, lt: weekEnd } },
-          select: { date: true, value: true, habitId: true },
+          select: { date: true, completed: true, habitId: true },
         })
-        .catch(() => [] as { date: Date; value: number; habitId: string }[]),
+        .catch(() => [] as { date: Date; completed: boolean; habitId: string }[]),
       db.transaction
         .findMany({
           where: { userId, date: { gte: weekStart, lt: weekEnd } },
-          select: { date: true, amount: true, type: true },
+          select: { date: true, amount: true },
         })
-        .catch(() => [] as { date: Date; amount: number; type: string }[]),
+        .catch(() => [] as { date: Date; amount: number }[]),
     ]);
 
     // Build per-day map
@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
       );
       const dayHabits = habitLogs.filter((h) => h.date.toISOString().split("T")[0] === dateStr);
       const dayExpenses = transactions
-        .filter((t) => t.date.toISOString().split("T")[0] === dateStr && t.type === "expense")
+        .filter((t) => t.date.toISOString().split("T")[0] === dateStr && t.amount < 0)
         .reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
 
       days.push({

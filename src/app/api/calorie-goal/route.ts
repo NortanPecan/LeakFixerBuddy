@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
     const dailyDeficitPlan = totalDeficit / totalDays;
 
     // Weight progress: get latest measurement
-    const latestMeasurement = await db.bodyMeasurement.findFirst({
+    const latestMeasurement = await db.measurement.findFirst({
       where: { userId, type: "weight" },
       orderBy: { date: "desc" },
     });
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
       );
       return {
         date: d.toISOString().split("T")[0],
-        calories: dayRecord?.calories ?? null,
+        calories: ((dayRecord as Record<string, unknown>)?.calories as number) ?? null,
         target: dailyTarget,
       };
     });
@@ -214,7 +214,7 @@ export async function PATCH(request: NextRequest) {
     let resolvedStartWeight = startWeight;
     if (!resolvedStartWeight) {
       const profile = await db.userProfile.findUnique({ where: { userId } });
-      const latestMeasurement = await db.bodyMeasurement.findFirst({
+      const latestMeasurement = await db.measurement.findFirst({
         where: { userId, type: "weight" },
         orderBy: { date: "desc" },
       });

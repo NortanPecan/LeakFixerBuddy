@@ -356,7 +356,7 @@ export function calculateHabitStreak(
   legacyOptions?: LegacyHabitOptions
 ): StreakResult {
   if (!Array.isArray(inputOrCompletions)) {
-    return calculateHabitStreakFromInput(inputOrCompletions);
+    return calculateHabitStreakFromInput(inputOrCompletions as HabitStreakInput);
   }
 
   const options = typeof periodDays === "number" ? legacyOptions : periodDays;

@@ -130,7 +130,8 @@ export async function DELETE(request: NextRequest) {
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
   try {
-    const auth = await requireAuthenticatedUser(request);
+    const auth = requireAuthenticatedUser(request);
+    if ("error" in auth) return auth.error;
     const existing = await db.buddyChallenge.findUnique({
       where: { id },
       select: { initiatorId: true, partnerId: true },

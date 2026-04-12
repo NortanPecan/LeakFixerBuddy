@@ -1007,8 +1007,9 @@ async function saveLearnedPattern(
       if (patterns.length > 50) patterns.splice(50);
     }
 
-    // Cast to satisfy Prisma Json type
-    const patternsJson = patterns as unknown as Record<string, unknown>[];
+    // Cast to satisfy Prisma Json type (InputJsonValue)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const patternsJson = patterns as unknown as any[];
     await db.userAiPattern.upsert({
       where: { userId_leakType: { userId, leakType: "tg_input_patterns" } },
       update: { lastAnalysis: patternsJson, updatedAt: new Date() },
@@ -1360,7 +1361,7 @@ async function runCoach(userId: string, question: string): Promise<string> {
     fitnessDays,
     topLeak,
   ] = await Promise.all([
-    db.user.findUnique({
+    db.appUser.findUnique({
       where: { id: userId },
       select: { streak: true, day: true, firstName: true },
     }),
@@ -1380,16 +1381,21 @@ async function runCoach(userId: string, question: string): Promise<string> {
     }),
   ]);
 
+  type DS = (typeof dailyStates)[number];
   const avgMood = dailyStates.length
-    ? (dailyStates.reduce((s, d) => s + (d.mood ?? 5), 0) / dailyStates.length).toFixed(1)
+    ? (dailyStates.reduce((s: number, d: DS) => s + (d.mood ?? 5), 0) / dailyStates.length).toFixed(
+        1
+      )
     : null;
   const avgEnergy = dailyStates.length
-    ? (dailyStates.reduce((s, d) => s + (d.energy ?? 5), 0) / dailyStates.length).toFixed(1)
-    : null;
-  const avgSleep = dailyStates.filter((d) => d.sleepHours).length
     ? (
-        dailyStates.reduce((s, d) => s + (d.sleepHours ?? 0), 0) /
-        dailyStates.filter((d) => d.sleepHours).length
+        dailyStates.reduce((s: number, d: DS) => s + (d.energy ?? 5), 0) / dailyStates.length
+      ).toFixed(1)
+    : null;
+  const avgSleep = dailyStates.filter((d: DS) => d.sleepHours).length
+    ? (
+        dailyStates.reduce((s: number, d: DS) => s + (d.sleepHours ?? 0), 0) /
+        dailyStates.filter((d: DS) => d.sleepHours).length
       ).toFixed(1)
     : null;
   const ritualRate =

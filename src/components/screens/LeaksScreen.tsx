@@ -751,7 +751,7 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
     };
   }
 
-  if (workedActions > 0 && leak.status !== "resolved") {
+  if (workedActions > 0) {
     return {
       tone: "emerald" as LeakGuidanceTone,
       title: "Есть рабочие решения",
@@ -1109,7 +1109,7 @@ function normalizePattern(rawPattern: unknown): LeakPattern | null {
         typeof candidate.linkedEntityType === "string" ? candidate.linkedEntityType : null,
       linkedEntityLabel:
         typeof candidate.linkedEntityLabel === "string" ? candidate.linkedEntityLabel : null,
-    } as LeakPattern["triedSolutions"][number];
+    } as NonNullable<LeakPattern["triedSolutions"]>[number];
   };
 
   const triedSolutions = Array.isArray(pattern.triedSolutions)
@@ -1315,7 +1315,7 @@ function getFeedbackLogFromSnapshot(
         updatedAt: candidate.updatedAt,
       };
     })
-    .filter((item): item is FeedbackLogItem => Boolean(item));
+    .filter(Boolean) as FeedbackLogItem[];
 }
 
 function getLeakFeedbackByAction(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
@@ -1784,7 +1784,7 @@ function normalizeNextBestAction(value: unknown): NextBestActionHint | null {
       ? candidate.targetMode
       : null;
   const factors = Array.isArray(candidate.factors)
-    ? candidate.factors
+    ? (candidate.factors
         .map((item) => {
           if (!item || typeof item !== "object") return null;
           const factor = item as Record<string, unknown>;
@@ -1795,8 +1795,8 @@ function normalizeNextBestAction(value: unknown): NextBestActionHint | null {
             detail: typeof factor.detail === "string" ? factor.detail : undefined,
           };
         })
-        .filter((item): item is NonNullable<NextBestActionHint["factors"]>[number] => Boolean(item))
-        .slice(0, 5)
+        .filter(Boolean)
+        .slice(0, 5) as NonNullable<NextBestActionHint["factors"]>)
     : [];
   return {
     type,
@@ -1989,15 +1989,20 @@ function normalizePolicyFunnel(value: unknown) {
       typeof funnel.nextPendingOutcomeActionTitle === "string"
         ? funnel.nextPendingOutcomeActionTitle
         : null,
-    stage:
-      funnel.stage === "suggested" ||
-      funnel.stage === "accepted" ||
-      funnel.stage === "awaiting_feedback" ||
-      funnel.stage === "learning" ||
-      funnel.stage === "completed" ||
-      funnel.stage === "rejected"
-        ? funnel.stage
-        : "suggested",
+    stage: (funnel.stage === "suggested" ||
+    funnel.stage === "accepted" ||
+    funnel.stage === "awaiting_feedback" ||
+    funnel.stage === "learning" ||
+    funnel.stage === "completed" ||
+    funnel.stage === "rejected"
+      ? funnel.stage
+      : "suggested") as
+      | "completed"
+      | "accepted"
+      | "suggested"
+      | "awaiting_feedback"
+      | "learning"
+      | "rejected",
     suggestedAgeMinutes:
       typeof funnel.suggestedAgeMinutes === "number"
         ? Math.round(funnel.suggestedAgeMinutes)
@@ -2043,26 +2048,23 @@ function normalizePolicyFunnel(value: unknown) {
             pendingFeedback: false,
             noOutcomeAfterCreate: false,
           },
-    primaryStuckSignal:
-      funnel.primaryStuckSignal === "pending_feedback" ||
-      funnel.primaryStuckSignal === "no_entity_after_accept" ||
-      funnel.primaryStuckSignal === "no_decision" ||
-      funnel.primaryStuckSignal === "none"
-        ? funnel.primaryStuckSignal
-        : "none",
+    primaryStuckSignal: (funnel.primaryStuckSignal === "pending_feedback" ||
+    funnel.primaryStuckSignal === "no_entity_after_accept" ||
+    funnel.primaryStuckSignal === "no_decision" ||
+    funnel.primaryStuckSignal === "none"
+      ? funnel.primaryStuckSignal
+      : "none") as "none" | "pending_feedback" | "no_entity_after_accept" | "no_decision",
     stuckScore: typeof funnel.stuckScore === "number" ? Math.round(funnel.stuckScore) : 0,
-    urgency:
-      funnel.urgency === "low" || funnel.urgency === "medium" || funnel.urgency === "high"
-        ? funnel.urgency
-        : "low",
+    urgency: (funnel.urgency === "low" || funnel.urgency === "medium" || funnel.urgency === "high"
+      ? funnel.urgency
+      : "low") as "low" | "medium" | "high",
     urgencyReason: typeof funnel.urgencyReason === "string" ? funnel.urgencyReason : "Нет данных",
-    recommendedNudge:
-      funnel.recommendedNudge === "accept_or_reject" ||
-      funnel.recommendedNudge === "create_entity" ||
-      funnel.recommendedNudge === "collect_feedback" ||
-      funnel.recommendedNudge === "none"
-        ? funnel.recommendedNudge
-        : "none",
+    recommendedNudge: (funnel.recommendedNudge === "accept_or_reject" ||
+    funnel.recommendedNudge === "create_entity" ||
+    funnel.recommendedNudge === "collect_feedback" ||
+    funnel.recommendedNudge === "none"
+      ? funnel.recommendedNudge
+      : "none") as "accept_or_reject" | "create_entity" | "collect_feedback" | "none",
     recommendedNudgeReason:
       typeof funnel.recommendedNudgeReason === "string"
         ? funnel.recommendedNudgeReason
@@ -2090,7 +2092,7 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
     executionScore: normalizeExecutionScore(candidate.executionScore),
     adaptiveModeSuggestion: normalizeAdaptiveMode(candidate.adaptiveModeSuggestion),
     runJournal: Array.isArray(candidate.runJournal)
-      ? candidate.runJournal
+      ? (candidate.runJournal
           .map((item) => {
             if (!item || typeof item !== "object") return null;
             const event = item as Record<string, unknown>;
@@ -2111,7 +2113,7 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
               decision: typeof event.decision === "string" ? event.decision : null,
               attempt: typeof event.attempt === "number" ? Math.round(event.attempt) : null,
               factors: Array.isArray(event.factors)
-                ? event.factors
+                ? (event.factors
                     .map((factor) => {
                       if (!factor || typeof factor !== "object") return null;
                       const item = factor as Record<string, unknown>;
@@ -2123,15 +2125,11 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
                         detail: typeof item.detail === "string" ? item.detail : undefined,
                       };
                     })
-                    .filter((factor): factor is { key: string; weight: number; detail?: string } =>
-                      Boolean(factor)
-                    )
+                    .filter(Boolean) as Array<{ key: string; weight: number; detail?: string }>)
                 : [],
             };
           })
-          .filter((item): item is NonNullable<LeakPolicyHint["runJournal"]>[number] =>
-            Boolean(item)
-          )
+          .filter(Boolean) as NonNullable<LeakPolicyHint["runJournal"]>)
       : undefined,
     summary:
       candidate.summary &&
@@ -2483,7 +2481,7 @@ export function LeaksScreen() {
         Array.isArray(patternsData.patterns)
           ? patternsData.patterns
               .map(normalizePattern)
-              .filter((item): item is LeakPattern => Boolean(item))
+              .filter((item: LeakPattern | null): item is LeakPattern => Boolean(item))
           : []
       );
     } catch (error) {
@@ -3213,7 +3211,8 @@ export function LeaksScreen() {
 
   const getActionFeedback = (action: LeakPlanAction) => getLatestPlanFeedback(action);
 
-  const getFeedbackCommentDraft = (action: LeakPlanAction) => {
+  const getFeedbackCommentDraft = (action: LeakPlanAction | null | undefined) => {
+    if (!action) return "";
     if (feedbackCommentByAction[action.id] !== undefined) {
       return feedbackCommentByAction[action.id];
     }
@@ -3484,7 +3483,7 @@ export function LeaksScreen() {
         [leakId]: nextPlans,
       }));
       const affectedActionIds = Array.isArray(data.affectedActionIds)
-        ? data.affectedActionIds.filter((item): item is string => typeof item === "string")
+        ? data.affectedActionIds.filter((item: unknown): item is string => typeof item === "string")
         : actionIds;
       const modeByActionId = new Map<string, LeakSolutionPlan["mode"]>();
       nextPlans.forEach((plan) => {
@@ -3493,7 +3492,7 @@ export function LeaksScreen() {
         });
       });
       const firstAffectedMode =
-        affectedActionIds.map((id) => modeByActionId.get(id)).find(Boolean) || null;
+        affectedActionIds.map((id: string) => modeByActionId.get(id)).find(Boolean) || null;
       const nextStatus =
         data.leak && typeof data.leak.status === "string" ? data.leak.status : null;
       const nextResolvedAt =
@@ -3538,7 +3537,7 @@ export function LeaksScreen() {
       }
       setFeedbackCommentByAction((current) => {
         const next = { ...current };
-        affectedActionIds.forEach((id) => {
+        affectedActionIds.forEach((id: string) => {
           next[id] = normalizedComment;
         });
         return next;
@@ -5836,7 +5835,9 @@ export function LeaksScreen() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => focusPlanAction(leak.id, guidance.bottleneckActionId)}
+                          onClick={() =>
+                            focusPlanAction(leak.id, guidance.bottleneckActionId || "")
+                          }
                           className="border-white/15 bg-white/5 text-white hover:bg-white/10"
                         >
                           Перейти к узкому шагу
@@ -6219,7 +6220,11 @@ export function LeaksScreen() {
                                           size="sm"
                                           variant="outline"
                                           onClick={() =>
-                                            setScreen(getActionScreen(item.entityType))
+                                            setScreen(
+                                              getActionScreen(
+                                                item.entityType as LeakActionLink["entityType"]
+                                              )
+                                            )
                                           }
                                           className="mt-1 border-white/15 bg-white/5 text-white hover:bg-white/10"
                                         >
@@ -6947,7 +6952,7 @@ export function LeaksScreen() {
                                               size="sm"
                                               variant="outline"
                                               onClick={() =>
-                                                focusPlanAction(leak.id, item.actionId)
+                                                focusPlanAction(leak.id, item.actionId || "")
                                               }
                                               className="border-white/15 bg-white/5 text-white hover:bg-white/10"
                                             >
@@ -6960,7 +6965,10 @@ export function LeaksScreen() {
                                               variant="outline"
                                               onClick={() =>
                                                 setScreen(
-                                                  getActionScreen(item.linkedEntity.entityType)
+                                                  getActionScreen(
+                                                    (item.linkedEntity?.entityType ??
+                                                      "task") as LeakActionLink["entityType"]
+                                                  )
                                                 )
                                               }
                                               className="border-white/15 bg-white/5 text-white hover:bg-white/10"

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireSelf } from "@/lib/server-auth";
 
@@ -144,7 +145,7 @@ export async function POST(request: NextRequest) {
         source: source || "manual",
         severity: severity || "warning",
         sphere: sphere?.trim() || null,
-        contextSnapshot: contextSnapshot ?? null,
+        contextSnapshot: (contextSnapshot ?? null) as unknown as Prisma.InputJsonValue,
       },
       include: {
         actions: {
@@ -210,7 +211,10 @@ export async function PATCH(request: NextRequest) {
           status,
           severity,
           sphere: sphere !== undefined ? sphere?.trim() || null : undefined,
-          contextSnapshot: contextSnapshot !== undefined ? (contextSnapshot ?? null) : undefined,
+          contextSnapshot:
+            contextSnapshot !== undefined
+              ? ((contextSnapshot ?? null) as unknown as Prisma.InputJsonValue)
+              : undefined,
           resolvedAt:
             status === "resolved"
               ? new Date()
@@ -232,7 +236,7 @@ export async function PATCH(request: NextRequest) {
           update: {
             label: appendAction.label.trim(),
             status: appendAction.status || "active",
-            metadata: appendAction.metadata ?? null,
+            metadata: (appendAction.metadata ?? null) as unknown as Prisma.InputJsonValue,
           },
           create: {
             leakId: id,
@@ -240,7 +244,7 @@ export async function PATCH(request: NextRequest) {
             entityId: appendAction.entityId,
             label: appendAction.label.trim(),
             status: appendAction.status || "active",
-            metadata: appendAction.metadata ?? null,
+            metadata: (appendAction.metadata ?? null) as unknown as Prisma.InputJsonValue,
           },
         });
       }

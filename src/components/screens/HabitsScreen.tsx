@@ -459,7 +459,7 @@ export function HabitsScreen() {
                                     backgroundColor: done
                                       ? habit.color || "#10b981"
                                       : "rgba(255,255,255,0.1)",
-                                    ringColor: habit.color,
+                                    // ring color applied via Tailwind's ring-offset; omit ringColor (invalid CSS property)
                                   }}
                                 />
                                 <span className="text-muted-foreground/60 text-[9px] leading-none">

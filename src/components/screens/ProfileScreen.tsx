@@ -264,10 +264,11 @@ export function ProfileScreen() {
 
         // Load settings
         const settingsRes = await fetch(`/api/settings?userId=${user.id}`);
+        let settingsData: { settings?: { hiddenWidgets?: string[]; theme?: string } } = {};
         if (settingsRes.ok) {
-          const settingsData = await settingsRes.json();
+          settingsData = await settingsRes.json();
           if (settingsData.settings) {
-            setSettings(settingsData.settings);
+            setSettings(settingsData.settings as unknown as UserSettings);
             // Apply saved theme
             if (settingsData.settings.theme) {
               setTheme(settingsData.settings.theme);

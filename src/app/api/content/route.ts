@@ -16,7 +16,8 @@ export async function GET(request: NextRequest) {
 
     // Get single item by id
     if (id) {
-      const auth = await requireAuthenticatedUser(request);
+      const auth = requireAuthenticatedUser(request);
+      if ("error" in auth) return auth.error;
       const item = await db.contentItem.findUnique({
         where: { id },
         include: {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireSelf } from "@/lib/server-auth";
 import {
@@ -7,6 +8,7 @@ import {
   compactSnapshot,
   normalizeSnapshot,
   type LeakPlanMode,
+  type PolicyPlan,
 } from "@/lib/leak-policy";
 
 async function loadPlans(leakId: string) {
@@ -559,7 +561,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ lea
 
     const plans = await loadPlans(leakId);
     const snapshot = normalizeSnapshot(leak.contextSnapshot);
-    const policy = buildLeakPolicy(plans, snapshot, pickLiveContext(snapshot));
+    const policy = buildLeakPolicy(
+      plans as unknown as PolicyPlan[],
+      snapshot,
+      pickLiveContext(snapshot)
+    );
 
     let nextSnapshot = snapshot;
     if (shouldAppendSuggestedEvent(snapshot, policy.nextBestAction?.correlationId || null)) {
@@ -579,7 +585,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ lea
       await db.leak.update({
         where: { id: leakId },
         data: {
-          contextSnapshot: nextSnapshot,
+          contextSnapshot: nextSnapshot as unknown as Prisma.InputJsonValue,
         },
       });
     }
@@ -597,7 +603,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ lea
         currentFunnel,
         recentFunnels,
         learningSignals: summarizeLearningSignals(nextSnapshot),
-        stuckOverview: summarizeStuckOverview(currentFunnel, recentFunnels),
+        stuckOverview: summarizeStuckOverview(
+          currentFunnel,
+          recentFunnels as unknown as Record<string, unknown>[]
+        ),
       },
       runJournal: Array.isArray(nextSnapshot.runJournal)
         ? nextSnapshot.runJournal.slice(0, 20)

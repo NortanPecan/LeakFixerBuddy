@@ -321,7 +321,7 @@ export async function GET(request: NextRequest) {
           where: {
             period: { userId },
             status: "completed",
-            completedAt: { gte: start, lte: end },
+            date: { gte: start, lte: end },
           },
           include: {
             exercises: {
@@ -337,7 +337,9 @@ export async function GET(request: NextRequest) {
 
         // Collect max weight per exercise
         const prMap = new Map<string, number>();
-        workouts.forEach((w) => {
+        type WorkoutEx = { name: string; sets: { weight: number | null }[] };
+        type WorkoutWithEx = { exercises: WorkoutEx[] };
+        (workouts as WorkoutWithEx[]).forEach((w) => {
           w.exercises.forEach((ex) => {
             ex.sets.forEach((set) => {
               if (set.weight !== null && set.weight > (prMap.get(ex.name) ?? 0)) {

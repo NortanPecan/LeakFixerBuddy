@@ -101,7 +101,8 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "id required" }, { status: 400 });
     }
 
-    const auth = await requireAuthenticatedUser(request);
+    const auth = requireAuthenticatedUser(request);
+    if ("error" in auth) return auth.error;
     const link = await db.noteLink.findUnique({
       where: { id },
       include: {

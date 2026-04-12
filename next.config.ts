@@ -23,13 +23,6 @@ const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: false,
 
-  typescript: {
-    // TODO: 106 pre-existing TypeScript errors to fix incrementally.
-    // Tracked via `bun x tsc --noEmit` in CI (non-blocking step).
-    // Remove this flag as errors are resolved.
-    ignoreBuildErrors: true,
-  },
-
   async headers() {
     return [
       {

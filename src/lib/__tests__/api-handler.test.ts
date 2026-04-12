@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import { NextRequest } from "next/server";
 import { apiHandler, RATE_LIMITS } from "../api-handler";
 import {
@@ -38,7 +38,8 @@ vi.mock("../rate-limit", async (importOriginal) => {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function makeRequest(url = "http://localhost/api/test", init?: RequestInit) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function makeRequest(url = "http://localhost/api/test", init?: any) {
   return new NextRequest(url, init);
 }
 

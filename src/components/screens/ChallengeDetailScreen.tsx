@@ -190,7 +190,7 @@ export function ChallengeDetailScreen() {
         if (d.sent) {
           const found = d.sent.find(
             (bc: BuddyChallengeInfo & { challenge: { id: string } }) =>
-              bc.challenge?.id === challenge.id || bc.challengeId === challenge.id
+              bc.challenge?.id === challenge.id
           );
           if (found) setBuddyChallenge(found);
         }
