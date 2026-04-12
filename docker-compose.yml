@@ -1,0 +1,53 @@
+##
+## LeakFixer Buddy — docker-compose for local development / staging preview
+##
+## Usage:
+##   cp .env.example .env.local
+##   docker compose up --build
+##
+## The app connects to Supabase in the cloud — no local Postgres needed.
+##
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    image: leakfixer-buddy:local
+    container_name: leakfixer-buddy
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+
+    # All secrets come from .env.local — never hardcoded here
+    env_file:
+      - .env.local
+
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+
+    # Health check using our /api/health endpoint
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    # Limit resource usage
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

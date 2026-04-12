@@ -31,7 +31,15 @@ $encodingPatterns = @(
 )
 
 function Get-UpstreamRange {
-  $upstream = git rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" 2>$null
+  # Wrap in try/catch: $ErrorActionPreference='Stop' would otherwise throw
+  # NativeCommandError on a new branch that has no upstream yet.
+  $upstream = try {
+    $ea = $ErrorActionPreference
+    $ErrorActionPreference = 'SilentlyContinue'
+    $result = git rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" 2>$null
+    $ErrorActionPreference = $ea
+    $result
+  } catch { $null }
   if ($LASTEXITCODE -eq 0 -and $upstream) {
     return "$($upstream.Trim())..HEAD"
   }

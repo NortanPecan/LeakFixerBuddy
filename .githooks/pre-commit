@@ -3,3 +3,6 @@ set -e
 
 echo "Running staged encoding guard..."
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "scripts/check-encoding-staged.ps1"
+
+echo "Running lint-staged (ESLint + Prettier on staged files)..."
+bun run lint-staged

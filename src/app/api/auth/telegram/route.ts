@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { authenticateTelegramUser, verifyTelegramInitData } from '@/lib/auth-telegram'
-import { db } from '@/lib/db'
-import { setAuthSession } from '@/lib/server-auth'
+import { NextRequest, NextResponse } from "next/server";
+import { authenticateTelegramUser, verifyTelegramInitData } from "@/lib/auth-telegram";
+import { db } from "@/lib/db";
+import { setAuthSession } from "@/lib/server-auth";
 
 function isDemoModeEnabled() {
-  return process.env.DEMO_MODE === 'true'
+  return process.env.DEMO_MODE === "true";
 }
 
 /**
@@ -13,62 +13,56 @@ function isDemoModeEnabled() {
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { initData, isDemo } = body
+    const body = await request.json();
+    const { initData, isDemo } = body;
 
-    let telegramUser
+    let telegramUser;
 
     if (isDemo) {
       if (!isDemoModeEnabled()) {
-        return NextResponse.json(
-          { error: 'Demo mode is disabled' },
-          { status: 403 }
-        )
+        return NextResponse.json({ error: "Demo mode is disabled" }, { status: 403 });
       }
 
       // Demo mode - create fake Telegram user
       telegramUser = {
         id: 9000000001,
-        first_name: 'Demo',
-        last_name: 'User',
-        username: 'demo_user',
-        language_code: 'ru',
-        photo_url: null
-      }
+        first_name: "Demo",
+        last_name: "User",
+        username: "demo_user",
+        language_code: "ru",
+        photo_url: undefined,
+      };
     } else {
       // Verify Telegram initData
-      const verification = verifyTelegramInitData(initData)
-      
+      const verification = verifyTelegramInitData(initData);
+
       if (!verification.valid) {
         return NextResponse.json(
-          { error: verification.error || 'Invalid Telegram data' },
+          { error: verification.error || "Invalid Telegram data" },
           { status: 401 }
-        )
+        );
       }
-      
-      telegramUser = verification.user!
+
+      telegramUser = verification.user!;
     }
 
     // Authenticate with Supabase
-    const authResult = await authenticateTelegramUser(telegramUser)
-    
+    const authResult = await authenticateTelegramUser(telegramUser);
+
     if (authResult.error) {
-      return NextResponse.json(
-        { error: 'Authentication failed' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: "Authentication failed" }, { status: 401 });
     }
 
-    const user = authResult.user!
-    const isNewUser = authResult.isNewUser
+    const user = authResult.user!;
+    const isNewUser = authResult.isNewUser;
 
     // Sync with local database (for Prisma compatibility)
-    const telegramIdBigInt = BigInt(telegramUser.id)
-    
+    const telegramIdBigInt = BigInt(telegramUser.id);
+
     let localUser = await db.appUser.findUnique({
       where: { telegramId: telegramIdBigInt },
-      include: { profile: true }
-    })
+      include: { profile: true },
+    });
 
     if (!localUser) {
       // Create local user
@@ -80,16 +74,16 @@ export async function POST(request: NextRequest) {
           telegramLastName: telegramUser.last_name,
           telegramLanguageCode: telegramUser.language_code,
           telegramPhotoUrl: telegramUser.photo_url,
-          authProvider: 'telegram',
-          lastLoginAt: new Date()
+          authProvider: "telegram",
+          lastLoginAt: new Date(),
         },
-        include: { profile: true }
-      })
+        include: { profile: true },
+      });
 
       // Create profile
       await db.userProfile.create({
-        data: { userId: localUser.id }
-      })
+        data: { userId: localUser.id },
+      });
     } else {
       // Update last login
       await db.appUser.update({
@@ -98,21 +92,21 @@ export async function POST(request: NextRequest) {
           telegramUsername: telegramUser.username,
           telegramFirstName: telegramUser.first_name,
           telegramLastName: telegramUser.last_name,
-          lastLoginAt: new Date()
-        }
-      })
+          lastLoginAt: new Date(),
+        },
+      });
     }
 
     // Get daily state for mood/energy
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     const dailyState = await db.dailyState.findFirst({
       where: {
         userId: localUser.id,
-        date: today
-      }
-    })
+        date: today,
+      },
+    });
 
     const response = NextResponse.json({
       success: true,
@@ -126,26 +120,25 @@ export async function POST(request: NextRequest) {
         language: localUser.language,
         day: localUser.day,
         streak: localUser.streak,
-        points: localUser.points
+        points: localUser.points,
       },
       profile: localUser.profile,
-      globalState: dailyState ? {
-        mood: dailyState.mood,
-        energy: dailyState.energy,
-        trend: 0
-      } : null,
+      globalState: dailyState
+        ? {
+            mood: dailyState.mood,
+            energy: dailyState.energy,
+            trend: 0,
+          }
+        : null,
       isNewUser,
       isDemo: isDemo || false,
-      supabaseUserId: user.id
-    })
+      supabaseUserId: user.id,
+    });
 
-    return setAuthSession(response, localUser.id, isDemo ? 'demo' : 'telegram')
+    return setAuthSession(response, localUser.id, isDemo ? "demo" : "telegram");
   } catch (error) {
-    console.error('Telegram auth error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error("Telegram auth error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -154,27 +147,23 @@ export async function POST(request: NextRequest) {
  * Demo authentication for testing
  */
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
-  const isDemo = searchParams.get('demo') === 'true'
+  const { searchParams } = new URL(request.url);
+  const isDemo = searchParams.get("demo") === "true";
 
   if (!isDemo) {
-    return NextResponse.json(
-      { error: 'Use POST with Telegram initData' },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: "Use POST with Telegram initData" }, { status: 400 });
   }
 
   if (!isDemoModeEnabled()) {
-    return NextResponse.json(
-      { error: 'Demo mode is disabled' },
-      { status: 403 }
-    )
+    return NextResponse.json({ error: "Demo mode is disabled" }, { status: 403 });
   }
 
   // Call POST with demo mode
-  return POST(new NextRequest(request.url, {
-    method: 'POST',
-    body: JSON.stringify({ isDemo: true }),
-    headers: { 'Content-Type': 'application/json' }
-  }))
+  return POST(
+    new NextRequest(request.url, {
+      method: "POST",
+      body: JSON.stringify({ isDemo: true }),
+      headers: { "Content-Type": "application/json" },
+    })
+  );
 }
