@@ -1,48 +1,48 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { normalizeToDate, parseDateKey } from '@/lib/date-utils'
-import { requireSelf } from '@/lib/server-auth'
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { normalizeToDate, parseDateKey } from "@/lib/date-utils";
+import { requireSelf } from "@/lib/server-auth";
 
 // POST /api/supplements/intake - Toggle intake checked status
 // Body: { supplementId, userId, date?: string, checked: boolean }
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { supplementId, userId, date, checked } = body
+    const body = await request.json();
+    const { supplementId, userId, date, checked } = body;
 
     if (!supplementId || !userId) {
-      return NextResponse.json({ error: 'supplementId and userId are required' }, { status: 400 })
+      return NextResponse.json({ error: "supplementId and userId are required" }, { status: 400 });
     }
-    await requireSelf(request, userId)
+    await requireSelf(request, userId);
 
     const supplement = await db.supplement.findUnique({
       where: { id: supplementId },
       select: { userId: true },
-    })
+    });
     if (!supplement) {
-      return NextResponse.json({ error: 'Supplement not found' }, { status: 404 })
+      return NextResponse.json({ error: "Supplement not found" }, { status: 404 });
     }
     if (supplement.userId !== userId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // Parse date or use today - normalize to start of day
-    const targetDate = date ? parseDateKey(date) : normalizeToDate(new Date())
+    const targetDate = date ? parseDateKey(date) : normalizeToDate(new Date());
 
     // Find existing intake
     let intake = await db.supplementIntake.findFirst({
       where: {
         supplementId,
-        date: targetDate
-      }
-    })
+        date: targetDate,
+      },
+    });
 
     if (intake) {
       // Update
       intake = await db.supplementIntake.update({
         where: { id: intake.id },
-        data: { checked }
-      })
+        data: { checked },
+      });
     } else {
       // Create new intake
       intake = await db.supplementIntake.create({
@@ -50,14 +50,14 @@ export async function POST(request: NextRequest) {
           supplementId,
           userId,
           date: targetDate,
-          checked
-        }
-      })
+          checked,
+        },
+      });
     }
 
-    return NextResponse.json({ success: true, intake })
+    return NextResponse.json({ success: true, intake });
   } catch (error) {
-    console.error('Error toggling intake:', error)
-    return NextResponse.json({ error: 'Failed to toggle intake' }, { status: 500 })
+    console.error("Error toggling intake:", error);
+    return NextResponse.json({ error: "Failed to toggle intake" }, { status: 500 });
   }
 }

@@ -1,12 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { requireSelf } from '@/lib/server-auth'
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { requireSelf } from "@/lib/server-auth";
 
-const SHIELD_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
+const SHIELD_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 function isShieldAvailable(streakShieldUsedAt: Date | null): boolean {
-  if (!streakShieldUsedAt) return true
-  return Date.now() - streakShieldUsedAt.getTime() > SHIELD_COOLDOWN_MS
+  if (!streakShieldUsedAt) return true;
+  return Date.now() - streakShieldUsedAt.getTime() > SHIELD_COOLDOWN_MS;
 }
 
 /**
@@ -14,28 +14,28 @@ function isShieldAvailable(streakShieldUsedAt: Date | null): boolean {
  * Check shield availability
  */
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
-  const userId = searchParams.get('userId')
+  const { searchParams } = new URL(request.url);
+  const userId = searchParams.get("userId");
 
   if (!userId) {
-    return NextResponse.json({ error: 'userId required' }, { status: 400 })
+    return NextResponse.json({ error: "userId required" }, { status: 400 });
   }
-  await requireSelf(request, userId)
+  await requireSelf(request, userId);
 
   try {
     const user = await db.appUser.findUnique({
       where: { id: userId },
       select: { streak: true, streakShieldUsedAt: true },
-    })
+    });
 
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const available = isShieldAvailable(user.streakShieldUsedAt)
+    const available = isShieldAvailable(user.streakShieldUsedAt);
     const rechargesAt = user.streakShieldUsedAt
       ? new Date(user.streakShieldUsedAt.getTime() + SHIELD_COOLDOWN_MS).toISOString()
-      : null
+      : null;
 
     return NextResponse.json({
       success: true,
@@ -43,10 +43,10 @@ export async function GET(request: NextRequest) {
       shieldAvailable: available,
       streakShieldUsedAt: user.streakShieldUsedAt?.toISOString() ?? null,
       rechargesAt,
-    })
+    });
   } catch (error) {
-    console.error('[Shield GET] Error:', error)
-    return NextResponse.json({ error: 'Failed to check shield' }, { status: 500 })
+    console.error("[Shield GET] Error:", error);
+    return NextResponse.json({ error: "Failed to check shield" }, { status: 500 });
   }
 }
 
@@ -57,45 +57,42 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await request.json()
+    const { userId } = await request.json();
 
     if (!userId) {
-      return NextResponse.json({ error: 'userId required' }, { status: 400 })
+      return NextResponse.json({ error: "userId required" }, { status: 400 });
     }
-    await requireSelf(request, userId)
+    await requireSelf(request, userId);
 
     const user = await db.appUser.findUnique({
       where: { id: userId },
       select: { streak: true, streakShieldUsedAt: true },
-    })
+    });
 
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     if (!isShieldAvailable(user.streakShieldUsedAt)) {
       const rechargesAt = new Date(
         user.streakShieldUsedAt!.getTime() + SHIELD_COOLDOWN_MS
-      ).toISOString()
-      return NextResponse.json(
-        { error: 'Shield is on cooldown', rechargesAt },
-        { status: 409 }
-      )
+      ).toISOString();
+      return NextResponse.json({ error: "Shield is on cooldown", rechargesAt }, { status: 409 });
     }
 
     const updated = await db.appUser.update({
       where: { id: userId },
       data: { streakShieldUsedAt: new Date() },
       select: { streak: true, streakShieldUsedAt: true },
-    })
+    });
 
     return NextResponse.json({
       success: true,
       streak: updated.streak,
       streakShieldUsedAt: updated.streakShieldUsedAt?.toISOString() ?? null,
-    })
+    });
   } catch (error) {
-    console.error('[Shield POST] Error:', error)
-    return NextResponse.json({ error: 'Failed to activate shield' }, { status: 500 })
+    console.error("[Shield POST] Error:", error);
+    return NextResponse.json({ error: "Failed to activate shield" }, { status: 500 });
   }
 }

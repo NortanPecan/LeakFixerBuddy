@@ -2,7 +2,7 @@
  * Fitness constants - Activity calories reference
  */
 
-import type { GymIntensity, CardioType, HomeExerciseType, DailyActivityType } from './types'
+import type { GymIntensity, CardioType, HomeExerciseType, DailyActivityType } from "./types";
 
 /** Calories burned per minute at 70kg body weight */
 export const ACTIVITY_CALORIES_PER_MIN: Record<string, number> = {
@@ -35,20 +35,20 @@ export const ACTIVITY_CALORIES_PER_MIN: Record<string, number> = {
   gardening: 5,
   stretching: 3,
   daily_other: 4,
-}
+};
 
 /** Calories per 1000 steps (approximate at 70kg) */
-export const CALORIES_PER_1000_STEPS = 35
+export const CALORIES_PER_1000_STEPS = 35;
 
 /** Default water baseline in ml */
-export const DEFAULT_WATER_BASELINE_ML = 2000
+export const DEFAULT_WATER_BASELINE_ML = 2000;
 
 /** Water quick add options in ml */
-export const WATER_QUICK_ADD_OPTIONS = [150, 250, 350, 500]
+export const WATER_QUICK_ADD_OPTIONS = [150, 250, 350, 500];
 
 /** Balance thresholds for color coding */
-export const BALANCE_GREEN_MAX = 300
-export const BALANCE_RED_THRESHOLD = 500
+export const BALANCE_GREEN_MAX = 300;
+export const BALANCE_RED_THRESHOLD = 500;
 
 /** Calorie targets by work profile */
 export const CALORIE_TARGETS_BY_PROFILE: Record<string, { base: number; activity: number }> = {
@@ -56,39 +56,42 @@ export const CALORIE_TARGETS_BY_PROFILE: Record<string, { base: number; activity
   moderate: { base: 2000, activity: 300 },
   active: { base: 2200, activity: 400 },
   very_active: { base: 2400, activity: 500 },
-}
+};
 
 /** Activity icons for display */
 export const ACTIVITY_ICONS: Record<string, string> = {
-  gym: '🏋️',
-  strength: '💪',
-  cardio: '🏃',
-  cardio_indoor: '🏃‍♂️',
-  cardio_outdoor: '🏃‍♀️',
-  home: '🏠',
-  home_exercise: '🤸',
-  steps: '👟',
-  daily: '🧹',
-  run: '🏃',
-  walk: '🚶',
-  bike: '🚴',
-  swim: '🏊',
-  cleaning: '🧹',
-  gardening: '🌱',
-  stretching: '🧘',
-}
+  gym: "🏋️",
+  strength: "💪",
+  cardio: "🏃",
+  cardio_indoor: "🏃‍♂️",
+  cardio_outdoor: "🏃‍♀️",
+  home: "🏠",
+  home_exercise: "🤸",
+  steps: "👟",
+  daily: "🧹",
+  run: "🏃",
+  walk: "🚶",
+  bike: "🚴",
+  swim: "🏊",
+  cleaning: "🧹",
+  gardening: "🌱",
+  stretching: "🧘",
+};
 
 /** Water hydration status */
-export function getHydrationStatus(currentMl: number, targetMl: number): {
-  percent: number
-  status: 'dehydrated' | 'low' | 'normal' | 'good' | 'excellent'
-  color: string
+export function getHydrationStatus(
+  currentMl: number,
+  targetMl: number
+): {
+  percent: number;
+  status: "dehydrated" | "low" | "normal" | "good" | "excellent";
+  color: string;
 } {
-  const percent = targetMl > 0 ? Math.round((currentMl / targetMl) * 100) : 0
+  const percent = targetMl > 0 ? Math.round((currentMl / targetMl) * 100) : 0;
 
-  if (percent < 25) return { percent, status: 'dehydrated', color: '#EF4444' }
-  if (percent < 50) return { percent, status: 'low', color: '#F97316' }
-  if (percent < 75) return { percent, status: 'normal', color: '#EAB308' }
-  if (percent < 100) return { percent, status: 'good', color: '#22C55E' }
-  return { percent, status: 'excellent', color: '#10B981' }
+  if (percent < 25) return { percent, status: "dehydrated", color: "#EF4444" };
+  if (percent < 50) return { percent, status: "low", color: "#F97316" };
+  if (percent < 75) return { percent, status: "normal", color: "#EAB308" };
+  if (percent < 100) return { percent, status: "good", color: "#22C55E" };
+  return { percent, status: "excellent", color: "#10B981" };
 }

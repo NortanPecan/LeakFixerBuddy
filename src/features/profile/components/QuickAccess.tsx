@@ -1,6 +1,6 @@
-'use client'
+"use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Target,
   Flame,
@@ -19,9 +19,9 @@ import {
   Users,
   Trophy,
   Settings,
-} from 'lucide-react'
-import { QUICK_ACCESS_ITEMS } from '../constants'
-import type { Screen } from '@/lib/store'
+} from "lucide-react";
+import { QUICK_ACCESS_ITEMS } from "../constants";
+import type { Screen } from "@/lib/store";
 
 // Icon mapping
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -41,10 +41,10 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Users,
   Trophy,
   Settings,
-}
+};
 
 interface QuickAccessProps {
-  onNavigate: (screen: Screen) => void
+  onNavigate: (screen: Screen) => void;
 }
 
 export function QuickAccess({ onNavigate }: QuickAccessProps) {
@@ -55,22 +55,22 @@ export function QuickAccess({ onNavigate }: QuickAccessProps) {
       </CardHeader>
       <CardContent className="space-y-2">
         {QUICK_ACCESS_ITEMS.map(({ screen, label, icon, color }) => {
-          const IconComponent = ICON_MAP[icon]
+          const IconComponent = ICON_MAP[icon];
           return (
             <button
               key={screen}
-              className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+              className="bg-muted/30 hover:bg-muted/50 flex w-full items-center justify-between rounded-lg p-3 transition-colors"
               onClick={() => onNavigate(screen as Screen)}
             >
               <div className="flex items-center gap-3">
-                {IconComponent && <IconComponent className={`w-5 h-5 ${color}`} />}
+                {IconComponent && <IconComponent className={`h-5 w-5 ${color}`} />}
                 <span className="font-medium">{label}</span>
               </div>
-              <ChevronRight className="w-5 h-5 text-muted-foreground" />
+              <ChevronRight className="text-muted-foreground h-5 w-5" />
             </button>
-          )
+          );
         })}
       </CardContent>
     </Card>
-  )
+  );
 }

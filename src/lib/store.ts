@@ -1,172 +1,215 @@
-import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
-import { formatDateKey, normalizeToDate, getToday, getTodayKey } from '@/lib/date-utils'
-import { getMoodStatus } from '@/lib/mood-utils'
+import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
+import { formatDateKey, normalizeToDate, getToday, getTodayKey } from "@/lib/date-utils";
+import { getMoodStatus } from "@/lib/mood-utils";
 
 // Navigation state
-export type Screen = 'home' | 'fitness' | 'rituals' | 'gym' | 'profile' | 'create-ritual' | 'catalog' | 'all-rituals' | 'tasks' | 'chain' | 'create-task' | 'create-chain' | 'notes' | 'note-detail' | 'development' | 'content-detail' | 'finance' | 'challenges' | 'challenge-detail' | 'health' | 'daily-summary' | 'goals' | 'skills' | 'traits' | 'export' | 'stats' | 'buddies' | 'journey' | 'leaks' | 'onboarding' | 'zones' | 'settings' | 'weekly-report' | 'monthly-report' | 'habits' | 'calorie-goal'
+export type Screen =
+  | "home"
+  | "fitness"
+  | "rituals"
+  | "gym"
+  | "profile"
+  | "create-ritual"
+  | "catalog"
+  | "all-rituals"
+  | "tasks"
+  | "chain"
+  | "create-task"
+  | "create-chain"
+  | "notes"
+  | "note-detail"
+  | "development"
+  | "content-detail"
+  | "finance"
+  | "challenges"
+  | "challenge-detail"
+  | "health"
+  | "daily-summary"
+  | "goals"
+  | "skills"
+  | "traits"
+  | "export"
+  | "stats"
+  | "buddies"
+  | "journey"
+  | "leaks"
+  | "onboarding"
+  | "zones"
+  | "settings"
+  | "weekly-report"
+  | "monthly-report"
+  | "habits"
+  | "calorie-goal";
 
-export const DEFAULT_NAV_ITEMS: Screen[] = ['home', 'gym', 'rituals', 'goals', 'leaks', 'profile']
-const LEGACY_DEFAULT_NAV_ITEMS: Screen[] = ['home', 'gym', 'rituals', 'goals', 'profile']
+export const DEFAULT_NAV_ITEMS: Screen[] = ["home", "gym", "rituals", "goals", "leaks", "profile"];
+const LEGACY_DEFAULT_NAV_ITEMS: Screen[] = ["home", "gym", "rituals", "goals", "profile"];
 
 function isSameNavItems(left: Screen[], right: Screen[]) {
-  return left.length === right.length && left.every((screen, index) => screen === right[index])
+  return left.length === right.length && left.every((screen, index) => screen === right[index]);
 }
 
 interface User {
-  id: string
-  telegramId: string
-  username: string | null
-  firstName: string | null
-  lastName: string | null
-  photoUrl: string | null
-  language: string
-  day: number
-  streak: number
-  points: number
-  streakShieldUsedAt: string | null
+  id: string;
+  telegramId: string;
+  username: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  photoUrl: string | null;
+  language: string;
+  day: number;
+  streak: number;
+  points: number;
+  streakShieldUsedAt: string | null;
 }
 
 interface UserProfile {
-  weight?: number
-  height?: number
-  age?: number
-  targetWeight?: number
-  workProfile?: string
-  waterBaseline?: number
-  bio?: string
+  weight?: number;
+  height?: number;
+  age?: number;
+  targetWeight?: number;
+  workProfile?: string;
+  waterBaseline?: number;
+  bio?: string;
   // Body measurements
-  waist?: number
-  hips?: number
-  chest?: number
-  bicep?: number
-  thigh?: number
+  waist?: number;
+  hips?: number;
+  chest?: number;
+  bicep?: number;
+  thigh?: number;
 }
 
 interface GlobalState {
-  mood: number // 1-10
-  energy: number // 1-10
-  trend: number // change from yesterday
-  status: string
+  mood: number; // 1-10
+  energy: number; // 1-10
+  trend: number; // change from yesterday
+  status: string;
 }
 
 interface DailyData {
-  water: { current: number; target: number }
-  calories: { eaten: number; burned: number; target: number }
-  activities: unknown[]
-  foods: unknown[]
-  mood?: number
-  energy?: number
+  water: { current: number; target: number };
+  calories: { eaten: number; burned: number; target: number };
+  activities: unknown[];
+  foods: unknown[];
+  mood?: number;
+  energy?: number;
 }
 
 interface Buddy {
-  id: string
-  partnerId: string
-  partnerName: string
-  partnerPhoto?: string
-  status: 'pending' | 'accepted' | 'rejected'
+  id: string;
+  partnerId: string;
+  partnerName: string;
+  partnerPhoto?: string;
+  status: "pending" | "accepted" | "rejected";
 }
 
 interface GymPeriod {
-  id: string
-  name: string
-  type: string
-  cycleLength: number
-  workoutsPerCycle: number
-  totalCycles: number
-  currentCycle: number
-  currentDay: number
-  isActive: boolean
+  id: string;
+  name: string;
+  type: string;
+  cycleLength: number;
+  workoutsPerCycle: number;
+  totalCycles: number;
+  currentCycle: number;
+  currentDay: number;
+  isActive: boolean;
 }
 
 interface AppState {
   // Navigation
-  currentScreen: Screen
-  setScreen: (screen: Screen) => void
-  selectedContentId: string | null
-  setSelectedContentId: (id: string | null) => void
-  selectedChainId: string | null
-  setSelectedChainId: (id: string | null) => void
+  currentScreen: Screen;
+  setScreen: (screen: Screen) => void;
+  selectedContentId: string | null;
+  setSelectedContentId: (id: string | null) => void;
+  selectedChainId: string | null;
+  setSelectedChainId: (id: string | null) => void;
 
   // Date selection (for daily tracking)
-  selectedDate: string // YYYY-MM-DD format
-  selectedDateObj: Date // Date object for convenience
-  setSelectedDate: (date: Date) => void
-  goToPrevDay: () => void
-  goToNextDay: () => void
-  goToToday: () => void
-  isToday: () => boolean
-  isFutureDate: () => boolean
+  selectedDate: string; // YYYY-MM-DD format
+  selectedDateObj: Date; // Date object for convenience
+  setSelectedDate: (date: Date) => void;
+  goToPrevDay: () => void;
+  goToNextDay: () => void;
+  goToToday: () => void;
+  isToday: () => boolean;
+  isFutureDate: () => boolean;
 
   // User
-  user: User | null
-  profile: UserProfile | null
-  setUser: (user: User | null) => void
-  setProfile: (profile: UserProfile | null) => void
+  user: User | null;
+  profile: UserProfile | null;
+  setUser: (user: User | null) => void;
+  setProfile: (profile: UserProfile | null) => void;
 
   // Global state (mood widget)
-  globalState: GlobalState | null
-  setGlobalState: (state: GlobalState) => void
+  globalState: GlobalState | null;
+  setGlobalState: (state: GlobalState) => void;
 
   // Daily data cache
-  dailyData: Record<string, DailyData>
-  setDailyData: (date: string, data: DailyData) => void
+  dailyData: Record<string, DailyData>;
+  setDailyData: (date: string, data: DailyData) => void;
 
   // Buddies
-  buddies: Buddy[]
-  setBuddies: (buddies: Buddy[]) => void
+  buddies: Buddy[];
+  setBuddies: (buddies: Buddy[]) => void;
 
   // Gym
-  activeGymPeriod: GymPeriod | null
-  setActiveGymPeriod: (period: GymPeriod | null) => void
+  activeGymPeriod: GymPeriod | null;
+  setActiveGymPeriod: (period: GymPeriod | null) => void;
 
   // Custom nav
-  navItems: Screen[]
-  setNavItems: (items: Screen[]) => void
+  navItems: Screen[];
+  setNavItems: (items: Screen[]) => void;
 
   // Demo mode
-  isDemoMode: boolean
-  setDemoMode: (demo: boolean) => void
-  isOwnerMode: boolean
-  setOwnerMode: (owner: boolean) => void
+  isDemoMode: boolean;
+  setDemoMode: (demo: boolean) => void;
+  isOwnerMode: boolean;
+  setOwnerMode: (owner: boolean) => void;
 
   // Loading
-  isLoading: boolean
-  isInitialized: boolean
-  setIsLoading: (loading: boolean) => void
-  setIsInitialized: (initialized: boolean) => void
+  isLoading: boolean;
+  isInitialized: boolean;
+  setIsLoading: (loading: boolean) => void;
+  setIsInitialized: (initialized: boolean) => void;
 
   // Actions
-  login: (isDemo?: boolean) => Promise<boolean>
-  loginWithEmail: (email: string, password: string, action: 'signin' | 'signup', name?: string) => Promise<{ ok: boolean; error?: string }>
-  logout: () => Promise<void>
-  updateProgress: (day?: number, streak?: number, points?: number) => Promise<void>
-  updateGlobalState: (mood: number, energy: number) => Promise<void>
-  loadDailyData: (date: string) => Promise<DailyData | null>
-  saveWater: (date: string, ml: number) => Promise<void>
+  login: (isDemo?: boolean) => Promise<boolean>;
+  loginWithEmail: (
+    email: string,
+    password: string,
+    action: "signin" | "signup",
+    name?: string
+  ) => Promise<{ ok: boolean; error?: string }>;
+  logout: () => Promise<void>;
+  updateProgress: (day?: number, streak?: number, points?: number) => Promise<void>;
+  updateGlobalState: (mood: number, energy: number) => Promise<void>;
+  loadDailyData: (date: string) => Promise<DailyData | null>;
+  saveWater: (date: string, ml: number) => Promise<void>;
 }
 
 function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function buildGlobalStateFromResponse(data: { globalState?: { mood: number; energy?: number; trend?: number } | null }): GlobalState | null {
-  if (!data.globalState) return null
+function buildGlobalStateFromResponse(data: {
+  globalState?: { mood: number; energy?: number; trend?: number } | null;
+}): GlobalState | null {
+  if (!data.globalState) return null;
 
-  const moodStatus = getMoodStatus(data.globalState.mood)
+  const moodStatus = getMoodStatus(data.globalState.mood);
   return {
     mood: data.globalState.mood,
     energy: data.globalState.energy || 5,
     trend: data.globalState.trend || 0,
     status: moodStatus.status,
-  }
+  };
 }
 
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
       // Navigation
-      currentScreen: 'home',
+      currentScreen: "home",
       setScreen: (screen) => set({ currentScreen: screen }),
       selectedContentId: null,
       setSelectedContentId: (id) => set({ selectedContentId: id }),
@@ -176,35 +219,37 @@ export const useAppStore = create<AppState>()(
       // Date selection
       selectedDate: formatDateKey(getToday()),
       selectedDateObj: getToday(),
-      setSelectedDate: (date) => set({
-        selectedDate: formatDateKey(date),
-        selectedDateObj: normalizeToDate(date)
-      }),
+      setSelectedDate: (date) =>
+        set({
+          selectedDate: formatDateKey(date),
+          selectedDateObj: normalizeToDate(date),
+        }),
       goToPrevDay: () => {
-        const current = get().selectedDateObj
-        const prev = new Date(current)
-        prev.setDate(prev.getDate() - 1)
+        const current = get().selectedDateObj;
+        const prev = new Date(current);
+        prev.setDate(prev.getDate() - 1);
         set({
           selectedDate: formatDateKey(prev),
-          selectedDateObj: normalizeToDate(prev)
-        })
+          selectedDateObj: normalizeToDate(prev),
+        });
       },
       goToNextDay: () => {
-        const current = get().selectedDateObj
-        const next = new Date(current)
-        next.setDate(next.getDate() + 1)
+        const current = get().selectedDateObj;
+        const next = new Date(current);
+        next.setDate(next.getDate() + 1);
         // Don't allow future dates
-        const today = getToday()
-        if (next > today) return
+        const today = getToday();
+        if (next > today) return;
         set({
           selectedDate: formatDateKey(next),
-          selectedDateObj: normalizeToDate(next)
-        })
+          selectedDateObj: normalizeToDate(next),
+        });
       },
-      goToToday: () => set({
-        selectedDate: formatDateKey(getToday()),
-        selectedDateObj: getToday()
-      }),
+      goToToday: () =>
+        set({
+          selectedDate: formatDateKey(getToday()),
+          selectedDateObj: getToday(),
+        }),
       isToday: () => get().selectedDate === formatDateKey(getToday()),
       isFutureDate: () => get().selectedDateObj > getToday(),
 
@@ -220,9 +265,10 @@ export const useAppStore = create<AppState>()(
 
       // Daily data
       dailyData: {},
-      setDailyData: (date, data) => set((state) => ({
-        dailyData: { ...state.dailyData, [date]: data }
-      })),
+      setDailyData: (date, data) =>
+        set((state) => ({
+          dailyData: { ...state.dailyData, [date]: data },
+        })),
 
       // Buddies
       buddies: [],
@@ -250,24 +296,24 @@ export const useAppStore = create<AppState>()(
 
       // Login
       login: async (isDemo = false) => {
-        set({ isLoading: true })
+        set({ isLoading: true });
 
         // Save auth mode to localStorage for persistence
-        if (typeof window !== 'undefined') {
+        if (typeof window !== "undefined") {
           if (isDemo) {
-            localStorage.setItem('leakfixer-auth-mode', 'demo')
+            localStorage.setItem("leakfixer-auth-mode", "demo");
           }
         }
 
         try {
-          let response: Response
+          let response: Response;
 
           if (isDemo) {
-            response = await fetch('/api/auth?demo=true')
+            response = await fetch("/api/auth?demo=true");
           } else {
-            const sessionResponse = await fetch('/api/auth/session', { cache: 'no-store' })
+            const sessionResponse = await fetch("/api/auth/session", { cache: "no-store" });
             if (sessionResponse.ok) {
-              const sessionData = await sessionResponse.json()
+              const sessionData = await sessionResponse.json();
               set({
                 user: sessionData.user,
                 profile: sessionData.profile,
@@ -276,55 +322,57 @@ export const useAppStore = create<AppState>()(
                 isOwnerMode: false,
                 isInitialized: true,
                 isLoading: false,
-              })
-              return true
+              });
+              return true;
             }
 
-            const tg = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp
-            const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : ''
-            const isTelegramContext = !!tg || /Telegram/i.test(userAgent)
+            const tg = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } })
+              .Telegram?.WebApp;
+            const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
+            const isTelegramContext = !!tg || /Telegram/i.test(userAgent);
 
-            let initData = tg?.initData
+            let initData = tg?.initData;
             if (!initData && isTelegramContext) {
               // In Telegram clients initData may appear with a short delay.
               for (let i = 0; i < 20; i++) {
-                await sleep(150)
-                initData = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData
-                if (initData) break
+                await sleep(150);
+                initData = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } })
+                  .Telegram?.WebApp?.initData;
+                if (initData) break;
               }
             }
 
             if (!initData) {
               if (isTelegramContext) {
                 // We're in Telegram but initData is missing — don't silently go demo
-                if (typeof window !== 'undefined') {
-                  ;(window as unknown as { __leakfixerAuthError?: string }).__leakfixerAuthError =
-                    'Не удалось получить данные Telegram. Перезапустите мини-приложение.'
+                if (typeof window !== "undefined") {
+                  (window as unknown as { __leakfixerAuthError?: string }).__leakfixerAuthError =
+                    "Не удалось получить данные Telegram. Перезапустите мини-приложение.";
                 }
-                set({ isLoading: false })
-                return false
+                set({ isLoading: false });
+                return false;
               }
-              if (typeof window !== 'undefined') {
-                ;(window as unknown as { __leakfixerAuthError?: string }).__leakfixerAuthError =
-                  'Открой мини-приложение через Telegram или войди по email.'
+              if (typeof window !== "undefined") {
+                (window as unknown as { __leakfixerAuthError?: string }).__leakfixerAuthError =
+                  "Открой мини-приложение через Telegram или войди по email.";
               }
-              set({ isLoading: false })
-              return false
+              set({ isLoading: false });
+              return false;
             }
 
-            response = await fetch('/api/auth', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ initData })
-            })
+            response = await fetch("/api/auth", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ initData }),
+            });
           }
 
           if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}))
-            throw new Error(errorData.error || 'Auth failed')
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || "Auth failed");
           }
 
-          const data = await response.json()
+          const data = await response.json();
 
           set({
             user: data.user,
@@ -333,38 +381,38 @@ export const useAppStore = create<AppState>()(
             isDemoMode: data.isDemo || false,
             isOwnerMode: false,
             isInitialized: true,
-            isLoading: false
-          })
+            isLoading: false,
+          });
 
-          return true
+          return true;
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Auth failed'
-          console.error('Login error:', error)
-          if (typeof window !== 'undefined') {
-            ;(window as unknown as { __leakfixerAuthError?: string }).__leakfixerAuthError = message
+          const message = error instanceof Error ? error.message : "Auth failed";
+          console.error("Login error:", error);
+          if (typeof window !== "undefined") {
+            (window as unknown as { __leakfixerAuthError?: string }).__leakfixerAuthError = message;
           }
-          set({ isLoading: false })
-          return false
+          set({ isLoading: false });
+          return false;
         }
       },
 
       // Email login
       loginWithEmail: async (email, password, action, name) => {
-        set({ isLoading: true })
+        set({ isLoading: true });
         try {
-          const response = await fetch('/api/auth/email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+          const response = await fetch("/api/auth/email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email, password, action, name }),
-          })
-          const data = await response.json()
+          });
+          const data = await response.json();
 
           if (!response.ok) {
-            return { ok: false, error: data.error || 'Auth failed' }
+            return { ok: false, error: data.error || "Auth failed" };
           }
 
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('leakfixer-auth-mode', 'email')
+          if (typeof window !== "undefined") {
+            localStorage.setItem("leakfixer-auth-mode", "email");
           }
 
           set({
@@ -375,26 +423,26 @@ export const useAppStore = create<AppState>()(
             isOwnerMode: false,
             isInitialized: true,
             isLoading: false,
-          })
+          });
 
-          return { ok: true }
+          return { ok: true };
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Auth failed'
-          set({ isLoading: false })
-          return { ok: false, error: message }
+          const message = error instanceof Error ? error.message : "Auth failed";
+          set({ isLoading: false });
+          return { ok: false, error: message };
         }
       },
 
       // Logout
       logout: async () => {
         try {
-          await fetch('/api/auth/session', { method: 'DELETE' })
+          await fetch("/api/auth/session", { method: "DELETE" });
         } catch (error) {
-          console.error('Logout error:', error)
+          console.error("Logout error:", error);
         }
 
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('leakfixer-auth-mode')
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("leakfixer-auth-mode");
         }
 
         set({
@@ -406,68 +454,73 @@ export const useAppStore = create<AppState>()(
           activeGymPeriod: null,
           isDemoMode: false,
           isOwnerMode: false,
-          isInitialized: false
-        })
+          isInitialized: false,
+        });
       },
 
       // Update progress
       updateProgress: async (day, streak, points) => {
-        const { user } = get()
-        if (!user) return
+        const { user } = get();
+        if (!user) return;
 
         try {
-          await fetch('/api/user', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: user.id, day, streak, points })
-          })
+          await fetch("/api/user", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: user.id, day, streak, points }),
+          });
 
           set({
-            user: { ...user, day: day ?? user.day, streak: streak ?? user.streak, points: points ?? user.points }
-          })
+            user: {
+              ...user,
+              day: day ?? user.day,
+              streak: streak ?? user.streak,
+              points: points ?? user.points,
+            },
+          });
         } catch (error) {
-          console.error('Update progress error:', error)
+          console.error("Update progress error:", error);
         }
       },
 
       // Update global state
       updateGlobalState: async (mood, energy) => {
-        const { user } = get()
-        if (!user) return
+        const { user } = get();
+        if (!user) return;
 
-        const moodStatus = getMoodStatus(mood)
-        const currentState = get().globalState
-        const trend = currentState ? mood - currentState.mood : 0
+        const moodStatus = getMoodStatus(mood);
+        const currentState = get().globalState;
+        const trend = currentState ? mood - currentState.mood : 0;
 
         const newState: GlobalState = {
           mood,
           energy,
           trend,
-          status: moodStatus.status
-        }
+          status: moodStatus.status,
+        };
 
-        set({ globalState: newState })
+        set({ globalState: newState });
 
         try {
-          const today = getTodayKey()
-          await fetch('/api/state', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: user.id, date: today, mood, energy })
-          })
+          const today = getTodayKey();
+          await fetch("/api/state", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: user.id, date: today, mood, energy }),
+          });
         } catch (error) {
-          console.error('Update state error:', error)
+          console.error("Update state error:", error);
         }
       },
 
       // Load daily data
       loadDailyData: async (date) => {
-        const { user, setDailyData } = get()
-        if (!user) return null
+        const { user, setDailyData } = get();
+        if (!user) return null;
 
         try {
-          const response = await fetch(`/api/fitness?userId=${user.id}&date=${date}`)
-          const data = await response.json()
+          const response = await fetch(`/api/fitness?userId=${user.id}&date=${date}`);
+          const data = await response.json();
 
           if (data.data) {
             const dailyData: DailyData = {
@@ -476,95 +529,104 @@ export const useAppStore = create<AppState>()(
               activities: data.data.activities || [],
               foods: data.data.foods || [],
               mood: data.data.mood,
-              energy: data.data.energy
-            }
-            setDailyData(date, dailyData)
-            return dailyData
+              energy: data.data.energy,
+            };
+            setDailyData(date, dailyData);
+            return dailyData;
           }
-          return null
+          return null;
         } catch (error) {
-          console.error('Load daily data error:', error)
-          return null
+          console.error("Load daily data error:", error);
+          return null;
         }
       },
 
       // Save water
       saveWater: async (date, ml) => {
-        const { user, dailyData, setDailyData } = get()
-        if (!user) return
+        const { user, dailyData, setDailyData } = get();
+        if (!user) return;
 
-        const current = dailyData[date] || { water: { current: 0, target: 2000 }, calories: { eaten: 0, burned: 0, target: 2200 }, activities: [], foods: [] }
-        const updated = { ...current, water: { ...current.water, current: ml } }
-        setDailyData(date, updated)
+        const current = dailyData[date] || {
+          water: { current: 0, target: 2000 },
+          calories: { eaten: 0, burned: 0, target: 2200 },
+          activities: [],
+          foods: [],
+        };
+        const updated = { ...current, water: { ...current.water, current: ml } };
+        setDailyData(date, updated);
 
         try {
-          await fetch('/api/fitness', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: user.id, date, water: updated.water })
-          })
+          await fetch("/api/fitness", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: user.id, date, water: updated.water }),
+          });
         } catch (error) {
-          console.error('Save water error:', error)
+          console.error("Save water error:", error);
         }
-      }
+      },
     }),
     {
-      name: 'leakfixer-storage',
+      name: "leakfixer-storage",
       // Only use localStorage on client side to avoid SSR errors
-      storage: typeof window !== 'undefined' ? createJSONStorage(() => localStorage) : undefined,
+      storage: typeof window !== "undefined" ? createJSONStorage(() => localStorage) : undefined,
       merge: (persistedState, currentState) => {
         const merged = {
           ...currentState,
           ...(persistedState as Partial<AppState>),
+        };
+
+        const persistedNavItems = (persistedState as Partial<AppState>)?.navItems;
+        if (
+          Array.isArray(persistedNavItems) &&
+          isSameNavItems(persistedNavItems, LEGACY_DEFAULT_NAV_ITEMS)
+        ) {
+          merged.navItems = DEFAULT_NAV_ITEMS;
         }
 
-        const persistedNavItems = (persistedState as Partial<AppState>)?.navItems
-        if (Array.isArray(persistedNavItems) && isSameNavItems(persistedNavItems, LEGACY_DEFAULT_NAV_ITEMS)) {
-          merged.navItems = DEFAULT_NAV_ITEMS
-        }
-
-        return merged
+        return merged;
       },
-      partialize: (state) => ({
-        user: state.user,
-        profile: state.profile,
-        globalState: state.globalState,
-        isDemoMode: state.isDemoMode,
-        isOwnerMode: state.isOwnerMode,
-        dailyData: state.dailyData,
-        buddies: state.buddies,
-        activeGymPeriod: state.activeGymPeriod,
-        selectedContentId: state.selectedContentId,
-        selectedChainId: state.selectedChainId,
-        selectedDate: state.selectedDate,
-        navItems: state.navItems
-      }) as AppState
+      partialize: (state) =>
+        ({
+          user: state.user,
+          profile: state.profile,
+          globalState: state.globalState,
+          isDemoMode: state.isDemoMode,
+          isOwnerMode: state.isOwnerMode,
+          dailyData: state.dailyData,
+          buddies: state.buddies,
+          activeGymPeriod: state.activeGymPeriod,
+          selectedContentId: state.selectedContentId,
+          selectedChainId: state.selectedChainId,
+          selectedDate: state.selectedDate,
+          navItems: state.navItems,
+        }) as AppState,
     }
   )
-)
+);
 
 // Telegram WebApp types
 declare global {
   interface Window {
     Telegram?: {
       WebApp?: {
-        initData: string
+        initData: string;
         initDataUnsafe: {
           user?: {
-            id: number
-            first_name?: string
-            last_name?: string
-            username?: string
-            photo_url?: string
-            language_code?: string
-          }
-        }
-        close: () => void
-        expand: () => void
-        ready: () => void
-        themeParams: Record<string, string>
-        colorScheme: 'light' | 'dark'
-      }
-    }
+            id: number;
+            first_name?: string;
+            last_name?: string;
+            username?: string;
+            photo_url?: string;
+            language_code?: string;
+          };
+        };
+        close: () => void;
+        expand: () => void;
+        ready: () => void;
+        themeParams: Record<string, string>;
+        colorScheme: "light" | "dark";
+      };
+    };
   }
 }

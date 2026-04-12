@@ -1,83 +1,83 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useAppStore } from '@/lib/store'
-import { showSuccessToast, showErrorToast, isOnline } from '@/lib/network-utils'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { ArrowLeft, Calendar, Clock, Link2 } from 'lucide-react'
-import { getTodayKey, getTomorrowKey } from '@/lib/date-utils'
+import { useState } from "react";
+import { useAppStore } from "@/lib/store";
+import { showSuccessToast, showErrorToast, isOnline } from "@/lib/network-utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { ArrowLeft, Calendar, Clock, Link2 } from "lucide-react";
+import { getTodayKey, getTomorrowKey } from "@/lib/date-utils";
 
 const ZONES = [
-  { id: 'LeakFixer', label: 'LeakFixer', icon: '🔧' },
-  { id: 'AI', label: 'ИИ', icon: '🤖' },
-  { id: 'Poker', label: 'Покер', icon: '♠️' },
-  { id: 'Health', label: 'Здоровье', icon: '❤️' },
-]
+  { id: "LeakFixer", label: "LeakFixer", icon: "🔧" },
+  { id: "AI", label: "ИИ", icon: "🤖" },
+  { id: "Poker", label: "Покер", icon: "♠️" },
+  { id: "Health", label: "Здоровье", icon: "❤️" },
+];
 
 export function CreateTaskScreen() {
-  const { user, setScreen, selectedDate } = useAppStore()
-  const [isSaving, setIsSaving] = useState(false)
+  const { user, setScreen, selectedDate } = useAppStore();
+  const [isSaving, setIsSaving] = useState(false);
 
-  const [text, setText] = useState('')
-  const [date, setDate] = useState(() => selectedDate || getTodayKey())
-  const [time, setTime] = useState('')
-  const [zone, setZone] = useState('')
-  const [notes, setNotes] = useState('')
-  const [noDate, setNoDate] = useState(false)
-  const [quickDate, setQuickDate] = useState<'today' | 'tomorrow' | 'custom'>('today')
+  const [text, setText] = useState("");
+  const [date, setDate] = useState(() => selectedDate || getTodayKey());
+  const [time, setTime] = useState("");
+  const [zone, setZone] = useState("");
+  const [notes, setNotes] = useState("");
+  const [noDate, setNoDate] = useState(false);
+  const [quickDate, setQuickDate] = useState<"today" | "tomorrow" | "custom">("today");
 
-  const handleQuickDate = (mode: 'today' | 'tomorrow' | 'custom') => {
-    setQuickDate(mode)
-    setNoDate(false)
-    if (mode === 'today') setDate(getTodayKey())
-    else if (mode === 'tomorrow') setDate(getTomorrowKey())
-  }
+  const handleQuickDate = (mode: "today" | "tomorrow" | "custom") => {
+    setQuickDate(mode);
+    setNoDate(false);
+    if (mode === "today") setDate(getTodayKey());
+    else if (mode === "tomorrow") setDate(getTomorrowKey());
+  };
 
   const handleSave = async () => {
-    if (!user?.id || !text.trim()) return
+    if (!user?.id || !text.trim()) return;
 
     if (!isOnline()) {
-      showErrorToast(new Error('Нет подключения к интернету'), 'создание дела')
-      return
+      showErrorToast(new Error("Нет подключения к интернету"), "создание дела");
+      return;
     }
 
-    setIsSaving(true)
+    setIsSaving(true);
     try {
-      const response = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           text: text.trim(),
           date: noDate ? null : date,
           time: time || undefined,
           zone: zone || undefined,
-          notes: notes.trim() || undefined
-        })
-      })
-      if (!response.ok) throw new Error('Failed to create task')
-      showSuccessToast('Дело создано')
-      setScreen('tasks')
+          notes: notes.trim() || undefined,
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to create task");
+      showSuccessToast("Дело создано");
+      setScreen("tasks");
     } catch (error) {
-      showErrorToast(error, 'создание дела')
+      showErrorToast(error, "создание дела");
     } finally {
-      setIsSaving(false)
+      setIsSaving(false);
     }
-  }
+  };
 
   return (
     <div className="flex flex-col gap-4 pb-20">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => setScreen('tasks')}>
-          <ArrowLeft className="w-5 h-5" />
+        <Button variant="ghost" size="icon" onClick={() => setScreen("tasks")}>
+          <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
           <h1 className="text-xl font-bold">Новое дело</h1>
-          <p className="text-sm text-muted-foreground">Добавь задачу</p>
+          <p className="text-muted-foreground text-sm">Добавь задачу</p>
         </div>
       </div>
 
@@ -88,66 +88,66 @@ export function CreateTaskScreen() {
           <Input
             placeholder="Например: Написать ТЗ для ритуалов"
             value={text}
-            onChange={e => setText(e.target.value)}
+            onChange={(e) => setText(e.target.value)}
           />
         </div>
 
         {/* Date - Quick Actions */}
         <div className="space-y-2">
           <Label className="flex items-center gap-2">
-            <Calendar className="w-4 h-4" />
+            <Calendar className="h-4 w-4" />
             Дата
           </Label>
-          
+
           {/* Quick date buttons */}
           <div className="flex gap-2">
             <Button
               size="sm"
-              variant={noDate ? 'outline' : quickDate === 'today' ? 'default' : 'outline'}
-              onClick={() => handleQuickDate('today')}
+              variant={noDate ? "outline" : quickDate === "today" ? "default" : "outline"}
+              onClick={() => handleQuickDate("today")}
               className="flex-1"
             >
               Сегодня
             </Button>
             <Button
               size="sm"
-              variant={quickDate === 'tomorrow' ? 'default' : 'outline'}
-              onClick={() => handleQuickDate('tomorrow')}
+              variant={quickDate === "tomorrow" ? "default" : "outline"}
+              onClick={() => handleQuickDate("tomorrow")}
               className="flex-1"
             >
               Завтра
             </Button>
             <Button
               size="sm"
-              variant={quickDate === 'custom' ? 'default' : 'outline'}
-              onClick={() => handleQuickDate('custom')}
+              variant={quickDate === "custom" ? "default" : "outline"}
+              onClick={() => handleQuickDate("custom")}
               className="flex-1"
             >
-              <Calendar className="w-4 h-4" />
+              <Calendar className="h-4 w-4" />
             </Button>
           </div>
-          
+
           {/* Custom date picker or no date toggle */}
           <div className="flex gap-2">
             <Button
               size="sm"
-              variant={noDate ? 'default' : 'outline'}
+              variant={noDate ? "default" : "outline"}
               onClick={() => setNoDate(!noDate)}
               className="text-xs"
             >
               Без даты
             </Button>
-            {!noDate && quickDate === 'custom' && (
+            {!noDate && quickDate === "custom" && (
               <Input
                 type="date"
                 value={date}
-                onChange={e => setDate(e.target.value)}
+                onChange={(e) => setDate(e.target.value)}
                 className="flex-1"
               />
             )}
-            {!noDate && quickDate !== 'custom' && (
-              <div className="flex-1 text-sm text-muted-foreground flex items-center">
-                {quickDate === 'today' ? getTodayKey() : getTomorrowKey()}
+            {!noDate && quickDate !== "custom" && (
+              <div className="text-muted-foreground flex flex-1 items-center text-sm">
+                {quickDate === "today" ? getTodayKey() : getTomorrowKey()}
               </div>
             )}
           </div>
@@ -157,33 +157,29 @@ export function CreateTaskScreen() {
         {!noDate && (
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
-              <Clock className="w-4 h-4" />
+              <Clock className="h-4 w-4" />
               Время (опционально)
             </Label>
-            <Input
-              type="time"
-              value={time}
-              onChange={e => setTime(e.target.value)}
-            />
+            <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
           </div>
         )}
 
         {/* Zone */}
         <div className="space-y-2">
           <Label className="flex items-center gap-2">
-            <Link2 className="w-4 h-4" />
+            <Link2 className="h-4 w-4" />
             Зона
           </Label>
           <div className="flex flex-wrap gap-2">
-            {ZONES.map(z => (
+            {ZONES.map((z) => (
               <button
                 key={z.id}
-                className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                className={`rounded-full px-3 py-1.5 text-sm transition-colors ${
                   zone === z.id
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted/30 hover:bg-muted/50'
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted/30 hover:bg-muted/50"
                 }`}
-                onClick={() => setZone(zone === z.id ? '' : z.id)}
+                onClick={() => setZone(zone === z.id ? "" : z.id)}
               >
                 {z.icon} {z.label}
               </button>
@@ -197,7 +193,7 @@ export function CreateTaskScreen() {
           <Textarea
             placeholder="Подробности..."
             value={notes}
-            onChange={e => setNotes(e.target.value)}
+            onChange={(e) => setNotes(e.target.value)}
             rows={2}
           />
         </div>
@@ -205,21 +201,17 @@ export function CreateTaskScreen() {
 
       {/* Actions */}
       <div className="flex gap-2 pt-4">
-        <Button
-          variant="outline"
-          className="flex-1"
-          onClick={() => setScreen('tasks')}
-        >
+        <Button variant="outline" className="flex-1" onClick={() => setScreen("tasks")}>
           Отмена
         </Button>
         <Button
-          className="flex-1 bg-primary"
+          className="bg-primary flex-1"
           disabled={!text.trim() || isSaving}
           onClick={handleSave}
         >
-          {isSaving ? 'Сохранение...' : 'Создать'}
+          {isSaving ? "Сохранение..." : "Создать"}
         </Button>
       </div>
     </div>
-  )
+  );
 }

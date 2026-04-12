@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
 
 // POST - Reschedule workout to a specific date
 // Options:
@@ -7,31 +7,36 @@ import { db } from '@/lib/db'
 // - shiftCycle: true - move this workout AND shift all subsequent workouts
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { workoutId, periodId, newDate, shiftCycle } = body
+    const body = await request.json();
+    const { workoutId, periodId, newDate, shiftCycle } = body;
 
     if (!workoutId || !periodId || !newDate) {
-      return NextResponse.json({ error: 'workoutId, periodId and newDate required' }, { status: 400 })
+      return NextResponse.json(
+        { error: "workoutId, periodId and newDate required" },
+        { status: 400 }
+      );
     }
 
     // Get the workout to reschedule
     const workout = await db.gymWorkout.findUnique({
-      where: { id: workoutId }
-    })
+      where: { id: workoutId },
+    });
 
     if (!workout) {
-      return NextResponse.json({ error: 'Workout not found' }, { status: 404 })
+      return NextResponse.json({ error: "Workout not found" }, { status: 404 });
     }
 
-    const oldDate = new Date(workout.date)
-    const targetDate = new Date(newDate)
+    const oldDate = new Date(workout.date);
+    const targetDate = new Date(newDate);
 
     if (shiftCycle) {
       // Shift mode: move this workout and all subsequent workouts
-      const daysDiff = Math.floor((targetDate.getTime() - oldDate.getTime()) / (1000 * 60 * 60 * 24))
-      
+      const daysDiff = Math.floor(
+        (targetDate.getTime() - oldDate.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
       if (daysDiff === 0) {
-        return NextResponse.json({ success: true, message: 'Same date, no changes needed' })
+        return NextResponse.json({ success: true, message: "Same date, no changes needed" });
       }
 
       // Get all workouts from this date onwards
@@ -39,63 +44,63 @@ export async function POST(request: NextRequest) {
         where: {
           periodId,
           date: { gte: oldDate },
-          completed: false
+          completed: false,
         },
-        orderBy: { date: 'asc' }
-      })
+        orderBy: { date: "asc" },
+      });
 
       // Shift all of them
       for (const w of subsequentWorkouts) {
-        const wDate = new Date(w.date)
-        wDate.setDate(wDate.getDate() + daysDiff)
-        
+        const wDate = new Date(w.date);
+        wDate.setDate(wDate.getDate() + daysDiff);
+
         await db.gymWorkout.update({
           where: { id: w.id },
-          data: { date: wDate }
-        })
+          data: { date: wDate },
+        });
       }
 
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: true,
         workoutId,
         newDate,
         shiftedCount: subsequentWorkouts.length,
-        mode: 'shift'
-      })
+        mode: "shift",
+      });
     } else {
       // Single mode: just move this workout, swap if target is occupied
       const existingWorkout = await db.gymWorkout.findFirst({
         where: {
           periodId,
           date: targetDate,
-          id: { not: workoutId }
-        }
-      })
+          id: { not: workoutId },
+        },
+      });
 
       if (existingWorkout) {
         // Swap: move existing workout to old date
         await db.gymWorkout.update({
           where: { id: existingWorkout.id },
-          data: { date: oldDate }
-        })
+          data: { date: oldDate },
+        });
       }
 
       // Move the workout to the new date
       await db.gymWorkout.update({
         where: { id: workoutId },
-        data: { date: targetDate }
-      })
+        data: { date: targetDate },
+      });
 
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: true,
         workoutId,
         newDate,
         swappedWith: existingWorkout?.id || null,
-        mode: 'single'
-      })
+        mode: "single",
+      });
     }
   } catch (error) {
-    console.error('Reschedule workout error:', error)
-    return NextResponse.json({ error: 'Failed to reschedule workout' }, { status: 500 })
+    console.error("Reschedule workout error:", error);
+    return NextResponse.json({ error: "Failed to reschedule workout" }, { status: 500 });
   }
 }

@@ -1,40 +1,37 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { requireAuthenticatedUser, requireSelf } from '@/lib/server-auth'
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { requireAuthenticatedUser, requireSelf } from "@/lib/server-auth";
 
 /**
  * Get user profile
  * GET /api/user?id=<userId>
  */
 export async function GET(request: NextRequest) {
-  const auth = requireAuthenticatedUser(request)
-  if ('error' in auth) {
-    return auth.error
+  const auth = requireAuthenticatedUser(request);
+  if ("error" in auth) {
+    return auth.error;
   }
 
   try {
-    const { searchParams } = new URL(request.url)
-    const requestedUserId = searchParams.get('id') || auth.session.userId
+    const { searchParams } = new URL(request.url);
+    const requestedUserId = searchParams.get("id") || auth.session.userId;
 
     if (requestedUserId !== auth.session.userId) {
       return NextResponse.json(
-        { error: 'Forbidden', hint: 'You can only access your own profile' },
+        { error: "Forbidden", hint: "You can only access your own profile" },
         { status: 403 }
-      )
+      );
     }
 
     const user = await db.appUser.findUnique({
       where: { id: requestedUserId },
       include: {
         profile: true,
-      }
-    })
+      },
+    });
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     return NextResponse.json({
@@ -51,24 +48,23 @@ export async function GET(request: NextRequest) {
         points: user.points,
         streakShieldUsedAt: user.streakShieldUsedAt?.toISOString() ?? null,
       },
-      profile: user.profile ? {
-        weight: user.profile.weight,
-        height: user.profile.height,
-        age: user.profile.age,
-        sex: user.profile.sex,
-        targetWeight: user.profile.targetWeight,
-        targetCalories: user.profile.targetCalories,
-        workProfile: user.profile.workProfile,
-        waterBaseline: user.profile.waterBaseline,
-        bio: user.profile.bio,
-      } : null
-    })
+      profile: user.profile
+        ? {
+            weight: user.profile.weight,
+            height: user.profile.height,
+            age: user.profile.age,
+            sex: user.profile.sex,
+            targetWeight: user.profile.targetWeight,
+            targetCalories: user.profile.targetCalories,
+            workProfile: user.profile.workProfile,
+            waterBaseline: user.profile.waterBaseline,
+            bio: user.profile.bio,
+          }
+        : null,
+    });
   } catch (error) {
-    console.error('Get user error:', error)
-    return NextResponse.json(
-      { error: 'Failed to get user' },
-      { status: 500 }
-    )
+    console.error("Get user error:", error);
+    return NextResponse.json({ error: "Failed to get user" }, { status: 500 });
   }
 }
 
@@ -78,62 +74,59 @@ export async function GET(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { userId, day, streak, points, profile } = body
-    const auth = requireSelf(request, userId)
-    if ('error' in auth) {
-      return auth.error
+    const body = await request.json();
+    const { userId, day, streak, points, profile } = body;
+    const auth = requireSelf(request, userId);
+    if ("error" in auth) {
+      return auth.error;
     }
 
     // Update user fields
-    const updateData: Record<string, unknown> = {}
-    if (day !== undefined) updateData.day = day
-    if (streak !== undefined) updateData.streak = streak
-    if (points !== undefined) updateData.points = points
+    const updateData: Record<string, unknown> = {};
+    if (day !== undefined) updateData.day = day;
+    if (streak !== undefined) updateData.streak = streak;
+    if (points !== undefined) updateData.points = points;
 
     if (Object.keys(updateData).length > 0) {
       await db.appUser.update({
         where: { id: userId },
-        data: updateData
-      })
+        data: updateData,
+      });
     }
 
     // Update profile if provided
     if (profile) {
-      const profileData: Record<string, unknown> = {}
-      if (profile.weight !== undefined) profileData.weight = profile.weight
-      if (profile.height !== undefined) profileData.height = profile.height
-      if (profile.age !== undefined) profileData.age = profile.age
-      if (profile.sex !== undefined) profileData.sex = profile.sex
-      if (profile.targetWeight !== undefined) profileData.targetWeight = profile.targetWeight
-      if (profile.targetCalories !== undefined) profileData.targetCalories = profile.targetCalories
-      if (profile.workProfile !== undefined) profileData.workProfile = profile.workProfile
-      if (profile.waterBaseline !== undefined) profileData.waterBaseline = profile.waterBaseline
-      if (profile.bio !== undefined) profileData.bio = profile.bio
+      const profileData: Record<string, unknown> = {};
+      if (profile.weight !== undefined) profileData.weight = profile.weight;
+      if (profile.height !== undefined) profileData.height = profile.height;
+      if (profile.age !== undefined) profileData.age = profile.age;
+      if (profile.sex !== undefined) profileData.sex = profile.sex;
+      if (profile.targetWeight !== undefined) profileData.targetWeight = profile.targetWeight;
+      if (profile.targetCalories !== undefined) profileData.targetCalories = profile.targetCalories;
+      if (profile.workProfile !== undefined) profileData.workProfile = profile.workProfile;
+      if (profile.waterBaseline !== undefined) profileData.waterBaseline = profile.waterBaseline;
+      if (profile.bio !== undefined) profileData.bio = profile.bio;
 
       if (Object.keys(profileData).length > 0) {
         await db.userProfile.update({
           where: { userId },
-          data: profileData
-        })
+          data: profileData,
+        });
       }
     }
 
     // Return updated user
     const updatedUser = await db.appUser.findUnique({
       where: { id: userId },
-      include: { profile: true }
-    })
+      include: { profile: true },
+    });
 
     return NextResponse.json({
       success: true,
-      user: updatedUser
-    })
+      user: updatedUser,
+    });
   } catch (error) {
-    console.error('Update user error:', error)
-    return NextResponse.json(
-      { error: 'Failed to update user' },
-      { status: 500 }
-    )
+    console.error("Update user error:", error);
+    return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
   }
 }

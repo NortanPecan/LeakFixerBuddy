@@ -1,22 +1,22 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { requireAuthenticatedUser, requireSelf } from '@/lib/server-auth'
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { requireAuthenticatedUser, requireSelf } from "@/lib/server-auth";
 
 // GET /api/content - Get all content items with filters or single item by id
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
-    const id = searchParams.get('id') // Single item by id
-    const type = searchParams.get('type')
-    const status = searchParams.get('status')
-    const zone = searchParams.get('zone')
-    const limit = parseInt(searchParams.get('limit') || '50')
-    const offset = parseInt(searchParams.get('offset') || '0')
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get("userId");
+    const id = searchParams.get("id"); // Single item by id
+    const type = searchParams.get("type");
+    const status = searchParams.get("status");
+    const zone = searchParams.get("zone");
+    const limit = parseInt(searchParams.get("limit") || "50");
+    const offset = parseInt(searchParams.get("offset") || "0");
 
     // Get single item by id
     if (id) {
-      const auth = await requireAuthenticatedUser(request)
+      const auth = await requireAuthenticatedUser(request);
       const item = await db.contentItem.findUnique({
         where: { id },
         include: {
@@ -26,14 +26,14 @@ export async function GET(request: NextRequest) {
               entity: true,
               entityId: true,
               fragment: true,
-            }
+            },
           },
           tasks: {
             select: {
               id: true,
               text: true,
               status: true,
-            }
+            },
           },
           rituals: {
             select: {
@@ -41,43 +41,43 @@ export async function GET(request: NextRequest) {
               title: true,
               status: true,
               category: true,
-            }
-          }
-        }
-      })
+            },
+          },
+        },
+      });
 
       if (!item) {
-        return NextResponse.json({ error: 'Content not found' }, { status: 404 })
+        return NextResponse.json({ error: "Content not found" }, { status: 404 });
       }
       if (item.userId !== auth.session.userId) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
 
-      return NextResponse.json({ items: [item], total: 1 })
+      return NextResponse.json({ items: [item], total: 1 });
     }
 
     if (!userId) {
-      return NextResponse.json({ error: 'userId required' }, { status: 400 })
+      return NextResponse.json({ error: "userId required" }, { status: 400 });
     }
-    await requireSelf(request, userId)
+    await requireSelf(request, userId);
 
     const where: {
-      userId: string
-      type?: string
-      status?: string
-      zone?: string
-    } = { userId }
+      userId: string;
+      type?: string;
+      status?: string;
+      zone?: string;
+    } = { userId };
 
-    if (type && type !== 'all') {
-      where.type = type
+    if (type && type !== "all") {
+      where.type = type;
     }
 
-    if (status && status !== 'all') {
-      where.status = status
+    if (status && status !== "all") {
+      where.status = status;
     }
 
-    if (zone && zone !== 'all') {
-      where.zone = zone
+    if (zone && zone !== "all") {
+      where.zone = zone;
     }
 
     const items = await db.contentItem.findMany({
@@ -89,14 +89,14 @@ export async function GET(request: NextRequest) {
             entity: true,
             entityId: true,
             fragment: true,
-          }
+          },
         },
         tasks: {
           select: {
             id: true,
             text: true,
             status: true,
-          }
+          },
         },
         rituals: {
           select: {
@@ -104,28 +104,28 @@ export async function GET(request: NextRequest) {
             title: true,
             status: true,
             category: true,
-          }
-        }
+          },
+        },
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: { updatedAt: "desc" },
       take: limit,
       skip: offset,
-    })
+    });
 
     // Count total for pagination
-    const total = await db.contentItem.count({ where })
+    const total = await db.contentItem.count({ where });
 
-    return NextResponse.json({ items, total })
+    return NextResponse.json({ items, total });
   } catch (error) {
-    console.error('Error fetching content:', error)
-    return NextResponse.json({ error: 'Failed to fetch content' }, { status: 500 })
+    console.error("Error fetching content:", error);
+    return NextResponse.json({ error: "Failed to fetch content" }, { status: 500 });
   }
 }
 
 // POST /api/content - Create a new content item
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    const body = await request.json();
     const {
       userId,
       type,
@@ -139,23 +139,23 @@ export async function POST(request: NextRequest) {
       unitType,
       author,
       imageUrl,
-      description
-    } = body
+      description,
+    } = body;
 
     if (!userId || !type || !title) {
-      return NextResponse.json({ error: 'userId, type, and title required' }, { status: 400 })
+      return NextResponse.json({ error: "userId, type, and title required" }, { status: 400 });
     }
-    await requireSelf(request, userId)
+    await requireSelf(request, userId);
 
     const item = await db.contentItem.create({
       data: {
         userId,
         type,
         title,
-        status: status || 'planned',
+        status: status || "planned",
         source: source || null,
         url: url || null,
-        zone: zone || 'general',
+        zone: zone || "general",
         totalUnits: totalUnits || null,
         currentUnits: currentUnits || 0,
         unitType: unitType || null,
@@ -166,13 +166,12 @@ export async function POST(request: NextRequest) {
       include: {
         links: true,
         tasks: true,
-      }
-    })
+      },
+    });
 
-    return NextResponse.json({ item })
+    return NextResponse.json({ item });
   } catch (error) {
-    console.error('Error creating content:', error)
-    return NextResponse.json({ error: 'Failed to create content' }, { status: 500 })
+    console.error("Error creating content:", error);
+    return NextResponse.json({ error: "Failed to create content" }, { status: 500 });
   }
 }
-

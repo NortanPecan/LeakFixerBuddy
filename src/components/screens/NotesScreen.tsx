@@ -1,12 +1,12 @@
-'use client'
+"use client";
 
-import { useEffect, useState, useCallback } from 'react'
-import { useAppStore } from '@/lib/store'
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Textarea } from '@/components/ui/textarea'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { useEffect, useState, useCallback } from "react";
+import { useAppStore } from "@/lib/store";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   StickyNote,
   Send,
@@ -22,576 +22,585 @@ import {
   Plus,
   RefreshCw,
   ArrowRight,
-  CheckCircle2
-} from 'lucide-react'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  CheckCircle2,
+} from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { NOTE_TYPES, NOTE_ZONES, getNoteTypeInfo, getNoteZoneInfo, parseReframeData, serializeReframeData, ReframeData, ReframeAction, getReframePreview, countLinkedActions } from '@/lib/notes-config'
-import { ReframeForm } from '@/components/ReframeForm'
-import { cn } from '@/lib/utils'
-import { showErrorToast, showSuccessToast, isOnline } from '@/lib/network-utils'
+} from "@/components/ui/dropdown-menu";
+import {
+  NOTE_TYPES,
+  NOTE_ZONES,
+  getNoteTypeInfo,
+  getNoteZoneInfo,
+  parseReframeData,
+  serializeReframeData,
+  ReframeData,
+  ReframeAction,
+  getReframePreview,
+  countLinkedActions,
+} from "@/lib/notes-config";
+import { ReframeForm } from "@/components/ReframeForm";
+import { cn } from "@/lib/utils";
+import { showErrorToast, showSuccessToast, isOnline } from "@/lib/network-utils";
 
 interface NoteLink {
-  id: string
-  entity: string
-  entityId: string
-  fragment: string | null
+  id: string;
+  entity: string;
+  entityId: string;
+  fragment: string | null;
   entityDetails?: {
-    type: 'task' | 'ritual' | 'chain'
-    text?: string
-    title?: string
-    chain?: { id: string; title: string } | null
-    status?: string
-  }
+    type: "task" | "ritual" | "chain";
+    text?: string;
+    title?: string;
+    chain?: { id: string; title: string } | null;
+    status?: string;
+  };
 }
 
 interface Note {
-  id: string
-  text: string
-  type: string
-  zone: string
-  date: string
-  createdAt: string
-  links: NoteLink[]
+  id: string;
+  text: string;
+  type: string;
+  zone: string;
+  date: string;
+  createdAt: string;
+  links: NoteLink[];
 }
 
 export function NotesScreen() {
-  const { user, setScreen } = useAppStore()
-  const [notes, setNotes] = useState<Note[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [quickNote, setQuickNote] = useState('')
-  const [isSaving, setIsSaving] = useState(false)
-  const [activeFilter, setActiveFilter] = useState('all')
-  const [activeZone, setActiveZone] = useState('all')
-  const [selectedNote, setSelectedNote] = useState<Note | null>(null)
-  const [showDetail, setShowDetail] = useState(false)
-  const [editText, setEditText] = useState('')
-  const [editType, setEditType] = useState('')
-  const [editZone, setEditZone] = useState('')
-  const [isEditing, setIsEditing] = useState(false)
-  
+  const { user, setScreen } = useAppStore();
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [quickNote, setQuickNote] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [activeZone, setActiveZone] = useState("all");
+  const [selectedNote, setSelectedNote] = useState<Note | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
+  const [editText, setEditText] = useState("");
+  const [editType, setEditType] = useState("");
+  const [editZone, setEditZone] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+
   // Chain step modal state
-  const [showChainModal, setShowChainModal] = useState(false)
-  const [activeChains, setActiveChains] = useState<{ id: string; title: string }[]>([])
-  const [selectedChainId, setSelectedChainId] = useState<string>('')
-  const [chainStepText, setChainStepText] = useState('')
-  const [isLoadingChains, setIsLoadingChains] = useState(false)
-  const [isCreatingRitual, setIsCreatingRitual] = useState(false)
-  
+  const [showChainModal, setShowChainModal] = useState(false);
+  const [activeChains, setActiveChains] = useState<{ id: string; title: string }[]>([]);
+  const [selectedChainId, setSelectedChainId] = useState<string>("");
+  const [chainStepText, setChainStepText] = useState("");
+  const [isLoadingChains, setIsLoadingChains] = useState(false);
+  const [isCreatingRitual, setIsCreatingRitual] = useState(false);
+
   // Reframe modal state
-  const [showReframeModal, setShowReframeModal] = useState(false)
-  const [reframeEditData, setReframeEditData] = useState<ReframeData | undefined>()
-  const [reframeEditZone, setReframeEditZone] = useState<string>('general')
-  const [isSavingReframe, setIsSavingReframe] = useState(false)
-  
+  const [showReframeModal, setShowReframeModal] = useState(false);
+  const [reframeEditData, setReframeEditData] = useState<ReframeData | undefined>();
+  const [reframeEditZone, setReframeEditZone] = useState<string>("general");
+  const [isSavingReframe, setIsSavingReframe] = useState(false);
+
   // Reframe detail state
-  const [reframeDetailData, setReframeDetailData] = useState<ReframeData | null>(null)
-  const [reframeActionIndex, setReframeActionIndex] = useState<number | null>(null)
+  const [reframeDetailData, setReframeDetailData] = useState<ReframeData | null>(null);
+  const [reframeActionIndex, setReframeActionIndex] = useState<number | null>(null);
 
   // Load notes
   const loadNotes = useCallback(async () => {
-    if (!user?.id) return
-    setIsLoading(true)
+    if (!user?.id) return;
+    setIsLoading(true);
     try {
       const params = new URLSearchParams({
         userId: user.id,
         type: activeFilter,
         zone: activeZone,
-      })
-      const response = await fetch(`/api/notes?${params}`)
-      const data = await response.json()
-      setNotes(data.notes || [])
+      });
+      const response = await fetch(`/api/notes?${params}`);
+      const data = await response.json();
+      setNotes(data.notes || []);
     } catch (error) {
-      showErrorToast(error, 'load notes')
+      showErrorToast(error, "load notes");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [user?.id, activeFilter, activeZone])
+  }, [user?.id, activeFilter, activeZone]);
 
   useEffect(() => {
-    loadNotes()
-  }, [loadNotes])
+    loadNotes();
+  }, [loadNotes]);
 
   // Quick save note
   const handleQuickSave = async () => {
-    if (!user?.id || !quickNote.trim()) return
-    setIsSaving(true)
+    if (!user?.id || !quickNote.trim()) return;
+    setIsSaving(true);
     try {
-      const response = await fetch('/api/notes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           text: quickNote.trim(),
-          type: 'thought',
-          zone: 'general',
-        })
-      })
-      const data = await response.json()
+          type: "thought",
+          zone: "general",
+        }),
+      });
+      const data = await response.json();
       if (data.note) {
-        setNotes(prev => [data.note, ...prev])
-        setQuickNote('')
-        showSuccessToast('Note created')
+        setNotes((prev) => [data.note, ...prev]);
+        setQuickNote("");
+        showSuccessToast("Note created");
       }
     } catch (error) {
-      showErrorToast(error, 'save note')
+      showErrorToast(error, "save note");
     } finally {
-      setIsSaving(false)
+      setIsSaving(false);
     }
-  }
+  };
 
   // Delete note
   const handleDelete = async (id: string) => {
     try {
-      await fetch(`/api/notes?id=${id}`, { method: 'DELETE' })
-      setNotes(prev => prev.filter(n => n.id !== id))
-      setShowDetail(false)
-      setSelectedNote(null)
-      showSuccessToast('Note deleted')
+      await fetch(`/api/notes?id=${id}`, { method: "DELETE" });
+      setNotes((prev) => prev.filter((n) => n.id !== id));
+      setShowDetail(false);
+      setSelectedNote(null);
+      showSuccessToast("Note deleted");
     } catch (error) {
-      showErrorToast(error, 'delete note')
+      showErrorToast(error, "delete note");
     }
-  }
+  };
 
   // Update note
   const handleUpdate = async () => {
-    if (!selectedNote) return
+    if (!selectedNote) return;
     try {
-      const response = await fetch('/api/notes', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/notes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: selectedNote.id,
           text: editText,
           type: editType,
           zone: editZone,
-        })
-      })
-      const data = await response.json()
+        }),
+      });
+      const data = await response.json();
       if (data.note) {
-        setNotes(prev => prev.map(n => n.id === data.note.id ? data.note : n))
-        setSelectedNote(data.note)
-        setIsEditing(false)
-        showSuccessToast('Note updated')
+        setNotes((prev) => prev.map((n) => (n.id === data.note.id ? data.note : n)));
+        setSelectedNote(data.note);
+        setIsEditing(false);
+        showSuccessToast("Note updated");
       }
     } catch (error) {
-      showErrorToast(error, 'update note')
+      showErrorToast(error, "update note");
     }
-  }
+  };
 
   // Create task from note
   const handleCreateTask = async () => {
-    if (!selectedNote || !user?.id) return
+    if (!selectedNote || !user?.id) return;
     try {
-      const response = await fetch('/api/notes/link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/notes/link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           noteId: selectedNote.id,
-          entity: 'task',
+          entity: "task",
           createEntity: true,
           fragment: selectedNote.text.substring(0, 100),
           entityData: {
             userId: user.id,
             text: selectedNote.text.substring(0, 200),
-          }
-        })
-      })
-      const data = await response.json()
+          },
+        }),
+      });
+      const data = await response.json();
       if (data.link) {
         // Refresh notes to show the link
-        loadNotes()
-        setShowDetail(false)
+        loadNotes();
+        setShowDetail(false);
         // Navigate to tasks
-        setScreen('tasks')
+        setScreen("tasks");
       }
     } catch (error) {
-      showErrorToast(error, 'create task')
+      showErrorToast(error, "create task");
     }
-  }
+  };
 
   // Create ritual from note
   const handleCreateRitual = async () => {
-    if (!selectedNote || !user?.id || isCreatingRitual) return
-    setIsCreatingRitual(true)
+    if (!selectedNote || !user?.id || isCreatingRitual) return;
+    setIsCreatingRitual(true);
     try {
       // Shorten title: first sentence or max 50 chars
-      const text = selectedNote.text
-      const firstSentence = text.split(/[.!?\n]/)[0]
-      const title = firstSentence.length > 50 ? firstSentence.substring(0, 50).trim() + '...' : firstSentence.trim() || text.substring(0, 50)
-      
-      const response = await fetch('/api/notes/link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const text = selectedNote.text;
+      const firstSentence = text.split(/[.!?\n]/)[0];
+      const title =
+        firstSentence.length > 50
+          ? firstSentence.substring(0, 50).trim() + "..."
+          : firstSentence.trim() || text.substring(0, 50);
+
+      const response = await fetch("/api/notes/link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           noteId: selectedNote.id,
-          entity: 'ritual',
+          entity: "ritual",
           createEntity: true,
           fragment: text.substring(0, 100),
           entityData: {
             userId: user.id,
             title: title,
-          }
-        })
-      })
-      const data = await response.json()
+          },
+        }),
+      });
+      const data = await response.json();
       if (data.link) {
-        loadNotes()
-        setShowDetail(false)
-        setScreen('rituals')
+        loadNotes();
+        setShowDetail(false);
+        setScreen("rituals");
       }
     } catch (error) {
-      showErrorToast(error, 'create ritual')
+      showErrorToast(error, "create ritual");
     } finally {
-      setIsCreatingRitual(false)
+      setIsCreatingRitual(false);
     }
-  }
+  };
 
   // Remove link from note
   const handleRemoveLink = async (linkId: string) => {
-    if (!confirm('Удалить связь?')) return
+    if (!confirm("Удалить связь?")) return;
     try {
-      await fetch(`/api/notes/link?id=${linkId}`, { method: 'DELETE' })
+      await fetch(`/api/notes/link?id=${linkId}`, { method: "DELETE" });
       // Update local state
       if (selectedNote) {
         setSelectedNote({
           ...selectedNote,
-          links: selectedNote.links.filter(l => l.id !== linkId)
-        })
+          links: selectedNote.links.filter((l) => l.id !== linkId),
+        });
       }
-      loadNotes()
-      showSuccessToast('Связь удалена')
+      loadNotes();
+      showSuccessToast("Связь удалена");
     } catch (error) {
-      showErrorToast(error, 'remove link')
+      showErrorToast(error, "remove link");
     }
-  }
+  };
 
   // Load active chains for the modal
   const loadActiveChains = async () => {
-    if (!user?.id) return
-    setIsLoadingChains(true)
+    if (!user?.id) return;
+    setIsLoadingChains(true);
     try {
-      const response = await fetch(`/api/chains?userId=${user.id}&status=active`)
-      const data = await response.json()
-      setActiveChains(data.chains || [])
+      const response = await fetch(`/api/chains?userId=${user.id}&status=active`);
+      const data = await response.json();
+      setActiveChains(data.chains || []);
       if (data.chains?.length > 0) {
-        setSelectedChainId(data.chains[0].id)
+        setSelectedChainId(data.chains[0].id);
       }
     } catch (error) {
-      showErrorToast(error, 'load chains')
+      showErrorToast(error, "load chains");
     } finally {
-      setIsLoadingChains(false)
+      setIsLoadingChains(false);
     }
-  }
+  };
 
   // Open chain step modal
   const openChainModal = () => {
-    setChainStepText(selectedNote?.text.substring(0, 200) || '')
-    setShowDetail(false)
-    setShowChainModal(true)
-    loadActiveChains()
-  }
+    setChainStepText(selectedNote?.text.substring(0, 200) || "");
+    setShowDetail(false);
+    setShowChainModal(true);
+    loadActiveChains();
+  };
 
   // Create chain step from note or reframe action
   const handleCreateChainStep = async () => {
-    if (!user?.id || !selectedChainId || !chainStepText.trim()) return
+    if (!user?.id || !selectedChainId || !chainStepText.trim()) return;
     try {
-      const response = await fetch('/api/notes/link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/notes/link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           noteId: selectedNote?.id,
-          entity: 'task',
+          entity: "task",
           createEntity: true,
           fragment: chainStepText.substring(0, 100),
           entityData: {
             userId: user.id,
             text: chainStepText,
             chainId: selectedChainId,
-          }
-        })
-      })
-      const data = await response.json()
+          },
+        }),
+      });
+      const data = await response.json();
       if (data.link) {
         // If this was from a reframe action, update the linked entity
         if (reframeActionIndex !== null && reframeDetailData) {
-          const updatedActions = [...reframeDetailData.actions]
+          const updatedActions = [...reframeDetailData.actions];
           updatedActions[reframeActionIndex] = {
             ...updatedActions[reframeActionIndex],
-            linkedEntity: { type: 'chainStep', id: data.entityId }
-          }
-          const updatedData = { ...reframeDetailData, actions: updatedActions }
-          
-          await fetch('/api/notes', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
+            linkedEntity: { type: "chainStep", id: data.entityId },
+          };
+          const updatedData = { ...reframeDetailData, actions: updatedActions };
+
+          await fetch("/api/notes", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               id: selectedNote?.id,
               text: serializeReframeData(updatedData),
-            })
-          })
-          setReframeDetailData(updatedData)
-          setReframeActionIndex(null)
+            }),
+          });
+          setReframeDetailData(updatedData);
+          setReframeActionIndex(null);
         }
-        
-        loadNotes()
-        setShowChainModal(false)
-        setSelectedChainId('')
-        setChainStepText('')
-        setScreen('tasks')
+
+        loadNotes();
+        setShowChainModal(false);
+        setSelectedChainId("");
+        setChainStepText("");
+        setScreen("tasks");
       }
     } catch (error) {
-      showErrorToast(error, 'create chain step')
+      showErrorToast(error, "create chain step");
     }
-  }
+  };
 
   // Open reframe modal for new note
   const openNewReframeModal = () => {
-    setReframeEditData(undefined)
-    setReframeEditZone('general')
-    setShowReframeModal(true)
-  }
+    setReframeEditData(undefined);
+    setReframeEditZone("general");
+    setShowReframeModal(true);
+  };
 
   // Open reframe modal for editing
   const openEditReframeModal = (note: Note) => {
-    const data = parseReframeData(note.text)
+    const data = parseReframeData(note.text);
     if (data) {
-      setReframeEditData(data)
-      setReframeEditZone(note.zone)
-      setSelectedNote(note)
-      setShowDetail(false)
-      setShowReframeModal(true)
+      setReframeEditData(data);
+      setReframeEditZone(note.zone);
+      setSelectedNote(note);
+      setShowDetail(false);
+      setShowReframeModal(true);
     }
-  }
+  };
 
   // Save reframe note
   const handleSaveReframe = async (data: ReframeData, zone: string) => {
-    if (!user?.id) return
-    setIsSavingReframe(true)
+    if (!user?.id) return;
+    setIsSavingReframe(true);
     try {
       if (selectedNote && reframeEditData) {
         // Update existing
-        const response = await fetch('/api/notes', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+        const response = await fetch("/api/notes", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             id: selectedNote.id,
             text: serializeReframeData(data),
             zone,
-          })
-        })
-        const result = await response.json()
+          }),
+        });
+        const result = await response.json();
         if (result.note) {
-          setNotes(prev => prev.map(n => n.id === result.note.id ? result.note : n))
-          setShowReframeModal(false)
-          setSelectedNote(null)
-          setReframeEditData(undefined)
-          showSuccessToast('Reframe note updated')
+          setNotes((prev) => prev.map((n) => (n.id === result.note.id ? result.note : n)));
+          setShowReframeModal(false);
+          setSelectedNote(null);
+          setReframeEditData(undefined);
+          showSuccessToast("Reframe note updated");
         }
       } else {
         // Create new
-        const response = await fetch('/api/notes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const response = await fetch("/api/notes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             userId: user.id,
             text: serializeReframeData(data),
-            type: 'reframe',
+            type: "reframe",
             zone,
-          })
-        })
-        const result = await response.json()
+          }),
+        });
+        const result = await response.json();
         if (result.note) {
-          setNotes(prev => [result.note, ...prev])
-          setShowReframeModal(false)
-          showSuccessToast('Reframe note created')
+          setNotes((prev) => [result.note, ...prev]);
+          setShowReframeModal(false);
+          showSuccessToast("Reframe note created");
         }
       }
     } catch (error) {
-      showErrorToast(error, 'save reframe')
+      showErrorToast(error, "save reframe");
     } finally {
-      setIsSavingReframe(false)
+      setIsSavingReframe(false);
     }
-  }
+  };
 
   // Create task from reframe action
   const handleCreateTaskFromAction = async (actionIndex: number) => {
-    if (!selectedNote || !user?.id || !reframeDetailData) return
-    const action = reframeDetailData.actions[actionIndex]
-    if (!action.text.trim()) return
-    
+    if (!selectedNote || !user?.id || !reframeDetailData) return;
+    const action = reframeDetailData.actions[actionIndex];
+    if (!action.text.trim()) return;
+
     try {
-      const response = await fetch('/api/notes/link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/notes/link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           noteId: selectedNote.id,
-          entity: 'task',
+          entity: "task",
           createEntity: true,
           fragment: action.text.substring(0, 100),
           entityData: {
             userId: user.id,
             text: action.text,
             zone: selectedNote.zone,
-          }
-        })
-      })
-      const data = await response.json()
+          },
+        }),
+      });
+      const data = await response.json();
       if (data.link) {
         // Update reframe data with linked entity
-        const updatedActions = [...reframeDetailData.actions]
+        const updatedActions = [...reframeDetailData.actions];
         updatedActions[actionIndex] = {
           ...action,
-          linkedEntity: { type: 'task', id: data.entityId }
-        }
-        const updatedData = { ...reframeDetailData, actions: updatedActions }
-        
+          linkedEntity: { type: "task", id: data.entityId },
+        };
+        const updatedData = { ...reframeDetailData, actions: updatedActions };
+
         // Update note text
-        await fetch('/api/notes', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+        await fetch("/api/notes", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             id: selectedNote.id,
             text: serializeReframeData(updatedData),
-          })
-        })
-        
-        setReframeDetailData(updatedData)
-        loadNotes()
-        showSuccessToast('Task created from action')
+          }),
+        });
+
+        setReframeDetailData(updatedData);
+        loadNotes();
+        showSuccessToast("Task created from action");
       }
     } catch (error) {
-      showErrorToast(error, 'create task from action')
+      showErrorToast(error, "create task from action");
     }
-  }
+  };
 
   // Open chain modal for action
   const openChainModalForAction = (actionIndex: number) => {
-    if (!reframeDetailData) return
-    setReframeActionIndex(actionIndex)
-    setChainStepText(reframeDetailData.actions[actionIndex].text)
-    setShowDetail(false)
-    setShowChainModal(true)
-    loadActiveChains()
-  }
+    if (!reframeDetailData) return;
+    setReframeActionIndex(actionIndex);
+    setChainStepText(reframeDetailData.actions[actionIndex].text);
+    setShowDetail(false);
+    setShowChainModal(true);
+    loadActiveChains();
+  };
 
   // Create ritual from reframe action
   const handleCreateRitualFromAction = async (actionIndex: number) => {
-    if (!selectedNote || !user?.id || !reframeDetailData) return
-    const action = reframeDetailData.actions[actionIndex]
-    if (!action.text.trim()) return
-    
+    if (!selectedNote || !user?.id || !reframeDetailData) return;
+    const action = reframeDetailData.actions[actionIndex];
+    if (!action.text.trim()) return;
+
     try {
-      const response = await fetch('/api/rituals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/rituals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           title: action.text.substring(0, 100),
-          type: 'regular',
-          category: 'productivity',
+          type: "regular",
+          category: "productivity",
           days: [1, 2, 3, 4, 5, 6, 7],
-          timeWindow: 'any',
+          timeWindow: "any",
           goalShort: `Из рефрейминга: ${reframeDetailData.newView.substring(0, 50)}`,
-        })
-      })
-      const data = await response.json()
+        }),
+      });
+      const data = await response.json();
       if (data.ritual) {
         // Update reframe data with linked entity
-        const updatedActions = [...reframeDetailData.actions]
+        const updatedActions = [...reframeDetailData.actions];
         updatedActions[actionIndex] = {
           ...action,
-          linkedEntity: { type: 'ritual', id: data.ritual.id }
-        }
-        const updatedData = { ...reframeDetailData, actions: updatedActions }
-        
+          linkedEntity: { type: "ritual", id: data.ritual.id },
+        };
+        const updatedData = { ...reframeDetailData, actions: updatedActions };
+
         // Update note text
-        await fetch('/api/notes', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+        await fetch("/api/notes", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             id: selectedNote.id,
             text: serializeReframeData(updatedData),
-          })
-        })
-        
-        setReframeDetailData(updatedData)
-        loadNotes()
-        showSuccessToast('Ritual created from action')
+          }),
+        });
+
+        setReframeDetailData(updatedData);
+        loadNotes();
+        showSuccessToast("Ritual created from action");
       }
     } catch (error) {
-      showErrorToast(error, 'create ritual from action')
+      showErrorToast(error, "create ritual from action");
     }
-  }
+  };
 
   // Open note detail
   const openNoteDetail = (note: Note) => {
-    setSelectedNote(note)
-    setEditText(note.text)
-    setEditType(note.type)
-    setEditZone(note.zone)
-    setIsEditing(false)
-    
+    setSelectedNote(note);
+    setEditText(note.text);
+    setEditType(note.type);
+    setEditZone(note.zone);
+    setIsEditing(false);
+
     // Parse reframe data if applicable
-    if (note.type === 'reframe') {
-      const data = parseReframeData(note.text)
-      setReframeDetailData(data)
+    if (note.type === "reframe") {
+      const data = parseReframeData(note.text);
+      setReframeDetailData(data);
     } else {
-      setReframeDetailData(null)
+      setReframeDetailData(null);
     }
-    
-    setShowDetail(true)
-  }
+
+    setShowDetail(true);
+  };
 
   // Format date
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diff = now.getTime() - date.getTime()
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
     if (days === 0) {
-      return 'Сегодня'
+      return "Сегодня";
     } else if (days === 1) {
-      return 'Вчера'
+      return "Вчера";
     } else if (days < 7) {
-      return `${days} дн. назад`
+      return `${days} дн. назад`;
     } else {
-      return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+      return date.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
     }
-  }
+  };
 
   // Get preview text
   const getPreviewText = (text: string, maxLength = 80) => {
-    if (text.length <= maxLength) return text
-    return text.substring(0, maxLength) + '...'
-  }
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + "...";
+  };
 
   return (
     <div className="flex flex-col gap-4 pb-20">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <StickyNote className="w-6 h-6 text-primary" />
+          <StickyNote className="text-primary h-6 w-6" />
           <h1 className="text-2xl font-bold">Заметки</h1>
         </div>
         <Badge variant="secondary" className="text-xs">
@@ -600,39 +609,39 @@ export function NotesScreen() {
       </div>
 
       {/* Quick input */}
-      <Card className="bg-card/50 backdrop-blur border-primary/20">
+      <Card className="bg-card/50 border-primary/20 backdrop-blur">
         <CardContent className="p-4">
           <div className="flex gap-2">
             <Textarea
               placeholder="Написать заметку..."
               value={quickNote}
               onChange={(e) => setQuickNote(e.target.value)}
-              className="min-h-[60px] resize-none border-0 bg-muted/50 focus-visible:ring-1"
+              className="bg-muted/50 min-h-[60px] resize-none border-0 focus-visible:ring-1"
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  handleQuickSave()
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleQuickSave();
                 }
               }}
             />
-            <div className="flex flex-col gap-1 shrink-0 self-end">
+            <div className="flex shrink-0 flex-col gap-1 self-end">
               <Button
                 size="icon"
                 onClick={handleQuickSave}
                 disabled={!quickNote.trim() || isSaving}
               >
-                <Send className="w-4 h-4" />
+                <Send className="h-4 w-4" />
               </Button>
             </div>
           </div>
-          <div className="flex gap-2 mt-3">
+          <div className="mt-3 flex gap-2">
             <Button
               variant="outline"
               size="sm"
-              className="gap-1 flex-1"
+              className="flex-1 gap-1"
               onClick={openNewReframeModal}
             >
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className="h-4 w-4" />
               Рефрейминг
             </Button>
           </div>
@@ -640,20 +649,20 @@ export function NotesScreen() {
       </Card>
 
       {/* Filters */}
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+      <div className="scrollbar-hide flex gap-2 overflow-x-auto pb-1">
         <Button
           size="sm"
-          variant={activeFilter === 'all' ? 'default' : 'outline'}
-          onClick={() => setActiveFilter('all')}
+          variant={activeFilter === "all" ? "default" : "outline"}
+          onClick={() => setActiveFilter("all")}
           className="shrink-0"
         >
           Все
         </Button>
-        {NOTE_TYPES.map(type => (
+        {NOTE_TYPES.map((type) => (
           <Button
             key={type.id}
             size="sm"
-            variant={activeFilter === type.id ? 'default' : 'outline'}
+            variant={activeFilter === type.id ? "default" : "outline"}
             onClick={() => setActiveFilter(type.id)}
             className="shrink-0 gap-1"
           >
@@ -664,22 +673,22 @@ export function NotesScreen() {
       </div>
 
       {/* Zone filter */}
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+      <div className="scrollbar-hide flex gap-2 overflow-x-auto pb-1">
         <Button
           size="sm"
-          variant={activeZone === 'all' ? 'secondary' : 'ghost'}
-          onClick={() => setActiveZone('all')}
+          variant={activeZone === "all" ? "secondary" : "ghost"}
+          onClick={() => setActiveZone("all")}
           className="shrink-0 text-xs"
         >
           Все зоны
         </Button>
-        {NOTE_ZONES.map(zone => (
+        {NOTE_ZONES.map((zone) => (
           <Button
             key={zone.id}
             size="sm"
-            variant={activeZone === zone.id ? 'secondary' : 'ghost'}
+            variant={activeZone === zone.id ? "secondary" : "ghost"}
             onClick={() => setActiveZone(zone.id)}
-            className="shrink-0 text-xs gap-1"
+            className="shrink-0 gap-1 text-xs"
           >
             <span>{zone.icon}</span>
             {zone.label}
@@ -689,62 +698,56 @@ export function NotesScreen() {
 
       {/* Notes list */}
       {isLoading ? (
-        <div className="text-center py-8 text-muted-foreground">
-          Загрузка...
-        </div>
+        <div className="text-muted-foreground py-8 text-center">Загрузка...</div>
       ) : notes.length === 0 ? (
         <Card className="bg-muted/30">
           <CardContent className="py-8 text-center">
-            <StickyNote className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
+            <StickyNote className="text-muted-foreground/50 mx-auto mb-3 h-12 w-12" />
             <p className="text-muted-foreground">Нет заметок</p>
-            <p className="text-sm text-muted-foreground/70 mt-1">
-              Напиши первую заметку выше
-            </p>
+            <p className="text-muted-foreground/70 mt-1 text-sm">Напиши первую заметку выше</p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-2">
-          {notes.map(note => {
-            const typeInfo = getNoteTypeInfo(note.type)
-            const zoneInfo = getNoteZoneInfo(note.zone)
-            const hasLinks = note.links && note.links.length > 0
-            
+          {notes.map((note) => {
+            const typeInfo = getNoteTypeInfo(note.type);
+            const zoneInfo = getNoteZoneInfo(note.zone);
+            const hasLinks = note.links && note.links.length > 0;
+
             // Check if this is a reframe note
-            const isReframe = note.type === 'reframe'
-            const reframeData = isReframe ? parseReframeData(note.text) : null
+            const isReframe = note.type === "reframe";
+            const reframeData = isReframe ? parseReframeData(note.text) : null;
 
             // For reframe notes, show special card
             if (isReframe && reframeData) {
-              const preview = getReframePreview(reframeData)
-              const linkedCount = countLinkedActions(reframeData)
-              
+              const preview = getReframePreview(reframeData);
+              const linkedCount = countLinkedActions(reframeData);
+
               return (
                 <Card
                   key={note.id}
-                  className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors border-primary/20"
+                  className="bg-card/50 hover:bg-card/70 border-primary/20 cursor-pointer backdrop-blur transition-colors"
                   onClick={() => openNoteDetail(note)}
                 >
                   <CardContent className="p-3">
                     <div className="flex items-start gap-3">
-                      <div className="text-lg shrink-0 mt-0.5">
-                        🔄
-                      </div>
-                      <div className="flex-1 min-w-0">
+                      <div className="mt-0.5 shrink-0 text-lg">🔄</div>
+                      <div className="min-w-0 flex-1">
                         <div className="text-sm">
                           <span className="text-destructive">&quot;{preview.oldThought}&quot;</span>
-                          <span className="mx-1.5 text-muted-foreground">→</span>
+                          <span className="text-muted-foreground mx-1.5">→</span>
                           <span className="text-emerald-600">&quot;{preview.newView}&quot;</span>
                         </div>
-                        <div className="flex items-center gap-2 mt-2 flex-wrap">
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
                             {zoneInfo.icon} {zoneInfo.label}
                           </Badge>
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                            📋 {reframeData.actions.filter(a => a.text.trim()).length} действ.
+                          <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                            📋 {reframeData.actions.filter((a) => a.text.trim()).length} действ.
                           </Badge>
                           {linkedCount > 0 && (
-                            <Badge variant="default" className="text-[10px] px-1.5 py-0 gap-0.5">
-                              <CheckCircle2 className="w-3 h-3" />
+                            <Badge variant="default" className="gap-0.5 px-1.5 py-0 text-[10px]">
+                              <CheckCircle2 className="h-3 w-3" />
                               {linkedCount} связей
                             </Badge>
                           )}
@@ -753,25 +756,27 @@ export function NotesScreen() {
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                           <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                            <MoreHorizontal className="w-4 h-4" />
+                            <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={(e) => {
-                            e.stopPropagation()
-                            openEditReframeModal(note)
-                          }}>
-                            <Edit3 className="w-4 h-4 mr-2" />
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openEditReframeModal(note);
+                            }}
+                          >
+                            <Edit3 className="mr-2 h-4 w-4" />
                             Редактировать
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-destructive"
                             onClick={(e) => {
-                              e.stopPropagation()
-                              handleDelete(note.id)
+                              e.stopPropagation();
+                              handleDelete(note.id);
                             }}
                           >
-                            <Trash2 className="w-4 h-4 mr-2" />
+                            <Trash2 className="mr-2 h-4 w-4" />
                             Удалить
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -779,36 +784,32 @@ export function NotesScreen() {
                     </div>
                   </CardContent>
                 </Card>
-              )
+              );
             }
 
             // Regular note card
             return (
               <Card
                 key={note.id}
-                className="bg-card/50 backdrop-blur cursor-pointer hover:bg-card/70 transition-colors"
+                className="bg-card/50 hover:bg-card/70 cursor-pointer backdrop-blur transition-colors"
                 onClick={() => openNoteDetail(note)}
               >
                 <CardContent className="p-3">
                   <div className="flex items-start gap-3">
-                    <div className="text-lg shrink-0 mt-0.5">
-                      {typeInfo.icon}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm line-clamp-2">
-                        {getPreviewText(note.text)}
-                      </p>
-                      <div className="flex items-center gap-2 mt-2 flex-wrap">
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                    <div className="mt-0.5 shrink-0 text-lg">{typeInfo.icon}</div>
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 text-sm">{getPreviewText(note.text)}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
                           {zoneInfo.icon} {zoneInfo.label}
                         </Badge>
-                        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
+                        <span className="text-muted-foreground flex items-center gap-1 text-[10px]">
+                          <Calendar className="h-3 w-3" />
                           {formatDate(note.createdAt)}
                         </span>
                         {hasLinks && (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-0.5">
-                            <Link2 className="w-3 h-3" />
+                          <Badge variant="secondary" className="gap-0.5 px-1.5 py-0 text-[10px]">
+                            <Link2 className="h-3 w-3" />
                             {note.links.length}
                           </Badge>
                         )}
@@ -817,25 +818,27 @@ export function NotesScreen() {
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                         <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                          <MoreHorizontal className="w-4 h-4" />
+                          <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={(e) => {
-                          e.stopPropagation()
-                          openNoteDetail(note)
-                        }}>
-                          <Edit3 className="w-4 h-4 mr-2" />
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openNoteDetail(note);
+                          }}
+                        >
+                          <Edit3 className="mr-2 h-4 w-4" />
                           Редактировать
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-destructive"
                           onClick={(e) => {
-                            e.stopPropagation()
-                            handleDelete(note.id)
+                            e.stopPropagation();
+                            handleDelete(note.id);
                           }}
                         >
-                          <Trash2 className="w-4 h-4 mr-2" />
+                          <Trash2 className="mr-2 h-4 w-4" />
                           Удалить
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -843,21 +846,21 @@ export function NotesScreen() {
                   </div>
                 </CardContent>
               </Card>
-            )
+            );
           })}
         </div>
       )}
 
       {/* Note Detail Dialog */}
       <Dialog open={showDetail} onOpenChange={setShowDetail}>
-        <DialogContent className="max-w-md max-h-[85vh] flex flex-col">
+        <DialogContent className="flex max-h-[85vh] max-w-md flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {isEditing ? 'Редактирование' : 'Заметка'}
+              {isEditing ? "Редактирование" : "Заметка"}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto space-y-4">
+          <div className="flex-1 space-y-4 overflow-y-auto">
             {isEditing ? (
               <>
                 <Textarea
@@ -866,13 +869,13 @@ export function NotesScreen() {
                   className="min-h-[150px]"
                 />
                 <div className="space-y-2">
-                  <label className="text-sm text-muted-foreground">Тип</label>
+                  <label className="text-muted-foreground text-sm">Тип</label>
                   <div className="flex flex-wrap gap-2">
-                    {NOTE_TYPES.map(type => (
+                    {NOTE_TYPES.map((type) => (
                       <Button
                         key={type.id}
                         size="sm"
-                        variant={editType === type.id ? 'default' : 'outline'}
+                        variant={editType === type.id ? "default" : "outline"}
                         onClick={() => setEditType(type.id)}
                         className="gap-1"
                       >
@@ -882,13 +885,13 @@ export function NotesScreen() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm text-muted-foreground">Зона</label>
+                  <label className="text-muted-foreground text-sm">Зона</label>
                   <div className="flex flex-wrap gap-2">
-                    {NOTE_ZONES.map(zone => (
+                    {NOTE_ZONES.map((zone) => (
                       <Button
                         key={zone.id}
                         size="sm"
-                        variant={editZone === zone.id ? 'secondary' : 'outline'}
+                        variant={editZone === zone.id ? "secondary" : "outline"}
                         onClick={() => setEditZone(zone.id)}
                         className="gap-1"
                       >
@@ -901,177 +904,197 @@ export function NotesScreen() {
             ) : (
               <>
                 {/* Note content - different for reframe type */}
-                {selectedNote?.type === 'reframe' && reframeDetailData ? (
+                {selectedNote?.type === "reframe" && reframeDetailData ? (
                   <>
                     {/* Reframe specific view */}
                     {reframeDetailData.situation && (
                       <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">Ситуация</p>
-                        <div className="text-sm bg-muted/30 rounded-lg p-3">
+                        <p className="text-muted-foreground text-xs">Ситуация</p>
+                        <div className="bg-muted/30 rounded-lg p-3 text-sm">
                           {reframeDetailData.situation}
                         </div>
                       </div>
                     )}
-                    
+
                     <div className="space-y-1">
-                      <p className="text-xs text-destructive">Старая мысль</p>
-                      <div className="text-sm bg-destructive/10 rounded-lg p-3 border border-destructive/20">
+                      <p className="text-destructive text-xs">Старая мысль</p>
+                      <div className="bg-destructive/10 border-destructive/20 rounded-lg border p-3 text-sm">
                         {reframeDetailData.oldThought}
                       </div>
                     </div>
-                    
+
                     <div className="space-y-1">
                       <p className="text-xs text-emerald-600">Новый взгляд</p>
-                      <div className="text-sm bg-emerald-500/10 rounded-lg p-3 border border-emerald-500/20">
+                      <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm">
                         {reframeDetailData.newView}
                       </div>
                     </div>
-                    
+
                     {/* Actions */}
-                    {reframeDetailData.actions.filter(a => a.text.trim()).length > 0 && (
+                    {reframeDetailData.actions.filter((a) => a.text.trim()).length > 0 && (
                       <div className="space-y-2">
-                        <p className="text-xs text-muted-foreground">Действия</p>
-                        {reframeDetailData.actions.filter(a => a.text.trim()).map((action, index) => (
-                          <div key={index} className="bg-muted/30 rounded-lg p-3 space-y-2">
-                            <div className="flex items-center gap-2">
-                              {action.linkedEntity?.id ? (
-                                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                              ) : (
-                                <div className="w-4 h-4 rounded-full border border-muted-foreground shrink-0" />
-                              )}
-                              <span className="text-sm flex-1">{action.text}</span>
-                            </div>
-                            {!action.linkedEntity?.id && (
-                              <div className="flex gap-1 flex-wrap">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="text-[10px] h-6"
-                                  onClick={() => handleCreateTaskFromAction(reframeDetailData.actions.findIndex(a => a.text === action.text))}
-                                >
-                                  <ListTodo className="w-3 h-3 mr-1" />
-                                  Дело
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="text-[10px] h-6"
-                                  onClick={() => openChainModalForAction(reframeDetailData.actions.findIndex(a => a.text === action.text))}
-                                >
-                                  <Target className="w-3 h-3 mr-1" />
-                                  В цепочку
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="text-[10px] h-6"
-                                  onClick={() => handleCreateRitualFromAction(reframeDetailData.actions.findIndex(a => a.text === action.text))}
-                                >
-                                  <Sparkles className="w-3 h-3 mr-1" />
-                                  Ритуал
-                                </Button>
+                        <p className="text-muted-foreground text-xs">Действия</p>
+                        {reframeDetailData.actions
+                          .filter((a) => a.text.trim())
+                          .map((action, index) => (
+                            <div key={index} className="bg-muted/30 space-y-2 rounded-lg p-3">
+                              <div className="flex items-center gap-2">
+                                {action.linkedEntity?.id ? (
+                                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+                                ) : (
+                                  <div className="border-muted-foreground h-4 w-4 shrink-0 rounded-full border" />
+                                )}
+                                <span className="flex-1 text-sm">{action.text}</span>
                               </div>
-                            )}
-                            {action.linkedEntity?.id && (
-                              <Badge variant="secondary" className="text-[10px]">
-                                {action.linkedEntity.type === 'task' && '✓ Дело создано'}
-                                {action.linkedEntity.type === 'chainStep' && '✓ Шаг цепочки создан'}
-                                {action.linkedEntity.type === 'ritual' && '✓ Ритуал создан'}
-                              </Badge>
-                            )}
-                          </div>
-                        ))}
+                              {!action.linkedEntity?.id && (
+                                <div className="flex flex-wrap gap-1">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 text-[10px]"
+                                    onClick={() =>
+                                      handleCreateTaskFromAction(
+                                        reframeDetailData.actions.findIndex(
+                                          (a) => a.text === action.text
+                                        )
+                                      )
+                                    }
+                                  >
+                                    <ListTodo className="mr-1 h-3 w-3" />
+                                    Дело
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 text-[10px]"
+                                    onClick={() =>
+                                      openChainModalForAction(
+                                        reframeDetailData.actions.findIndex(
+                                          (a) => a.text === action.text
+                                        )
+                                      )
+                                    }
+                                  >
+                                    <Target className="mr-1 h-3 w-3" />В цепочку
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 text-[10px]"
+                                    onClick={() =>
+                                      handleCreateRitualFromAction(
+                                        reframeDetailData.actions.findIndex(
+                                          (a) => a.text === action.text
+                                        )
+                                      )
+                                    }
+                                  >
+                                    <Sparkles className="mr-1 h-3 w-3" />
+                                    Ритуал
+                                  </Button>
+                                </div>
+                              )}
+                              {action.linkedEntity?.id && (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  {action.linkedEntity.type === "task" && "✓ Дело создано"}
+                                  {action.linkedEntity.type === "chainStep" &&
+                                    "✓ Шаг цепочки создан"}
+                                  {action.linkedEntity.type === "ritual" && "✓ Ритуал создан"}
+                                </Badge>
+                              )}
+                            </div>
+                          ))}
                       </div>
                     )}
                   </>
                 ) : (
                   /* Regular note text */
-                  <div className="text-sm whitespace-pre-wrap bg-muted/30 rounded-lg p-3">
+                  <div className="bg-muted/30 rounded-lg p-3 text-sm whitespace-pre-wrap">
                     {selectedNote?.text}
                   </div>
                 )}
 
                 {/* Meta */}
-                <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex flex-wrap items-center gap-3">
                   <Badge variant="outline" className="gap-1">
-                    {getNoteTypeInfo(selectedNote?.type || '').icon}
-                    {getNoteTypeInfo(selectedNote?.type || '').label}
+                    {getNoteTypeInfo(selectedNote?.type || "").icon}
+                    {getNoteTypeInfo(selectedNote?.type || "").label}
                   </Badge>
                   <Badge variant="secondary" className="gap-1">
-                    {getNoteZoneInfo(selectedNote?.zone || '').icon}
-                    {getNoteZoneInfo(selectedNote?.zone || '').label}
+                    {getNoteZoneInfo(selectedNote?.zone || "").icon}
+                    {getNoteZoneInfo(selectedNote?.zone || "").label}
                   </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {formatDate(selectedNote?.createdAt || '')}
+                  <span className="text-muted-foreground text-xs">
+                    {formatDate(selectedNote?.createdAt || "")}
                   </span>
                 </div>
 
                 {/* Links */}
                 {selectedNote?.links && selectedNote.links.length > 0 && (
                   <div className="space-y-2">
-                    <div className="text-sm font-medium flex items-center gap-1">
-                      <Link2 className="w-4 h-4" />
+                    <div className="flex items-center gap-1 text-sm font-medium">
+                      <Link2 className="h-4 w-4" />
                       Связи
                     </div>
-                    {selectedNote.links.map(link => {
+                    {selectedNote.links.map((link) => {
                       // Determine display text based on entity and chain
-                      let displayText = ''
-                      let Icon = ListTodo
-                      let iconColor = 'text-primary'
-                      
-                      if (link.entity === 'task') {
+                      let displayText = "";
+                      let Icon = ListTodo;
+                      let iconColor = "text-primary";
+
+                      if (link.entity === "task") {
                         if (link.entityDetails?.chain) {
                           // Task is a chain step
-                          displayText = `Шаг цепочки: ${link.entityDetails.chain.title}`
-                          Icon = Target
-                          iconColor = 'text-emerald-500'
+                          displayText = `Шаг цепочки: ${link.entityDetails.chain.title}`;
+                          Icon = Target;
+                          iconColor = "text-emerald-500";
                         } else {
-                          displayText = 'Дело'
-                          Icon = ListTodo
-                          iconColor = 'text-primary'
+                          displayText = "Дело";
+                          Icon = ListTodo;
+                          iconColor = "text-primary";
                         }
-                      } else if (link.entity === 'ritual') {
-                        displayText = link.entityDetails?.title || 'Ритуал'
-                        Icon = Sparkles
-                        iconColor = 'text-amber-500'
-                      } else if (link.entity === 'chain') {
-                        displayText = link.entityDetails?.title || 'Цепочка'
-                        Icon = Target
-                        iconColor = 'text-emerald-500'
+                      } else if (link.entity === "ritual") {
+                        displayText = link.entityDetails?.title || "Ритуал";
+                        Icon = Sparkles;
+                        iconColor = "text-amber-500";
+                      } else if (link.entity === "chain") {
+                        displayText = link.entityDetails?.title || "Цепочка";
+                        Icon = Target;
+                        iconColor = "text-emerald-500";
                       }
-                      
+
                       return (
                         <div
                           key={link.id}
-                          className="text-sm bg-muted/30 rounded-lg p-2 flex items-center gap-2 group"
+                          className="bg-muted/30 group flex items-center gap-2 rounded-lg p-2 text-sm"
                         >
-                          <Icon className={`w-4 h-4 ${iconColor} shrink-0`} />
+                          <Icon className={`h-4 w-4 ${iconColor} shrink-0`} />
                           <span className="flex-1 truncate">{displayText}</span>
                           {link.fragment && !link.entityDetails?.chain && (
-                            <span className="text-muted-foreground text-xs truncate max-w-[100px]">
+                            <span className="text-muted-foreground max-w-[100px] truncate text-xs">
                               &quot;{link.fragment.substring(0, 20)}...&quot;
                             </span>
                           )}
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+                            className="text-muted-foreground hover:text-destructive h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
                             onClick={(e) => {
-                              e.stopPropagation()
-                              handleRemoveLink(link.id)
+                              e.stopPropagation();
+                              handleRemoveLink(link.id);
                             }}
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <Trash2 className="h-3 w-3" />
                           </Button>
                         </div>
-                      )
+                      );
                     })}
                   </div>
                 )}
 
                 {/* Action buttons */}
-                <div className="space-y-2 pt-2 border-t">
-                  <p className="text-sm text-muted-foreground">Создать из заметки:</p>
+                <div className="space-y-2 border-t pt-2">
+                  <p className="text-muted-foreground text-sm">Создать из заметки:</p>
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
@@ -1079,7 +1102,7 @@ export function NotesScreen() {
                       className="flex-1 gap-1"
                       onClick={handleCreateTask}
                     >
-                      <ListTodo className="w-4 h-4" />
+                      <ListTodo className="h-4 w-4" />
                       Дело
                     </Button>
                     <Button
@@ -1088,7 +1111,7 @@ export function NotesScreen() {
                       className="flex-1 gap-1"
                       onClick={openChainModal}
                     >
-                      <Target className="w-4 h-4" />
+                      <Target className="h-4 w-4" />
                       Шаг в цепочку
                     </Button>
                     <Button
@@ -1098,8 +1121,8 @@ export function NotesScreen() {
                       onClick={handleCreateRitual}
                       disabled={isCreatingRitual}
                     >
-                      <Sparkles className="w-4 h-4" />
-                      {isCreatingRitual ? 'Создание...' : 'Ритуал'}
+                      <Sparkles className="h-4 w-4" />
+                      {isCreatingRitual ? "Создание..." : "Ритуал"}
                     </Button>
                   </div>
                 </div>
@@ -1108,7 +1131,7 @@ export function NotesScreen() {
           </div>
 
           {/* Footer actions */}
-          <div className="flex gap-2 pt-4 border-t">
+          <div className="flex gap-2 border-t pt-4">
             {isEditing ? (
               <>
                 <Button variant="outline" className="flex-1" onClick={() => setIsEditing(false)}>
@@ -1120,8 +1143,12 @@ export function NotesScreen() {
               </>
             ) : (
               <>
-                <Button variant="outline" className="flex-1 gap-1" onClick={() => setIsEditing(true)}>
-                  <Edit3 className="w-4 h-4" />
+                <Button
+                  variant="outline"
+                  className="flex-1 gap-1"
+                  onClick={() => setIsEditing(true)}
+                >
+                  <Edit3 className="h-4 w-4" />
                   Изменить
                 </Button>
                 <Button
@@ -1129,7 +1156,7 @@ export function NotesScreen() {
                   className="flex-1 gap-1"
                   onClick={() => selectedNote && handleDelete(selectedNote.id)}
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="h-4 w-4" />
                   Удалить
                 </Button>
               </>
@@ -1146,17 +1173,17 @@ export function NotesScreen() {
           </DialogHeader>
           <div className="space-y-4 pt-4">
             {isLoadingChains ? (
-              <p className="text-center text-muted-foreground py-4">Загрузка цепочек...</p>
+              <p className="text-muted-foreground py-4 text-center">Загрузка цепочек...</p>
             ) : activeChains.length === 0 ? (
-              <div className="text-center py-4">
+              <div className="py-4 text-center">
                 <p className="text-muted-foreground">Нет активных цепочек</p>
                 <Button
                   variant="outline"
                   size="sm"
                   className="mt-2"
                   onClick={() => {
-                    setShowChainModal(false)
-                    setScreen('create-chain')
+                    setShowChainModal(false);
+                    setScreen("create-chain");
                   }}
                 >
                   Создать цепочку
@@ -1171,7 +1198,7 @@ export function NotesScreen() {
                       <SelectValue placeholder="Выберите цепочку" />
                     </SelectTrigger>
                     <SelectContent>
-                      {activeChains.map(chain => (
+                      {activeChains.map((chain) => (
                         <SelectItem key={chain.id} value={chain.id}>
                           {chain.title}
                         </SelectItem>
@@ -1212,23 +1239,25 @@ export function NotesScreen() {
 
       {/* Reframe Modal */}
       <Dialog open={showReframeModal} onOpenChange={setShowReframeModal}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-h-[85vh] max-w-md overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{reframeEditData ? 'Редактировать рефрейминг' : 'Новый рефрейминг'}</DialogTitle>
+            <DialogTitle>
+              {reframeEditData ? "Редактировать рефрейминг" : "Новый рефрейминг"}
+            </DialogTitle>
           </DialogHeader>
           <ReframeForm
             initialData={reframeEditData}
             initialZone={reframeEditZone}
             onSubmit={handleSaveReframe}
             onCancel={() => {
-              setShowReframeModal(false)
-              setReframeEditData(undefined)
-              setSelectedNote(null)
+              setShowReframeModal(false);
+              setReframeEditData(undefined);
+              setSelectedNote(null);
             }}
             isLoading={isSavingReframe}
           />
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }

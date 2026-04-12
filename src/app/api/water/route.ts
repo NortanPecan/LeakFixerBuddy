@@ -1,47 +1,53 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { normalizeToDate, getStartOfDay, getEndOfDay, formatDateKey, parseDateKey } from '@/lib/date-utils'
-import { requireSelf } from '@/lib/server-auth'
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import {
+  normalizeToDate,
+  getStartOfDay,
+  getEndOfDay,
+  formatDateKey,
+  parseDateKey,
+} from "@/lib/date-utils";
+import { requireSelf } from "@/lib/server-auth";
 
 // GET /api/water?userId=xxx - Get water for today
 // GET /api/water?userId=xxx&date=YYYY-MM-DD - Get water for specific date
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
-  const userId = searchParams.get('userId')
-  const dateParam = searchParams.get('date')
+  const { searchParams } = new URL(request.url);
+  const userId = searchParams.get("userId");
+  const dateParam = searchParams.get("date");
 
   if (!userId) {
-    return NextResponse.json({ error: 'userId is required' }, { status: 400 })
+    return NextResponse.json({ error: "userId is required" }, { status: 400 });
   }
 
-  const auth = requireSelf(request, userId)
-  if ('error' in auth) return auth.error
+  const auth = requireSelf(request, userId);
+  if ("error" in auth) return auth.error;
 
   try {
-    const targetDate = dateParam ? parseDateKey(dateParam) : normalizeToDate(new Date())
+    const targetDate = dateParam ? parseDateKey(dateParam) : normalizeToDate(new Date());
 
     // Find or create fitness daily record
     let fitnessDaily = await db.fitnessDaily.findFirst({
       where: {
         userId,
-        date: targetDate
-      }
-    })
+        date: targetDate,
+      },
+    });
 
     if (!fitnessDaily) {
       // Get user's water baseline from profile
       const profile = await db.userProfile.findUnique({
-        where: { userId }
-      })
+        where: { userId },
+      });
 
       fitnessDaily = await db.fitnessDaily.create({
         data: {
           userId,
           date: targetDate,
           water: 0,
-          waterTarget: profile?.waterBaseline || 2000
-        }
-      })
+          waterTarget: profile?.waterBaseline || 2000,
+        },
+      });
     }
 
     return NextResponse.json({
@@ -50,61 +56,61 @@ export async function GET(request: NextRequest) {
       water: {
         current: fitnessDaily.water,
         target: fitnessDaily.waterTarget,
-        percentage: Math.round((fitnessDaily.water / fitnessDaily.waterTarget) * 100)
-      }
-    })
+        percentage: Math.round((fitnessDaily.water / fitnessDaily.waterTarget) * 100),
+      },
+    });
   } catch (error) {
-    console.error('Error fetching water:', error)
-    return NextResponse.json({ error: 'Failed to fetch water' }, { status: 500 })
+    console.error("Error fetching water:", error);
+    return NextResponse.json({ error: "Failed to fetch water" }, { status: 500 });
   }
 }
 
 // PATCH /api/water - Update water intake
 export async function PATCH(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { userId, date, amount, target } = body
+    const body = await request.json();
+    const { userId, date, amount, target } = body;
 
     if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 })
+      return NextResponse.json({ error: "userId is required" }, { status: 400 });
     }
 
-    const auth = requireSelf(request, userId)
-    if ('error' in auth) return auth.error
+    const auth = requireSelf(request, userId);
+    if ("error" in auth) return auth.error;
 
-    const targetDate = date ? parseDateKey(date) : normalizeToDate(new Date())
+    const targetDate = date ? parseDateKey(date) : normalizeToDate(new Date());
 
     // Find or create fitness daily record
     let fitnessDaily = await db.fitnessDaily.findFirst({
       where: {
         userId,
-        date: targetDate
-      }
-    })
+        date: targetDate,
+      },
+    });
 
     if (!fitnessDaily) {
       const profile = await db.userProfile.findUnique({
-        where: { userId }
-      })
+        where: { userId },
+      });
 
       fitnessDaily = await db.fitnessDaily.create({
         data: {
           userId,
           date: targetDate,
           water: amount || 0,
-          waterTarget: target || profile?.waterBaseline || 2000
-        }
-      })
+          waterTarget: target || profile?.waterBaseline || 2000,
+        },
+      });
     } else {
-      const updateData: Record<string, unknown> = { water: amount }
+      const updateData: Record<string, unknown> = { water: amount };
       if (target !== undefined) {
-        updateData.waterTarget = target
+        updateData.waterTarget = target;
       }
 
       fitnessDaily = await db.fitnessDaily.update({
         where: { id: fitnessDaily.id },
-        data: updateData
-      })
+        data: updateData,
+      });
     }
 
     return NextResponse.json({
@@ -113,11 +119,11 @@ export async function PATCH(request: NextRequest) {
       water: {
         current: fitnessDaily.water,
         target: fitnessDaily.waterTarget,
-        percentage: Math.round((fitnessDaily.water / fitnessDaily.waterTarget) * 100)
-      }
-    })
+        percentage: Math.round((fitnessDaily.water / fitnessDaily.waterTarget) * 100),
+      },
+    });
   } catch (error) {
-    console.error('Error updating water:', error)
-    return NextResponse.json({ error: 'Failed to update water' }, { status: 500 })
+    console.error("Error updating water:", error);
+    return NextResponse.json({ error: "Failed to update water" }, { status: 500 });
   }
 }

@@ -1,12 +1,12 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { useAppStore } from '@/lib/store'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
-import { DatePicker } from '@/components/DatePicker'
+import { useEffect, useState } from "react";
+import { useAppStore } from "@/lib/store";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { DatePicker } from "@/components/DatePicker";
 import {
   Droplets,
   Apple,
@@ -23,138 +23,138 @@ import {
   Minus,
   Moon,
   Share2,
-  X
-} from 'lucide-react'
+  X,
+} from "lucide-react";
 
 interface CheckinData {
   morning: {
-    done: boolean
-    energy: number | null
-    focusWord: string | null
-    tasks: (string | null)[]
-    intention: string | null
-  }
+    done: boolean;
+    energy: number | null;
+    focusWord: string | null;
+    tasks: (string | null)[];
+    intention: string | null;
+  };
   evening: {
-    done: boolean
-    dayRating: number | null
-    win: string | null
-    tasksDone: boolean[]
-  }
+    done: boolean;
+    dayRating: number | null;
+    win: string | null;
+    tasksDone: boolean[];
+  };
 }
 
 interface DailySummaryData {
-  date: string
-  checkin?: CheckinData
+  date: string;
+  checkin?: CheckinData;
   water: {
-    current: number
-    target: number
-    percentage: number
-  }
+    current: number;
+    target: number;
+    percentage: number;
+  };
   food: {
-    calories: number
-    protein: number
-    fat: number
-    carbs: number
+    calories: number;
+    protein: number;
+    fat: number;
+    carbs: number;
     qualityBreakdown: {
-      good: number
-      neutral: number
-      bad: number
-    }
-    entriesCount: number
-    firstMeal: string | null
-    lastMeal: string | null
-    eatingWindowHours: number | null
-    avgCalories7d: number | null
-  }
+      good: number;
+      neutral: number;
+      bad: number;
+    };
+    entriesCount: number;
+    firstMeal: string | null;
+    lastMeal: string | null;
+    eatingWindowHours: number | null;
+    avgCalories7d: number | null;
+  };
   rituals: {
-    completed: number
-    total: number
-    percentage: number
-  }
+    completed: number;
+    total: number;
+    percentage: number;
+  };
   state: {
-    mood: number | null
-    energy: number | null
-    sleepHours: number | null
-  }
+    mood: number | null;
+    energy: number | null;
+    sleepHours: number | null;
+  };
   supplements: {
-    checked: number
-    total: number
-    percentage: number
-  }
+    checked: number;
+    total: number;
+    percentage: number;
+  };
   flags: {
-    isOvereating: boolean
-    isLowEnergy: boolean
-    isBadMood: boolean
-    isRitualsFailed: boolean
-    isDehydrated: boolean
-    hasNoData: boolean
-  }
+    isOvereating: boolean;
+    isLowEnergy: boolean;
+    isBadMood: boolean;
+    isRitualsFailed: boolean;
+    isDehydrated: boolean;
+    hasNoData: boolean;
+  };
 }
 
 interface NewAchievement {
-  code: string
-  label: string
-  emoji: string
-  desc: string
+  code: string;
+  label: string;
+  emoji: string;
+  desc: string;
 }
 
 export function DailySummaryScreen() {
-  const { user, profile, selectedDate, setScreen } = useAppStore()
-  const [summary, setSummary] = useState<DailySummaryData | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [markingAte, setMarkingAte] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [newAchievements, setNewAchievements] = useState<NewAchievement[]>([])
-  const [shareClicked, setShareClicked] = useState(false)
+  const { user, profile, selectedDate, setScreen } = useAppStore();
+  const [summary, setSummary] = useState<DailySummaryData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [markingAte, setMarkingAte] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [newAchievements, setNewAchievements] = useState<NewAchievement[]>([]);
+  const [shareClicked, setShareClicked] = useState(false);
 
   useEffect(() => {
     const loadSummary = async () => {
-      if (!user?.id) return
+      if (!user?.id) return;
 
-      setIsLoading(true)
-      setError(null)
+      setIsLoading(true);
+      setError(null);
       try {
-        const response = await fetch(
-          `/api/daily-summary?userId=${user.id}&date=${selectedDate}`
-        )
-        if (!response.ok) throw new Error('Failed to load summary')
-        const data = await response.json()
+        const response = await fetch(`/api/daily-summary?userId=${user.id}&date=${selectedDate}`);
+        if (!response.ok) throw new Error("Failed to load summary");
+        const data = await response.json();
         if (data.success) {
-          setSummary(data.summary)
+          setSummary(data.summary);
           // Check achievements for today only (not historical dates)
-          const todayStr = new Date().toISOString().split('T')[0]
+          const todayStr = new Date().toISOString().split("T")[0];
           if (selectedDate === todayStr) {
-            fetch('/api/achievements/check', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+            fetch("/api/achievements/check", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ userId: user.id }),
             })
-              .then(r => r.json())
-              .then(result => {
+              .then((r) => r.json())
+              .then((result) => {
                 if (result.newAchievements?.length > 0) {
-                  setNewAchievements(result.newAchievements)
+                  setNewAchievements(result.newAchievements);
                 }
               })
-              .catch(() => { /* non-critical */ })
+              .catch(() => {
+                /* non-critical */
+              });
           }
         }
       } catch (err) {
-        console.error('Failed to load daily summary:', err)
-        setError('Не удалось загрузить сводку')
+        console.error("Failed to load daily summary:", err);
+        setError("Не удалось загрузить сводку");
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
-    }
-    
-    loadSummary()
-  }, [user?.id, selectedDate])
+    };
+
+    loadSummary();
+  }, [user?.id, selectedDate]);
 
   if (isLoading) {
     return (
       <div className="flex flex-col gap-4 pb-20">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => setScreen('home')}>
-            <ArrowLeft className="w-4 h-4" />
+          <Button variant="ghost" size="sm" onClick={() => setScreen("home")}>
+            <ArrowLeft className="h-4 w-4" />
           </Button>
           <h1 className="text-xl font-bold">Дневная сводка</h1>
         </div>
@@ -162,38 +162,38 @@ export function DailySummaryScreen() {
         {/* Loading skeleton */}
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <Card className="bg-card/50 backdrop-blur animate-pulse">
+            <Card className="bg-card/50 animate-pulse backdrop-blur">
               <CardContent className="pt-4">
-                <div className="h-4 bg-muted rounded w-1/2 mb-2" />
-                <div className="h-6 bg-muted rounded w-2/3" />
+                <div className="bg-muted mb-2 h-4 w-1/2 rounded" />
+                <div className="bg-muted h-6 w-2/3 rounded" />
               </CardContent>
             </Card>
-            <Card className="bg-card/50 backdrop-blur animate-pulse">
+            <Card className="bg-card/50 animate-pulse backdrop-blur">
               <CardContent className="pt-4">
-                <div className="h-4 bg-muted rounded w-1/2 mb-2" />
-                <div className="h-6 bg-muted rounded w-2/3" />
+                <div className="bg-muted mb-2 h-4 w-1/2 rounded" />
+                <div className="bg-muted h-6 w-2/3 rounded" />
               </CardContent>
             </Card>
           </div>
-          {[1, 2, 3].map(i => (
-            <Card key={i} className="bg-card/50 backdrop-blur animate-pulse">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="bg-card/50 animate-pulse backdrop-blur">
               <CardContent className="pt-4">
-                <div className="h-4 bg-muted rounded w-1/3 mb-3" />
-                <div className="h-8 bg-muted rounded w-full" />
+                <div className="bg-muted mb-3 h-4 w-1/3 rounded" />
+                <div className="bg-muted h-8 w-full rounded" />
               </CardContent>
             </Card>
           ))}
         </div>
       </div>
-    )
+    );
   }
 
   if (!summary || error) {
     return (
       <div className="flex flex-col gap-4 pb-20">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => setScreen('home')}>
-            <ArrowLeft className="w-4 h-4" />
+          <Button variant="ghost" size="sm" onClick={() => setScreen("home")}>
+            <ArrowLeft className="h-4 w-4" />
           </Button>
           <h1 className="text-xl font-bold">Дневная сводка</h1>
         </div>
@@ -202,121 +202,139 @@ export function DailySummaryScreen() {
           <CardContent className="pt-6 text-center">
             {error ? (
               <>
-                <p className="text-red-400 mb-4">{error}</p>
-                <Button onClick={() => window.location.reload()}>
-                  Повторить
-                </Button>
+                <p className="mb-4 text-red-400">{error}</p>
+                <Button onClick={() => window.location.reload()}>Повторить</Button>
               </>
             ) : (
               <>
-                <Calendar className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+                <Calendar className="text-muted-foreground/50 mx-auto mb-3 h-12 w-12" />
                 <p className="text-muted-foreground">Нет данных за этот день</p>
               </>
             )}
           </CardContent>
         </Card>
       </div>
-    )
+    );
   }
 
   const hasFlags = Object.entries(summary.flags).some(
-    ([key, value]) => key !== 'hasNoData' && value
-  )
+    ([key, value]) => key !== "hasNoData" && value
+  );
 
   // Day score (0–100)
   const dayScore = (() => {
-    let score = 0
-    let weight = 0
+    let score = 0;
+    let weight = 0;
 
     // Rituals (25 pts)
     if (summary.rituals.total > 0) {
-      score += (summary.rituals.completed / summary.rituals.total) * 25
-      weight += 25
+      score += (summary.rituals.completed / summary.rituals.total) * 25;
+      weight += 25;
     }
 
     // Water (20 pts)
     if (summary.water.target > 0) {
-      score += Math.min(summary.water.percentage / 100, 1) * 20
-      weight += 20
+      score += Math.min(summary.water.percentage / 100, 1) * 20;
+      weight += 20;
     }
 
     // Mood (20 pts)
-    const mood = summary.state.mood ?? summary.checkin?.evening?.dayRating ?? null
+    const mood = summary.state.mood ?? summary.checkin?.evening?.dayRating ?? null;
     if (mood !== null) {
-      score += (mood / 10) * 20
-      weight += 20
+      score += (mood / 10) * 20;
+      weight += 20;
     }
 
     // Energy (15 pts)
-    const energy = summary.state.energy ?? summary.checkin?.morning?.energy ?? null
+    const energy = summary.state.energy ?? summary.checkin?.morning?.energy ?? null;
     if (energy !== null) {
-      score += (energy / 10) * 15
-      weight += 15
+      score += (energy / 10) * 15;
+      weight += 15;
     }
 
     // Checkins (10 pts each)
-    if (summary.checkin?.morning?.done) { score += 10; weight += 10 }
-    if (summary.checkin?.evening?.done) { score += 10; weight += 10 }
+    if (summary.checkin?.morning?.done) {
+      score += 10;
+      weight += 10;
+    }
+    if (summary.checkin?.evening?.done) {
+      score += 10;
+      weight += 10;
+    }
 
-    return weight > 0 ? Math.round((score / weight) * 100) : null
-  })()
+    return weight > 0 ? Math.round((score / weight) * 100) : null;
+  })();
 
-  const scoreColor = dayScore === null ? 'text-muted-foreground'
-    : dayScore >= 75 ? 'text-emerald-400'
-    : dayScore >= 50 ? 'text-yellow-400'
-    : 'text-red-400'
+  const scoreColor =
+    dayScore === null
+      ? "text-muted-foreground"
+      : dayScore >= 75
+        ? "text-emerald-400"
+        : dayScore >= 50
+          ? "text-yellow-400"
+          : "text-red-400";
 
-  const scoreLabel = dayScore === null ? 'Нет данных'
-    : dayScore >= 80 ? 'Отличный день!'
-    : dayScore >= 60 ? 'Хороший день'
-    : dayScore >= 40 ? 'Средний день'
-    : 'Сложный день'
+  const scoreLabel =
+    dayScore === null
+      ? "Нет данных"
+      : dayScore >= 80
+        ? "Отличный день!"
+        : dayScore >= 60
+          ? "Хороший день"
+          : dayScore >= 40
+            ? "Средний день"
+            : "Сложный день";
 
   const handleShare = async () => {
-    if (!summary || dayScore === null) return
-    const waterPct = summary.water.percentage
-    const cals = summary.food.calories
-    const ritDone = summary.rituals.completed
-    const ritTotal = summary.rituals.total
-    const parts: string[] = []
-    if (waterPct > 0) parts.push(`💧${waterPct}%`)
-    if (cals > 0) parts.push(`🍽️${cals}ккал`)
-    if (ritTotal > 0) parts.push(`✅${ritDone}/${ritTotal} ритуалов`)
-    const shareText = `📊 Мой день: ${dayScore}/100 — ${scoreLabel} ${parts.join(' ')}`
+    if (!summary || dayScore === null) return;
+    const waterPct = summary.water.percentage;
+    const cals = summary.food.calories;
+    const ritDone = summary.rituals.completed;
+    const ritTotal = summary.rituals.total;
+    const parts: string[] = [];
+    if (waterPct > 0) parts.push(`💧${waterPct}%`);
+    if (cals > 0) parts.push(`🍽️${cals}ккал`);
+    if (ritTotal > 0) parts.push(`✅${ritDone}/${ritTotal} ритуалов`);
+    const shareText = `📊 Мой день: ${dayScore}/100 — ${scoreLabel} ${parts.join(" ")}`;
     try {
-      await navigator.clipboard.writeText(shareText)
-      setShareClicked(true)
-      setTimeout(() => setShareClicked(false), 2000)
+      await navigator.clipboard.writeText(shareText);
+      setShareClicked(true);
+      setTimeout(() => setShareClicked(false), 2000);
     } catch {
-      window.open(`tg://msg?text=${encodeURIComponent(shareText)}`)
+      window.open(`tg://msg?text=${encodeURIComponent(shareText)}`);
     }
-  }
+  };
 
   return (
     <div className="flex flex-col gap-4 pb-20">
       {/* Achievement popup */}
       {newAchievements.length > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-card border border-border rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-in fade-in zoom-in">
+          <div className="bg-card border-border animate-in fade-in zoom-in w-full max-w-sm rounded-2xl border p-6 shadow-2xl">
             <button
-              className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"
+              className="text-muted-foreground hover:text-foreground absolute top-3 right-3"
               onClick={() => setNewAchievements([])}
             >
-              <X className="w-4 h-4" />
+              <X className="h-4 w-4" />
             </button>
-            <div className="text-center mb-4">
-              <p className="text-4xl mb-2">{newAchievements[0].emoji}</p>
+            <div className="mb-4 text-center">
+              <p className="mb-2 text-4xl">{newAchievements[0].emoji}</p>
               <p className="text-lg font-bold">Новое достижение!</p>
             </div>
             <div className="space-y-3">
-              {newAchievements.map(a => (
-                <div key={a.code} className="bg-primary/10 border border-primary/30 rounded-xl p-3 text-center">
-                  <p className="font-semibold text-primary">{a.emoji} {a.label}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{a.desc}</p>
+              {newAchievements.map((a) => (
+                <div
+                  key={a.code}
+                  className="bg-primary/10 border-primary/30 rounded-xl border p-3 text-center"
+                >
+                  <p className="text-primary font-semibold">
+                    {a.emoji} {a.label}
+                  </p>
+                  <p className="text-muted-foreground mt-1 text-xs">{a.desc}</p>
                 </div>
               ))}
             </div>
-            <Button className="w-full mt-4" onClick={() => setNewAchievements([])}>
+            <Button className="mt-4 w-full" onClick={() => setNewAchievements([])}>
               Отлично!
             </Button>
           </div>
@@ -325,8 +343,8 @@ export function DailySummaryScreen() {
 
       {/* Header with back button */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={() => setScreen('home')}>
-          <ArrowLeft className="w-4 h-4" />
+        <Button variant="ghost" size="sm" onClick={() => setScreen("home")}>
+          <ArrowLeft className="h-4 w-4" />
         </Button>
         <h1 className="text-xl font-bold">Дневная сводка</h1>
         {dayScore !== null && (
@@ -339,14 +357,14 @@ export function DailySummaryScreen() {
               title="Поделиться результатом"
             >
               {shareClicked ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
               ) : (
-                <Share2 className="w-4 h-4" />
+                <Share2 className="h-4 w-4" />
               )}
             </Button>
             <div className="flex items-baseline gap-1">
               <span className={`text-2xl font-bold ${scoreColor}`}>{dayScore}</span>
-              <span className="text-xs text-muted-foreground">/100</span>
+              <span className="text-muted-foreground text-xs">/100</span>
             </div>
           </div>
         )}
@@ -354,7 +372,9 @@ export function DailySummaryScreen() {
 
       {/* Day score label */}
       {dayScore !== null && (
-        <div className={`text-center text-sm font-medium ${scoreColor}`}>{shareClicked ? '✅ Скопировано!' : scoreLabel}</div>
+        <div className={`text-center text-sm font-medium ${scoreColor}`}>
+          {shareClicked ? "✅ Скопировано!" : scoreLabel}
+        </div>
       )}
 
       {/* Date Picker */}
@@ -362,35 +382,47 @@ export function DailySummaryScreen() {
 
       {/* Warning flags */}
       {hasFlags && (
-        <Card className="bg-amber-500/10 border-amber-500/30">
+        <Card className="border-amber-500/30 bg-amber-500/10">
           <CardContent className="pt-4">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="w-4 h-4 text-amber-400" />
+            <div className="mb-2 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-400" />
               <span className="text-sm font-medium text-amber-400">Обрати внимание</span>
             </div>
             <div className="flex flex-wrap gap-2">
               {summary.flags.isOvereating && (
-                <Badge variant="outline" className="bg-red-500/10 text-red-400 border-red-500/30">
+                <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-red-400">
                   🍔 Переедание
                 </Badge>
               )}
               {summary.flags.isLowEnergy && (
-                <Badge variant="outline" className="bg-orange-500/10 text-orange-400 border-orange-500/30">
+                <Badge
+                  variant="outline"
+                  className="border-orange-500/30 bg-orange-500/10 text-orange-400"
+                >
                   🪫 Низкая энергия
                 </Badge>
               )}
               {summary.flags.isBadMood && (
-                <Badge variant="outline" className="bg-purple-500/10 text-purple-400 border-purple-500/30">
+                <Badge
+                  variant="outline"
+                  className="border-purple-500/30 bg-purple-500/10 text-purple-400"
+                >
                   😔 Плохое настроение
                 </Badge>
               )}
               {summary.flags.isRitualsFailed && (
-                <Badge variant="outline" className="bg-yellow-500/10 text-yellow-400 border-yellow-500/30">
+                <Badge
+                  variant="outline"
+                  className="border-yellow-500/30 bg-yellow-500/10 text-yellow-400"
+                >
                   ⚠️ Ритуалы не выполнены
                 </Badge>
               )}
               {summary.flags.isDehydrated && (
-                <Badge variant="outline" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30">
+                <Badge
+                  variant="outline"
+                  className="border-cyan-500/30 bg-cyan-500/10 text-cyan-400"
+                >
                   💧 Обезвоживание
                 </Badge>
               )}
@@ -401,11 +433,11 @@ export function DailySummaryScreen() {
 
       {/* Empty state */}
       {summary.flags.hasNoData && (
-        <Card className="bg-card/50 backdrop-blur border-dashed">
+        <Card className="bg-card/50 border-dashed backdrop-blur">
           <CardContent className="pt-6 text-center">
-            <Calendar className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+            <Calendar className="text-muted-foreground/50 mx-auto mb-3 h-12 w-12" />
             <p className="text-muted-foreground">Нет данных за этот день</p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-muted-foreground mt-1 text-xs">
               Начни записывать еду, воду и ритуалы
             </p>
           </CardContent>
@@ -420,34 +452,34 @@ export function DailySummaryScreen() {
         {/* Mood/Energy/Sleep */}
         <Card className="bg-card/50 backdrop-blur">
           <CardContent className="pt-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Heart className="w-4 h-4 text-pink-400" />
-              <span className="text-xs text-muted-foreground">Настроение</span>
+            <div className="mb-2 flex items-center gap-2">
+              <Heart className="h-4 w-4 text-pink-400" />
+              <span className="text-muted-foreground text-xs">Настроение</span>
             </div>
             {summary.state.mood !== null ? (
               <div className="flex items-baseline gap-1">
                 <span className="text-2xl font-bold">{summary.state.mood}</span>
-                <span className="text-xs text-muted-foreground">/10</span>
+                <span className="text-muted-foreground text-xs">/10</span>
               </div>
             ) : (
-              <span className="text-sm text-muted-foreground">—</span>
+              <span className="text-muted-foreground text-sm">—</span>
             )}
           </CardContent>
         </Card>
 
         <Card className="bg-card/50 backdrop-blur">
           <CardContent className="pt-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Zap className="w-4 h-4 text-yellow-400" />
-              <span className="text-xs text-muted-foreground">Энергия</span>
+            <div className="mb-2 flex items-center gap-2">
+              <Zap className="h-4 w-4 text-yellow-400" />
+              <span className="text-muted-foreground text-xs">Энергия</span>
             </div>
             {summary.state.energy !== null ? (
               <div className="flex items-baseline gap-1">
                 <span className="text-2xl font-bold">{summary.state.energy}</span>
-                <span className="text-xs text-muted-foreground">/10</span>
+                <span className="text-muted-foreground text-xs">/10</span>
               </div>
             ) : (
-              <span className="text-sm text-muted-foreground">—</span>
+              <span className="text-muted-foreground text-sm">—</span>
             )}
           </CardContent>
         </Card>
@@ -455,13 +487,13 @@ export function DailySummaryScreen() {
         {summary.state.sleepHours !== null && (
           <Card className="bg-card/50 backdrop-blur">
             <CardContent className="pt-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Moon className="w-4 h-4 text-indigo-400" />
-                <span className="text-xs text-muted-foreground">Сон</span>
+              <div className="mb-2 flex items-center gap-2">
+                <Moon className="h-4 w-4 text-indigo-400" />
+                <span className="text-muted-foreground text-xs">Сон</span>
               </div>
               <div className="flex items-baseline gap-1">
                 <span className="text-2xl font-bold">{summary.state.sleepHours}</span>
-                <span className="text-xs text-muted-foreground">ч</span>
+                <span className="text-muted-foreground text-xs">ч</span>
               </div>
             </CardContent>
           </Card>
@@ -472,9 +504,7 @@ export function DailySummaryScreen() {
       {summary.checkin && (summary.checkin.morning.done || summary.checkin.evening.done) && (
         <Card className="bg-card/50 backdrop-blur">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              📋 Чекапы
-            </CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base">📋 Чекапы</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {/* Morning */}
@@ -493,17 +523,29 @@ export function DailySummaryScreen() {
                     </Badge>
                   )}
                 </div>
-                {summary.checkin.morning.tasks.some(t => t) && (
-                  <div className="pl-1 space-y-0.5">
+                {summary.checkin.morning.tasks.some((t) => t) && (
+                  <div className="space-y-0.5 pl-1">
                     {summary.checkin.morning.tasks.map((task, i) =>
                       task ? (
                         <div key={i} className="flex items-center gap-1.5 text-xs text-white/50">
-                          {summary.checkin?.evening.done
-                            ? (summary.checkin.evening.tasksDone[i]
-                              ? <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-                              : <Circle className="w-3 h-3 text-white/20 flex-shrink-0" />)
-                            : <span className="w-3 h-3 flex-shrink-0" />}
-                          <span className={summary.checkin?.evening.done && summary.checkin.evening.tasksDone[i] ? 'line-through text-white/30' : ''}>{task}</span>
+                          {summary.checkin?.evening.done ? (
+                            summary.checkin.evening.tasksDone[i] ? (
+                              <CheckCircle2 className="h-3 w-3 flex-shrink-0 text-emerald-400" />
+                            ) : (
+                              <Circle className="h-3 w-3 flex-shrink-0 text-white/20" />
+                            )
+                          ) : (
+                            <span className="h-3 w-3 flex-shrink-0" />
+                          )}
+                          <span
+                            className={
+                              summary.checkin?.evening.done && summary.checkin.evening.tasksDone[i]
+                                ? "text-white/30 line-through"
+                                : ""
+                            }
+                          >
+                            {task}
+                          </span>
                         </div>
                       ) : null
                     )}
@@ -521,8 +563,12 @@ export function DailySummaryScreen() {
                       variant="outline"
                       className="text-[10px]"
                       style={{
-                        color: summary.checkin.evening.dayRating >= 7 ? '#22c55e'
-                          : summary.checkin.evening.dayRating >= 5 ? '#f59e0b' : '#ef4444',
+                        color:
+                          summary.checkin.evening.dayRating >= 7
+                            ? "#22c55e"
+                            : summary.checkin.evening.dayRating >= 5
+                              ? "#f59e0b"
+                              : "#ef4444",
                       }}
                     >
                       {summary.checkin.evening.dayRating}/10
@@ -530,7 +576,7 @@ export function DailySummaryScreen() {
                   )}
                 </div>
                 {summary.checkin.evening.win && (
-                  <p className="text-xs text-white/50 pl-1">🏆 {summary.checkin.evening.win}</p>
+                  <p className="pl-1 text-xs text-white/50">🏆 {summary.checkin.evening.win}</p>
                 )}
               </div>
             )}
@@ -541,21 +587,21 @@ export function DailySummaryScreen() {
       {/* Water */}
       <Card className="bg-card/50 backdrop-blur">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Droplets className="w-5 h-5 text-cyan-400" />
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Droplets className="h-5 w-5 text-cyan-400" />
             Вода
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between mb-2">
+          <div className="mb-2 flex items-center justify-between">
             <span className="text-2xl font-bold">{summary.water.current}</span>
-            <span className="text-sm text-muted-foreground">/ {summary.water.target} мл</span>
+            <span className="text-muted-foreground text-sm">/ {summary.water.target} мл</span>
           </div>
-          <Progress value={Math.min(summary.water.percentage, 100)} className="h-2 mb-1" />
-          <div className="flex justify-between text-xs text-muted-foreground">
+          <Progress value={Math.min(summary.water.percentage, 100)} className="mb-1 h-2" />
+          <div className="text-muted-foreground flex justify-between text-xs">
             <span>{summary.water.percentage}%</span>
             {summary.water.percentage >= 100 && (
-              <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px]">Цель!</Badge>
+              <Badge className="bg-emerald-500/20 text-[10px] text-emerald-400">Цель!</Badge>
             )}
           </div>
         </CardContent>
@@ -565,8 +611,8 @@ export function DailySummaryScreen() {
       <Card className="bg-card/50 backdrop-blur">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Apple className="w-5 h-5 text-green-400" />
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Apple className="h-5 w-5 text-green-400" />
               Еда
             </CardTitle>
             {summary.food.entriesCount > 0 && (
@@ -579,22 +625,22 @@ export function DailySummaryScreen() {
         <CardContent>
           {summary.food.entriesCount > 0 ? (
             <>
-              <div className="flex items-baseline gap-1 mb-3">
+              <div className="mb-3 flex items-baseline gap-1">
                 <span className="text-2xl font-bold">{summary.food.calories}</span>
-                <span className="text-sm text-muted-foreground">ккал</span>
+                <span className="text-muted-foreground text-sm">ккал</span>
               </div>
-              
+
               {/* Macros */}
-              <div className="grid grid-cols-3 gap-2 mb-3 text-xs">
-                <div className="text-center p-2 rounded-lg bg-muted/30">
+              <div className="mb-3 grid grid-cols-3 gap-2 text-xs">
+                <div className="bg-muted/30 rounded-lg p-2 text-center">
                   <div className="text-muted-foreground">Белки</div>
                   <div className="font-medium">{summary.food.protein.toFixed(0)}г</div>
                 </div>
-                <div className="text-center p-2 rounded-lg bg-muted/30">
+                <div className="bg-muted/30 rounded-lg p-2 text-center">
                   <div className="text-muted-foreground">Жиры</div>
                   <div className="font-medium">{summary.food.fat.toFixed(0)}г</div>
                 </div>
-                <div className="text-center p-2 rounded-lg bg-muted/30">
+                <div className="bg-muted/30 rounded-lg p-2 text-center">
                   <div className="text-muted-foreground">Углеводы</div>
                   <div className="font-medium">{summary.food.carbs.toFixed(0)}г</div>
                 </div>
@@ -624,83 +670,102 @@ export function DailySummaryScreen() {
               )}
 
               {/* Intermittent fasting window */}
-              {summary.food.firstMeal && summary.food.lastMeal && summary.food.eatingWindowHours !== null && (
-                <div className="mt-3 pt-3 border-t border-border/30 flex items-center justify-between text-xs text-muted-foreground">
-                  <span>⏱ Окно питания</span>
-                  <span className="font-medium text-foreground">
-                    {summary.food.firstMeal} — {summary.food.lastMeal}
-                    <span className="text-muted-foreground ml-1">({summary.food.eatingWindowHours} ч)</span>
-                  </span>
-                </div>
-              )}
+              {summary.food.firstMeal &&
+                summary.food.lastMeal &&
+                summary.food.eatingWindowHours !== null && (
+                  <div className="border-border/30 text-muted-foreground mt-3 flex items-center justify-between border-t pt-3 text-xs">
+                    <span>⏱ Окно питания</span>
+                    <span className="text-foreground font-medium">
+                      {summary.food.firstMeal} — {summary.food.lastMeal}
+                      <span className="text-muted-foreground ml-1">
+                        ({summary.food.eatingWindowHours} ч)
+                      </span>
+                    </span>
+                  </div>
+                )}
               {/* 7-day rolling calorie average */}
               {summary.food.avgCalories7d !== null && (
-                <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+                <div className="text-muted-foreground mt-1 flex items-center justify-between text-xs">
                   <span>∅ Среднее за 7 дней</span>
-                  <span className={`font-medium ${
-                    summary.food.calories > summary.food.avgCalories7d * 1.2 ? 'text-red-400' :
-                    summary.food.calories < summary.food.avgCalories7d * 0.8 ? 'text-yellow-400' :
-                    'text-foreground'
-                  }`}>
+                  <span
+                    className={`font-medium ${
+                      summary.food.calories > summary.food.avgCalories7d * 1.2
+                        ? "text-red-400"
+                        : summary.food.calories < summary.food.avgCalories7d * 0.8
+                          ? "text-yellow-400"
+                          : "text-foreground"
+                    }`}
+                  >
                     {summary.food.avgCalories7d} ккал
                   </span>
                 </div>
               )}
               {/* TDEE recommendation (5.8) */}
               {(() => {
-                const w = profile?.weight
-                const h = profile?.height
-                const age = profile?.age
-                if (!w || !h || !age) return null
+                const w = profile?.weight;
+                const h = profile?.height;
+                const age = profile?.age;
+                if (!w || !h || !age) return null;
                 // Harris-Benedict BMR (male, default) * moderate activity (1.55)
-                const bmr = 10 * w + 6.25 * h - 5 * age + 5
-                const tdee = Math.round(bmr * 1.55)
-                const targetW = profile?.targetWeight
-                const goal = targetW && targetW < w ? tdee - 300 : tdee
-                const diff = summary.food.calories - goal
+                const bmr = 10 * w + 6.25 * h - 5 * age + 5;
+                const tdee = Math.round(bmr * 1.55);
+                const targetW = profile?.targetWeight;
+                const goal = targetW && targetW < w ? tdee - 300 : tdee;
+                const diff = summary.food.calories - goal;
                 return (
-                  <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+                  <div className="text-muted-foreground mt-1 flex items-center justify-between text-xs">
                     <span>🎯 Рекомендовано</span>
-                    <span className={`font-medium ${
-                      diff > 200 ? 'text-red-400' : diff < -300 ? 'text-yellow-400' : 'text-emerald-400'
-                    }`}>
-                      {goal} ккал ({diff > 0 ? '+' : ''}{diff})
+                    <span
+                      className={`font-medium ${
+                        diff > 200
+                          ? "text-red-400"
+                          : diff < -300
+                            ? "text-yellow-400"
+                            : "text-emerald-400"
+                      }`}
+                    >
+                      {goal} ккал ({diff > 0 ? "+" : ""}
+                      {diff})
                     </span>
                   </div>
-                )
+                );
               })()}
             </>
           ) : (
             <div className="flex flex-col items-center gap-3 py-2">
-              <p className="text-sm text-muted-foreground">Нет записей о еде</p>
+              <p className="text-muted-foreground text-sm">Нет записей о еде</p>
               <button
                 disabled={markingAte}
                 onClick={async () => {
-                  if (!user?.id) return
-                  setMarkingAte(true)
+                  if (!user?.id) return;
+                  setMarkingAte(true);
                   try {
-                    await fetch('/api/food', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
+                    await fetch("/api/food", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
                         userId: user.id,
-                        name: 'Ел сегодня',
-                        mealType: 'snack',
-                        quality: 'neutral',
+                        name: "Ел сегодня",
+                        mealType: "snack",
+                        quality: "neutral",
                         date: selectedDate,
                       }),
-                    })
-                    setSummary(prev => prev ? {
-                      ...prev,
-                      food: { ...prev.food, entriesCount: 1 }
-                    } : prev)
+                    });
+                    setSummary((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            food: { ...prev.food, entriesCount: 1 },
+                          }
+                        : prev
+                    );
                   } finally {
-                    setMarkingAte(false)
+                    setMarkingAte(false);
                   }
                 }}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 text-sm font-medium hover:bg-green-500/15 transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 rounded-xl border border-green-500/20 bg-green-500/10 px-4 py-2 text-sm font-medium text-green-400 transition-colors hover:bg-green-500/15 disabled:opacity-50"
               >
-                🍽️ {markingAte ? 'Записываю...' : 'Я ел сегодня'}
+                🍽️ {markingAte ? "Записываю..." : "Я ел сегодня"}
               </button>
             </div>
           )}
@@ -709,35 +774,39 @@ export function DailySummaryScreen() {
 
       {/* Food slip reframe + smart swaps (5.6 + 5.2) */}
       {summary.food.qualityBreakdown.bad > 2 && (
-        <Card className="bg-orange-500/5 border border-orange-500/20">
-          <CardContent className="pt-4 pb-3 space-y-3">
-            <div className="flex gap-3 items-start">
+        <Card className="border border-orange-500/20 bg-orange-500/5">
+          <CardContent className="space-y-3 pt-4 pb-3">
+            <div className="flex items-start gap-3">
               <span className="text-2xl">🔄</span>
               <div>
-                <p className="text-sm font-medium text-orange-300 mb-1">Срыв — не катастрофа</p>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Один плохой день не ломает прогресс. Следующий приём пищи — чистый лист.
-                  Пей воду, подвигайся 10 минут — это перезапустит метаболизм.
+                <p className="mb-1 text-sm font-medium text-orange-300">Срыв — не катастрофа</p>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  Один плохой день не ломает прогресс. Следующий приём пищи — чистый лист. Пей воду,
+                  подвигайся 10 минут — это перезапустит метаболизм.
                 </p>
               </div>
             </div>
             <div className="border-t border-orange-500/10 pt-3">
-              <p className="text-xs font-medium text-orange-300/80 mb-2">💡 Умные замены на следующий раз:</p>
+              <p className="mb-2 text-xs font-medium text-orange-300/80">
+                💡 Умные замены на следующий раз:
+              </p>
               <div className="space-y-1.5">
                 {[
-                  { bad: 'Чипсы / сухарики', good: 'Орехи или морковь с хумусом' },
-                  { bad: 'Сладкая газировка', good: 'Вода с лимоном или зелёный чай' },
-                  { bad: 'Майонез', good: 'Авокадо или греческий йогурт' },
-                  { bad: 'Белый хлеб', good: 'Цельнозерновой или бездрожжевой' },
-                  { bad: 'Фаст-фуд', good: 'Куриная грудка + овощи за 15 минут' },
-                  { bad: 'Молочный шоколад', good: 'Горький 70%+ или финики' },
-                ].slice(0, 3).map((swap, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs">
-                    <span className="text-red-400/70 line-through">{swap.bad}</span>
-                    <span className="text-white/30">→</span>
-                    <span className="text-emerald-400/80">{swap.good}</span>
-                  </div>
-                ))}
+                  { bad: "Чипсы / сухарики", good: "Орехи или морковь с хумусом" },
+                  { bad: "Сладкая газировка", good: "Вода с лимоном или зелёный чай" },
+                  { bad: "Майонез", good: "Авокадо или греческий йогурт" },
+                  { bad: "Белый хлеб", good: "Цельнозерновой или бездрожжевой" },
+                  { bad: "Фаст-фуд", good: "Куриная грудка + овощи за 15 минут" },
+                  { bad: "Молочный шоколад", good: "Горький 70%+ или финики" },
+                ]
+                  .slice(0, 3)
+                  .map((swap, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <span className="text-red-400/70 line-through">{swap.bad}</span>
+                      <span className="text-white/30">→</span>
+                      <span className="text-emerald-400/80">{swap.good}</span>
+                    </div>
+                  ))}
               </div>
             </div>
           </CardContent>
@@ -747,19 +816,19 @@ export function DailySummaryScreen() {
       {/* Rituals */}
       <Card className="bg-card/50 backdrop-blur">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-purple-400" />
+          <CardTitle className="flex items-center gap-2 text-base">
+            <CheckCircle2 className="h-5 w-5 text-purple-400" />
             Ритуалы
           </CardTitle>
         </CardHeader>
         <CardContent>
           {summary.rituals.total > 0 ? (
             <>
-              <div className="flex items-center justify-between mb-2">
+              <div className="mb-2 flex items-center justify-between">
                 <span className="text-2xl font-bold">
                   {summary.rituals.completed} / {summary.rituals.total}
                 </span>
-                <span className="text-sm text-muted-foreground">{summary.rituals.percentage}%</span>
+                <span className="text-muted-foreground text-sm">{summary.rituals.percentage}%</span>
               </div>
               <Progress value={summary.rituals.percentage} className="h-2" />
               {summary.rituals.percentage === 100 && (
@@ -770,17 +839,18 @@ export function DailySummaryScreen() {
                 </div>
               )}
               {summary.flags.isRitualsFailed && summary.rituals.total > 0 && (
-                <div className="mt-3 flex gap-2 items-start p-2 rounded-lg bg-yellow-500/5 border border-yellow-500/15">
+                <div className="mt-3 flex items-start gap-2 rounded-lg border border-yellow-500/15 bg-yellow-500/5 p-2">
                   <span className="text-base">🔄</span>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Сегодня не лучший день для ритуалов. Выбери 1 самый важный и сделай только его — это лучше нуля.
+                  <p className="text-muted-foreground text-xs leading-relaxed">
+                    Сегодня не лучший день для ритуалов. Выбери 1 самый важный и сделай только его —
+                    это лучше нуля.
                   </p>
                 </div>
               )}
             </>
           ) : (
-            <div className="text-center py-2">
-              <p className="text-sm text-muted-foreground">Нет активных ритуалов на этот день</p>
+            <div className="py-2 text-center">
+              <p className="text-muted-foreground text-sm">Нет активных ритуалов на этот день</p>
             </div>
           )}
         </CardContent>
@@ -789,25 +859,27 @@ export function DailySummaryScreen() {
       {/* Supplements */}
       <Card className="bg-card/50 backdrop-blur">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Pill className="w-5 h-5 text-blue-400" />
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Pill className="h-5 w-5 text-blue-400" />
             БАДы
           </CardTitle>
         </CardHeader>
         <CardContent>
           {summary.supplements.total > 0 ? (
             <>
-              <div className="flex items-center justify-between mb-2">
+              <div className="mb-2 flex items-center justify-between">
                 <span className="text-2xl font-bold">
                   {summary.supplements.checked} / {summary.supplements.total}
                 </span>
-                <span className="text-sm text-muted-foreground">{summary.supplements.percentage}%</span>
+                <span className="text-muted-foreground text-sm">
+                  {summary.supplements.percentage}%
+                </span>
               </div>
               <Progress value={summary.supplements.percentage} className="h-2" />
             </>
           ) : (
-            <div className="text-center py-2">
-              <p className="text-sm text-muted-foreground">Нет активных БАДов на этот день</p>
+            <div className="py-2 text-center">
+              <p className="text-muted-foreground text-sm">Нет активных БАДов на этот день</p>
             </div>
           )}
         </CardContent>
@@ -815,23 +887,15 @@ export function DailySummaryScreen() {
 
       {/* Quick actions */}
       <div className="grid grid-cols-2 gap-3">
-        <Button
-          variant="outline"
-          className="w-full"
-          onClick={() => setScreen('health')}
-        >
-          <Apple className="w-4 h-4 mr-2" />
+        <Button variant="outline" className="w-full" onClick={() => setScreen("health")}>
+          <Apple className="mr-2 h-4 w-4" />
           Здоровье
         </Button>
-        <Button
-          variant="outline"
-          className="w-full"
-          onClick={() => setScreen('rituals')}
-        >
-          <CheckCircle2 className="w-4 h-4 mr-2" />
+        <Button variant="outline" className="w-full" onClick={() => setScreen("rituals")}>
+          <CheckCircle2 className="mr-2 h-4 w-4" />
           Ритуалы
         </Button>
       </div>
     </div>
-  )
+  );
 }
