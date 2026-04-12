@@ -1,0 +1,9 @@
+.next
+node_modules
+out
+build
+public
+prisma/migrations
+*.md
+bun.lockb
+.env*

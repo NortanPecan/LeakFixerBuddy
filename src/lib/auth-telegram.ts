@@ -1,13 +1,9 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
-import { createHmac, timingSafeEqual } from 'crypto'
-import {
-  getSupabaseUrl,
-  getSupabaseServiceKey,
-  isSupabaseAdminAvailable
-} from './supabaseClient'
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { createHmac, timingSafeEqual } from "crypto";
+import { getSupabaseUrl, getSupabaseServiceKey, isSupabaseAdminAvailable } from "./supabaseClient";
 
 // Lazy-initialized Supabase admin client for auth operations
-let _supabaseAuth: SupabaseClient | null = null
+let _supabaseAuth: SupabaseClient | null = null;
 
 /**
  * Get Supabase Auth client (uses service role key for admin operations)
@@ -15,62 +11,65 @@ let _supabaseAuth: SupabaseClient | null = null
  */
 function getSupabaseAuth(): SupabaseClient {
   if (!_supabaseAuth) {
-    const url = getSupabaseUrl()
-    const serviceKey = getSupabaseServiceKey()
-    
+    const url = getSupabaseUrl();
+    const serviceKey = getSupabaseServiceKey();
+
     if (!url || !serviceKey) {
-      throw new Error('[Supabase Auth] Missing credentials. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY')
+      throw new Error(
+        "[Supabase Auth] Missing credentials. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY"
+      );
     }
-    
+
     _supabaseAuth = createClient(url, serviceKey, {
       auth: {
         autoRefreshToken: false,
-        persistSession: false
-      }
-    })
+        persistSession: false,
+      },
+    });
   }
-  return _supabaseAuth
+  return _supabaseAuth;
 }
 
 // Export for backward compatibility (but use getter)
 export const supabaseAuth = {
   get auth() {
-    return getSupabaseAuth().auth
-  }
-}
+    return getSupabaseAuth().auth;
+  },
+};
 
 // Re-export from supabaseClient.ts
-export { isSupabaseAdminAvailable as isSupabaseConfigured }
+export { isSupabaseAdminAvailable as isSupabaseConfigured };
 
 /**
  * Authenticate or create user via Telegram
  * This links Telegram user to Supabase Auth
  */
 export async function authenticateTelegramUser(telegramUser: {
-  id: number
-  first_name?: string
-  last_name?: string
-  username?: string
-  language_code?: string
-  photo_url?: string
+  id: number;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+  language_code?: string;
+  photo_url?: string;
 }) {
-  const telegramId = telegramUser.id.toString()
-  const email = `telegram_${telegramId}@leakfixer.app`
-  const client = getSupabaseAuth()
-  
+  const telegramId = telegramUser.id.toString();
+  const email = `telegram_${telegramId}@leakfixer.app`;
+  const client = getSupabaseAuth();
+
   try {
     // Try to find existing user by telegram_id in user_metadata
-    const { data: { users }, error: listError } = await client.auth.admin.listUsers()
-    
+    const {
+      data: { users },
+      error: listError,
+    } = await client.auth.admin.listUsers();
+
     if (listError) {
-      console.error('Error listing users:', listError)
-      return { error: listError }
+      console.error("Error listing users:", listError);
+      return { error: listError };
     }
-    
-    let existingUser = users.find(u => 
-      u.user_metadata?.telegram_id === telegramId
-    )
-    
+
+    const existingUser = users.find((u) => u.user_metadata?.telegram_id === telegramId);
+
     if (existingUser) {
       // Update last login
       await client.auth.admin.updateUserById(existingUser.id, {
@@ -80,26 +79,29 @@ export async function authenticateTelegramUser(telegramUser: {
           telegram_last_name: telegramUser.last_name,
           telegram_username: telegramUser.username,
           telegram_photo_url: telegramUser.photo_url,
-          last_login_at: new Date().toISOString()
-        }
-      })
-      
+          last_login_at: new Date().toISOString(),
+        },
+      });
+
       // Generate new session token
       const { data: sessionData, error: _sessionError } = await client.auth.admin.generateLink({
-        type: 'magiclink',
-        email: existingUser.email!
-      })
-      const session = (sessionData as { session?: unknown })?.session ?? null
-      
-      return { 
-        user: existingUser, 
+        type: "magiclink",
+        email: existingUser.email!,
+      });
+      const session = (sessionData as { session?: unknown })?.session ?? null;
+
+      return {
+        user: existingUser,
         isNewUser: false,
-        session: session 
-      }
+        session: session,
+      };
     }
-    
+
     // Create new user with Telegram data
-    const { data: { user }, error: createError } = await client.auth.admin.createUser({
+    const {
+      data: { user },
+      error: createError,
+    } = await client.auth.admin.createUser({
       email,
       email_confirm: true,
       user_metadata: {
@@ -109,19 +111,19 @@ export async function authenticateTelegramUser(telegramUser: {
         telegram_username: telegramUser.username,
         telegram_language_code: telegramUser.language_code,
         telegram_photo_url: telegramUser.photo_url,
-        auth_provider: 'telegram'
-      }
-    })
-    
+        auth_provider: "telegram",
+      },
+    });
+
     if (createError) {
-      console.error('Error creating user:', createError)
-      return { error: createError }
+      console.error("Error creating user:", createError);
+      return { error: createError };
     }
-    
-    return { user, isNewUser: true }
+
+    return { user, isNewUser: true };
   } catch (error) {
-    console.error('Telegram auth error:', error)
-    return { error }
+    console.error("Telegram auth error:", error);
+    return { error };
   }
 }
 
@@ -130,53 +132,56 @@ export async function authenticateTelegramUser(telegramUser: {
  * Validates that the request comes from Telegram
  */
 export function verifyTelegramInitData(initData: string): {
-  valid: boolean
+  valid: boolean;
   user?: {
-    id: number
-    first_name?: string
-    last_name?: string
-    username?: string
-    language_code?: string
-    photo_url?: string
-  }
-  error?: string
+    id: number;
+    first_name?: string;
+    last_name?: string;
+    username?: string;
+    language_code?: string;
+    photo_url?: string;
+  };
+  error?: string;
 } {
   try {
-    const botToken = process.env.TELEGRAM_BOT_TOKEN
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) {
-      return { valid: false, error: 'TELEGRAM_BOT_TOKEN is not configured' }
+      return { valid: false, error: "TELEGRAM_BOT_TOKEN is not configured" };
     }
 
-    const params = new URLSearchParams(initData)
-    const hash = params.get('hash')
-    const userParam = params.get('user')
+    const params = new URLSearchParams(initData);
+    const hash = params.get("hash");
+    const userParam = params.get("user");
 
     if (!hash) {
-      return { valid: false, error: 'No hash in initData' }
+      return { valid: false, error: "No hash in initData" };
     }
 
     if (!userParam) {
-      return { valid: false, error: 'No user data in initData' }
+      return { valid: false, error: "No user data in initData" };
     }
 
-    params.delete('hash')
+    params.delete("hash");
 
     const dataCheckString = [...params.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, value]) => `${key}=${value}`)
-      .join('\n')
+      .join("\n");
 
-    const secretKey = createHmac('sha256', 'WebAppData').update(botToken).digest()
-    const calculatedHash = createHmac('sha256', secretKey).update(dataCheckString).digest('hex')
+    const secretKey = createHmac("sha256", "WebAppData").update(botToken).digest();
+    const calculatedHash = createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
 
-    const providedHash = Buffer.from(hash, 'hex')
-    const expectedHash = Buffer.from(calculatedHash, 'hex')
+    const providedHash = Buffer.from(hash, "hex");
+    const expectedHash = Buffer.from(calculatedHash, "hex");
 
-    if (providedHash.length !== expectedHash.length || !timingSafeEqual(providedHash, expectedHash)) {
-      return { valid: false, error: 'Invalid Telegram signature' }
+    if (
+      providedHash.length !== expectedHash.length ||
+      !timingSafeEqual(providedHash, expectedHash)
+    ) {
+      return { valid: false, error: "Invalid Telegram signature" };
     }
 
-    const userData = JSON.parse(userParam)
+    const userData = JSON.parse(userParam);
 
     return {
       valid: true,
@@ -186,12 +191,12 @@ export function verifyTelegramInitData(initData: string): {
         last_name: userData.last_name,
         username: userData.username,
         language_code: userData.language_code,
-        photo_url: userData.photo_url
-      }
-    }
+        photo_url: userData.photo_url,
+      },
+    };
   } catch (error) {
-    console.error('Error verifying initData:', error)
-    return { valid: false, error: 'Invalid initData format' }
+    console.error("Error verifying initData:", error);
+    return { valid: false, error: "Invalid initData format" };
   }
 }
 
@@ -199,24 +204,24 @@ export function verifyTelegramInitData(initData: string): {
  * Generate a session token for a user
  */
 export async function generateSessionToken(userId: string) {
-  const client = getSupabaseAuth()
+  const client = getSupabaseAuth();
 
   // Look up user email first (required by Supabase v2 generateLink)
-  const { data: userRecord, error: userError } = await client.auth.admin.getUserById(userId)
+  const { data: userRecord, error: userError } = await client.auth.admin.getUserById(userId);
   if (userError || !userRecord?.user?.email) {
-    console.error('Error fetching user for token generation:', userError)
-    return null
+    console.error("Error fetching user for token generation:", userError);
+    return null;
   }
 
   const { data, error } = await client.auth.admin.generateLink({
-    type: 'magiclink',
-    email: userRecord.user.email
-  })
+    type: "magiclink",
+    email: userRecord.user.email,
+  });
 
   if (error) {
-    console.error('Error generating session:', error)
-    return null
+    console.error("Error generating session:", error);
+    return null;
   }
 
-  return data
+  return data;
 }
