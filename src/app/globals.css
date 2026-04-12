@@ -184,7 +184,7 @@
     -webkit-backdrop-filter: blur(20px) saturate(150%);
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
-  
+
   .glass-panel-light {
     background: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(20px) saturate(150%);
@@ -198,11 +198,11 @@
   .touch-manipulation {
     touch-action: manipulation;
   }
-  
+
   .press-effect {
     transition: transform 0.15s ease-out;
   }
-  
+
   .press-effect:active {
     transform: scale(0.95);
   }
@@ -213,11 +213,11 @@
   .glow-emerald {
     box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
   }
-  
+
   .glow-white {
     box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
   }
-  
+
   .text-glow {
     text-shadow: 0 0 10px currentColor;
   }

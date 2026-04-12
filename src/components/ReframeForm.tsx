@@ -1,95 +1,93 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { NOTE_ZONES, ReframeData, ReframeAction, getNoteZoneInfo } from '@/lib/notes-config'
-import { Plus, Trash2, ChevronDown, ChevronUp, Lightbulb, ArrowRight, CheckCircle } from 'lucide-react'
-import { cn } from '@/lib/utils'
+} from "@/components/ui/select";
+import { NOTE_ZONES, ReframeData, ReframeAction, getNoteZoneInfo } from "@/lib/notes-config";
+import {
+  Plus,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  Lightbulb,
+  ArrowRight,
+  CheckCircle,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface ReframeFormProps {
-  initialData?: ReframeData
-  initialZone?: string
-  onSubmit: (data: ReframeData, zone: string) => void
-  onCancel: () => void
-  isLoading?: boolean
+  initialData?: ReframeData;
+  initialZone?: string;
+  onSubmit: (data: ReframeData, zone: string) => void;
+  onCancel: () => void;
+  isLoading?: boolean;
 }
 
 const EXAMPLES = {
-  oldThought: [
-    'Я опять всё солью',
-    'У меня не получится',
-    'Я не смогу довести это до конца',
-  ],
+  oldThought: ["Я опять всё солью", "У меня не получится", "Я не смогу довести это до конца"],
   newView: [
-    'Я могу сделать маленький шаг и проверить результат',
-    'У меня уже есть опыт, который поможет',
-    'Можно разбить на части и двигаться постепенно',
+    "Я могу сделать маленький шаг и проверить результат",
+    "У меня уже есть опыт, который поможет",
+    "Можно разбить на части и двигаться постепенно",
   ],
-  actions: [
-    'Написать план на сегодня',
-    'Сделать один маленький шаг',
-    'Проверить гипотезу',
-  ],
-}
+  actions: ["Написать план на сегодня", "Сделать один маленький шаг", "Проверить гипотезу"],
+};
 
-export function ReframeForm({ 
-  initialData, 
-  initialZone = 'general', 
-  onSubmit, 
+export function ReframeForm({
+  initialData,
+  initialZone = "general",
+  onSubmit,
   onCancel,
-  isLoading 
+  isLoading,
 }: ReframeFormProps) {
-  const [zone, setZone] = useState(initialZone)
-  const [situation, setSituation] = useState(initialData?.situation || '')
-  const [oldThought, setOldThought] = useState(initialData?.oldThought || '')
-  const [newView, setNewView] = useState(initialData?.newView || '')
-  const [actions, setActions] = useState<ReframeAction[]>(
-    initialData?.actions || [{ text: '' }]
-  )
-  const [showExamples, setShowExamples] = useState(false)
-  const [expandedSection, setExpandedSection] = useState<string | null>('oldThought')
+  const [zone, setZone] = useState(initialZone);
+  const [situation, setSituation] = useState(initialData?.situation || "");
+  const [oldThought, setOldThought] = useState(initialData?.oldThought || "");
+  const [newView, setNewView] = useState(initialData?.newView || "");
+  const [actions, setActions] = useState<ReframeAction[]>(initialData?.actions || [{ text: "" }]);
+  const [showExamples, setShowExamples] = useState(false);
+  const [expandedSection, setExpandedSection] = useState<string | null>("oldThought");
 
   const addAction = () => {
     if (actions.length < 3) {
-      setActions([...actions, { text: '' }])
+      setActions([...actions, { text: "" }]);
     }
-  }
+  };
 
   const removeAction = (index: number) => {
-    setActions(actions.filter((_, i) => i !== index))
-  }
+    setActions(actions.filter((_, i) => i !== index));
+  };
 
   const updateAction = (index: number, text: string) => {
-    const updated = [...actions]
-    updated[index] = { ...updated[index], text }
-    setActions(updated)
-  }
+    const updated = [...actions];
+    updated[index] = { ...updated[index], text };
+    setActions(updated);
+  };
 
-  const isValid = oldThought.trim() && newView.trim() && actions.some(a => a.text.trim())
+  const isValid = oldThought.trim() && newView.trim() && actions.some((a) => a.text.trim());
 
   const handleSubmit = () => {
-    if (!isValid) return
-    
+    if (!isValid) return;
+
     const data: ReframeData = {
       situation: situation.trim(),
       oldThought: oldThought.trim(),
       newView: newView.trim(),
-      actions: actions.filter(a => a.text.trim()),
-    }
-    
-    onSubmit(data, zone)
-  }
+      actions: actions.filter((a) => a.text.trim()),
+    };
+
+    onSubmit(data, zone);
+  };
 
   return (
     <div className="space-y-4">
@@ -101,7 +99,7 @@ export function ReframeForm({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {NOTE_ZONES.map(z => (
+            {NOTE_ZONES.map((z) => (
               <SelectItem key={z.id} value={z.id}>
                 {z.icon} {z.label}
               </SelectItem>
@@ -114,14 +112,20 @@ export function ReframeForm({
       <div className="space-y-2">
         <button
           type="button"
-          className="flex items-center gap-2 text-sm font-medium w-full"
-          onClick={() => setExpandedSection(expandedSection === 'situation' ? null : 'situation')}
+          className="flex w-full items-center gap-2 text-sm font-medium"
+          onClick={() => setExpandedSection(expandedSection === "situation" ? null : "situation")}
         >
           <span className="text-muted-foreground">Ситуация</span>
-          <Badge variant="outline" className="text-[10px]">опц.</Badge>
-          {expandedSection === 'situation' ? <ChevronUp className="w-4 h-4 ml-auto" /> : <ChevronDown className="w-4 h-4 ml-auto" />}
+          <Badge variant="outline" className="text-[10px]">
+            опц.
+          </Badge>
+          {expandedSection === "situation" ? (
+            <ChevronUp className="ml-auto h-4 w-4" />
+          ) : (
+            <ChevronDown className="ml-auto h-4 w-4" />
+          )}
         </button>
-        {expandedSection === 'situation' && (
+        {expandedSection === "situation" && (
           <Textarea
             placeholder="Что произошло / что запускает мысль?"
             value={situation}
@@ -135,27 +139,33 @@ export function ReframeForm({
       <div className="space-y-2">
         <button
           type="button"
-          className="flex items-center gap-2 text-sm font-medium w-full"
-          onClick={() => setExpandedSection(expandedSection === 'oldThought' ? null : 'oldThought')}
+          className="flex w-full items-center gap-2 text-sm font-medium"
+          onClick={() => setExpandedSection(expandedSection === "oldThought" ? null : "oldThought")}
         >
           <span className="text-destructive">Старая мысль</span>
-          <Badge variant="destructive" className="text-[10px]">обяз.</Badge>
-          {expandedSection === 'oldThought' ? <ChevronUp className="w-4 h-4 ml-auto" /> : <ChevronDown className="w-4 h-4 ml-auto" />}
+          <Badge variant="destructive" className="text-[10px]">
+            обяз.
+          </Badge>
+          {expandedSection === "oldThought" ? (
+            <ChevronUp className="ml-auto h-4 w-4" />
+          ) : (
+            <ChevronDown className="ml-auto h-4 w-4" />
+          )}
         </button>
-        {expandedSection === 'oldThought' && (
+        {expandedSection === "oldThought" && (
           <>
             <Textarea
               placeholder="Что за мысль крутится в голове?"
               value={oldThought}
               onChange={(e) => setOldThought(e.target.value)}
-              className="min-h-[80px] resize-none border-destructive/30 focus-visible:ring-destructive/30"
+              className="border-destructive/30 focus-visible:ring-destructive/30 min-h-[80px] resize-none"
             />
             <div className="flex flex-wrap gap-1">
               {EXAMPLES.oldThought.map((ex, i) => (
                 <button
                   key={i}
                   type="button"
-                  className="text-[10px] text-muted-foreground hover:text-foreground bg-muted/50 px-2 py-0.5 rounded"
+                  className="text-muted-foreground hover:text-foreground bg-muted/50 rounded px-2 py-0.5 text-[10px]"
                   onClick={() => setOldThought(ex)}
                 >
                   {ex}
@@ -170,14 +180,18 @@ export function ReframeForm({
       <div className="space-y-2">
         <button
           type="button"
-          className="flex items-center gap-2 text-sm font-medium w-full"
-          onClick={() => setExpandedSection(expandedSection === 'newView' ? null : 'newView')}
+          className="flex w-full items-center gap-2 text-sm font-medium"
+          onClick={() => setExpandedSection(expandedSection === "newView" ? null : "newView")}
         >
           <span className="text-emerald-600">Новый взгляд</span>
-          <Badge className="text-[10px] bg-emerald-600">обяз.</Badge>
-          {expandedSection === 'newView' ? <ChevronUp className="w-4 h-4 ml-auto" /> : <ChevronDown className="w-4 h-4 ml-auto" />}
+          <Badge className="bg-emerald-600 text-[10px]">обяз.</Badge>
+          {expandedSection === "newView" ? (
+            <ChevronUp className="ml-auto h-4 w-4" />
+          ) : (
+            <ChevronDown className="ml-auto h-4 w-4" />
+          )}
         </button>
-        {expandedSection === 'newView' && (
+        {expandedSection === "newView" && (
           <>
             <Textarea
               placeholder="Как можно посмотреть на это по-другому?"
@@ -190,7 +204,7 @@ export function ReframeForm({
                 <button
                   key={i}
                   type="button"
-                  className="text-[10px] text-muted-foreground hover:text-foreground bg-muted/50 px-2 py-0.5 rounded"
+                  className="text-muted-foreground hover:text-foreground bg-muted/50 rounded px-2 py-0.5 text-[10px]"
                   onClick={() => setNewView(ex)}
                 >
                   {ex}
@@ -205,18 +219,24 @@ export function ReframeForm({
       <div className="space-y-2">
         <button
           type="button"
-          className="flex items-center gap-2 text-sm font-medium w-full"
-          onClick={() => setExpandedSection(expandedSection === 'actions' ? null : 'actions')}
+          className="flex w-full items-center gap-2 text-sm font-medium"
+          onClick={() => setExpandedSection(expandedSection === "actions" ? null : "actions")}
         >
           <span className="text-primary">Действия</span>
-          <Badge variant="default" className="text-[10px]">1-3</Badge>
-          {expandedSection === 'actions' ? <ChevronUp className="w-4 h-4 ml-auto" /> : <ChevronDown className="w-4 h-4 ml-auto" />}
+          <Badge variant="default" className="text-[10px]">
+            1-3
+          </Badge>
+          {expandedSection === "actions" ? (
+            <ChevronUp className="ml-auto h-4 w-4" />
+          ) : (
+            <ChevronDown className="ml-auto h-4 w-4" />
+          )}
         </button>
-        {expandedSection === 'actions' && (
+        {expandedSection === "actions" && (
           <div className="space-y-2">
             {actions.map((action, index) => (
-              <div key={index} className="flex gap-2 items-start">
-                <span className="text-muted-foreground text-sm mt-2">{index + 1}.</span>
+              <div key={index} className="flex items-start gap-2">
+                <span className="text-muted-foreground mt-2 text-sm">{index + 1}.</span>
                 <Input
                   placeholder={`Действие ${index + 1}...`}
                   value={action.text}
@@ -231,7 +251,7 @@ export function ReframeForm({
                     className="shrink-0"
                     onClick={() => removeAction(index)}
                   >
-                    <Trash2 className="w-4 h-4 text-muted-foreground" />
+                    <Trash2 className="text-muted-foreground h-4 w-4" />
                   </Button>
                 )}
               </div>
@@ -244,7 +264,7 @@ export function ReframeForm({
                 className="w-full gap-1"
                 onClick={addAction}
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="h-4 w-4" />
                 Добавить действие
               </Button>
             )}
@@ -254,32 +274,34 @@ export function ReframeForm({
 
       {/* Preview */}
       {isValid && (
-        <div className="bg-muted/30 rounded-lg p-3 space-y-2">
-          <p className="text-xs text-muted-foreground">Превью:</p>
+        <div className="bg-muted/30 space-y-2 rounded-lg p-3">
+          <p className="text-muted-foreground text-xs">Превью:</p>
           <div className="text-sm">
-            <span className="text-destructive">&quot;{oldThought.slice(0, 50)}{oldThought.length > 50 ? '...' : ''}&quot;</span>
+            <span className="text-destructive">
+              &quot;{oldThought.slice(0, 50)}
+              {oldThought.length > 50 ? "..." : ""}&quot;
+            </span>
             <span className="mx-2">→</span>
-            <span className="text-emerald-600">&quot;{newView.slice(0, 50)}{newView.length > 50 ? '...' : ''}&quot;</span>
+            <span className="text-emerald-600">
+              &quot;{newView.slice(0, 50)}
+              {newView.length > 50 ? "..." : ""}&quot;
+            </span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            📋 {actions.filter(a => a.text.trim()).length} действие(й)
+          <p className="text-muted-foreground text-xs">
+            📋 {actions.filter((a) => a.text.trim()).length} действие(й)
           </p>
         </div>
       )}
 
       {/* Actions */}
-      <div className="flex gap-2 pt-2 border-t">
+      <div className="flex gap-2 border-t pt-2">
         <Button variant="outline" className="flex-1" onClick={onCancel}>
           Отмена
         </Button>
-        <Button
-          className="flex-1"
-          onClick={handleSubmit}
-          disabled={!isValid || isLoading}
-        >
-          {isLoading ? 'Сохранение...' : 'Сохранить'}
+        <Button className="flex-1" onClick={handleSubmit} disabled={!isValid || isLoading}>
+          {isLoading ? "Сохранение..." : "Сохранить"}
         </Button>
       </div>
     </div>
-  )
+  );
 }

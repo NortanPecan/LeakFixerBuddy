@@ -1,18 +1,13 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { useAppStore } from '@/lib/store'
-import { showErrorToast } from '@/lib/network-utils'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Progress } from '@/components/ui/progress'
+import { useEffect, useState } from "react";
+import { useAppStore } from "@/lib/store";
+import { showErrorToast } from "@/lib/network-utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 import {
   AreaChart,
   Area,
@@ -23,8 +18,8 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  ReferenceLine
-} from 'recharts'
+  ReferenceLine,
+} from "recharts";
 import {
   Scale,
   Target,
@@ -35,141 +30,154 @@ import {
   BarChart3,
   LineChartIcon,
   List,
-  Edit
-} from 'lucide-react'
+  Edit,
+} from "lucide-react";
 
 interface WeightHistoryModalProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onOpenRecords: () => void
-  onOpenGoal: () => void
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onOpenRecords: () => void;
+  onOpenGoal: () => void;
 }
 
 interface HistoryPoint {
-  date: string
-  avg: number
-  count: number
-  min: number
-  max: number
+  date: string;
+  avg: number;
+  count: number;
+  min: number;
+  max: number;
 }
 
 interface Stats {
-  min: number | null
-  max: number | null
-  avg: number | null
-  count: number
-  daysTracked: number
+  min: number | null;
+  max: number | null;
+  avg: number | null;
+  count: number;
+  daysTracked: number;
 }
 
 interface Progress {
-  startWeight: number
-  currentWeight: number
-  targetWeight: number
-  lost: number
-  toLose: number
-  totalToLose: number
-  percent: number
+  startWeight: number;
+  currentWeight: number;
+  targetWeight: number;
+  lost: number;
+  toLose: number;
+  totalToLose: number;
+  percent: number;
 }
 
 interface Forecast {
-  ratePerWeek: number
-  direction: 'losing' | 'gaining' | 'stable'
-  predictedDate: string | null
-  daysToGoal: number | null
+  ratePerWeek: number;
+  direction: "losing" | "gaining" | "stable";
+  predictedDate: string | null;
+  daysToGoal: number | null;
   deadlineStatus: {
-    willMakeIt: boolean
-    daysDifference: number
-    message: string
-  } | null
+    willMakeIt: boolean;
+    daysDifference: number;
+    message: string;
+  } | null;
 }
 
-export function WeightHistoryModal({ open, onOpenChange, onOpenRecords, onOpenGoal }: WeightHistoryModalProps) {
-  const { user } = useAppStore()
-  const [period, setPeriod] = useState<'7' | '30' | '90' | 'all'>('30')
-  const [chartType, setChartType] = useState<'area' | 'line'>('area')
-  const [history, setHistory] = useState<HistoryPoint[]>([])
-  const [stats, setStats] = useState<Stats | null>(null)
-  const [progress, setProgress] = useState<Progress | null>(null)
-  const [forecast, setForecast] = useState<Forecast | null>(null)
-  const [targetWeight, setTargetWeight] = useState<number | null>(null)
-  const [weightStart, setWeightStart] = useState<number | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+export function WeightHistoryModal({
+  open,
+  onOpenChange,
+  onOpenRecords,
+  onOpenGoal,
+}: WeightHistoryModalProps) {
+  const { user } = useAppStore();
+  const [period, setPeriod] = useState<"7" | "30" | "90" | "all">("30");
+  const [chartType, setChartType] = useState<"area" | "line">("area");
+  const [history, setHistory] = useState<HistoryPoint[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [progress, setProgress] = useState<Progress | null>(null);
+  const [forecast, setForecast] = useState<Forecast | null>(null);
+  const [targetWeight, setTargetWeight] = useState<number | null>(null);
+  const [weightStart, setWeightStart] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (open && user?.id) {
-      loadData()
+      loadData();
     }
-  }, [open, user?.id, period])
+  }, [open, user?.id, period]);
 
   const loadData = async () => {
-    if (!user?.id) return
-    setIsLoading(true)
+    if (!user?.id) return;
+    setIsLoading(true);
     try {
-      const periodParam = period === 'all' ? '365' : period
-      const res = await fetch(`/api/weight/history?userId=${user.id}&period=${periodParam}`)
-      const data = await res.json()
-      
-      setHistory(data.history || [])
-      setStats(data.stats || null)
-      setProgress(data.progress || null)
-      setForecast(data.forecast || null)
-      setTargetWeight(data.targetWeight || null)
-      setWeightStart(data.weightStart || null)
+      const periodParam = period === "all" ? "365" : period;
+      const res = await fetch(`/api/weight/history?userId=${user.id}&period=${periodParam}`);
+      const data = await res.json();
+
+      setHistory(data.history || []);
+      setStats(data.stats || null);
+      setProgress(data.progress || null);
+      setForecast(data.forecast || null);
+      setTargetWeight(data.targetWeight || null);
+      setWeightStart(data.weightStart || null);
     } catch (error) {
-      showErrorToast(error, 'load weight history')
+      showErrorToast(error, "load weight history");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   // Format date for chart
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
-  }
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+  };
 
   // Prepare chart data
-  const chartData = history.map(h => ({
+  const chartData = history.map((h) => ({
     date: formatDate(h.date),
     weight: Math.round(h.avg * 10) / 10,
-    fullDate: h.date
-  }))
+    fullDate: h.date,
+  }));
 
   // Custom tooltip
-  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) => {
+  const CustomTooltip = ({
+    active,
+    payload,
+    label,
+  }: {
+    active?: boolean;
+    payload?: Array<{ value: number }>;
+    label?: string;
+  }) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-background/95 backdrop-blur border border-border rounded-lg p-2 shadow-lg">
-          <p className="text-xs text-muted-foreground">{label}</p>
+        <div className="bg-background/95 border-border rounded-lg border p-2 shadow-lg backdrop-blur">
+          <p className="text-muted-foreground text-xs">{label}</p>
           <p className="text-sm font-bold">{payload[0].value} кг</p>
         </div>
-      )
+      );
     }
-    return null
-  }
+    return null;
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Scale className="w-5 h-5" />
+            <Scale className="h-5 w-5" />
             История веса
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 pt-4">
           {/* Period selector */}
-          <div className="flex gap-1 flex-wrap">
-            {(['7', '30', '90', 'all'] as const).map((p) => (
+          <div className="flex flex-wrap gap-1">
+            {(["7", "30", "90", "all"] as const).map((p) => (
               <Button
                 key={p}
-                variant={period === p ? 'default' : 'outline'}
+                variant={period === p ? "default" : "outline"}
                 size="sm"
-                className={period === p ? 'bg-primary' : ''}
+                className={period === p ? "bg-primary" : ""}
                 onClick={() => setPeriod(p)}
               >
-                {p === 'all' ? 'Все' : `${p} дн`}
+                {p === "all" ? "Все" : `${p} дн`}
               </Button>
             ))}
           </div>
@@ -177,21 +185,21 @@ export function WeightHistoryModal({ open, onOpenChange, onOpenRecords, onOpenGo
           {/* Chart type toggle */}
           <div className="flex gap-1">
             <Button
-              variant={chartType === 'area' ? 'default' : 'outline'}
+              variant={chartType === "area" ? "default" : "outline"}
               size="sm"
-              className={chartType === 'area' ? 'bg-primary' : ''}
-              onClick={() => setChartType('area')}
+              className={chartType === "area" ? "bg-primary" : ""}
+              onClick={() => setChartType("area")}
             >
-              <BarChart3 className="w-4 h-4 mr-1" />
+              <BarChart3 className="mr-1 h-4 w-4" />
               Площадь
             </Button>
             <Button
-              variant={chartType === 'line' ? 'default' : 'outline'}
+              variant={chartType === "line" ? "default" : "outline"}
               size="sm"
-              className={chartType === 'line' ? 'bg-primary' : ''}
-              onClick={() => setChartType('line')}
+              className={chartType === "line" ? "bg-primary" : ""}
+              onClick={() => setChartType("line")}
             >
-              <LineChartIcon className="w-4 h-4 mr-1" />
+              <LineChartIcon className="mr-1 h-4 w-4" />
               Линия
             </Button>
           </div>
@@ -202,7 +210,7 @@ export function WeightHistoryModal({ open, onOpenChange, onOpenRecords, onOpenGo
           ) : chartData.length > 0 ? (
             <div className="h-48 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                {chartType === 'area' ? (
+                {chartType === "area" ? (
                   <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="weightGradient" x1="0" y1="0" x2="0" y2="1">
@@ -210,27 +218,31 @@ export function WeightHistoryModal({ open, onOpenChange, onOpenRecords, onOpenGo
                         <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                    <XAxis 
-                      dataKey="date" 
-                      tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="hsl(var(--border))"
+                      opacity={0.3}
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
                       tickLine={false}
                       axisLine={false}
                     />
-                    <YAxis 
-                      domain={['dataMin - 1', 'dataMax + 1']}
-                      tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                    <YAxis
+                      domain={["dataMin - 1", "dataMax + 1"]}
+                      tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={(v) => `${v}`}
                     />
                     <Tooltip content={<CustomTooltip />} />
                     {targetWeight && (
-                      <ReferenceLine 
-                        y={targetWeight} 
-                        stroke="hsl(142, 76%, 36%)" 
+                      <ReferenceLine
+                        y={targetWeight}
+                        stroke="hsl(142, 76%, 36%)"
                         strokeDasharray="5 5"
-                        label={{ value: 'Цель', fontSize: 10, fill: 'hsl(142, 76%, 36%)' }}
+                        label={{ value: "Цель", fontSize: 10, fill: "hsl(142, 76%, 36%)" }}
                       />
                     )}
                     <Area
@@ -243,24 +255,28 @@ export function WeightHistoryModal({ open, onOpenChange, onOpenRecords, onOpenGo
                   </AreaChart>
                 ) : (
                   <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                    <XAxis 
-                      dataKey="date" 
-                      tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="hsl(var(--border))"
+                      opacity={0.3}
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
                       tickLine={false}
                       axisLine={false}
                     />
-                    <YAxis 
-                      domain={['dataMin - 1', 'dataMax + 1']}
-                      tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                    <YAxis
+                      domain={["dataMin - 1", "dataMax + 1"]}
+                      tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
                       tickLine={false}
                       axisLine={false}
                     />
                     <Tooltip content={<CustomTooltip />} />
                     {targetWeight && (
-                      <ReferenceLine 
-                        y={targetWeight} 
-                        stroke="hsl(142, 76%, 36%)" 
+                      <ReferenceLine
+                        y={targetWeight}
+                        stroke="hsl(142, 76%, 36%)"
                         strokeDasharray="5 5"
                       />
                     )}
@@ -269,7 +285,7 @@ export function WeightHistoryModal({ open, onOpenChange, onOpenRecords, onOpenGo
                       dataKey="weight"
                       stroke="hsl(var(--primary))"
                       strokeWidth={2}
-                      dot={{ fill: 'hsl(var(--primary))', r: 3 }}
+                      dot={{ fill: "hsl(var(--primary))", r: 3 }}
                       activeDot={{ r: 5 }}
                     />
                   </LineChart>
@@ -277,76 +293,96 @@ export function WeightHistoryModal({ open, onOpenChange, onOpenRecords, onOpenGo
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-48 flex items-center justify-center text-muted-foreground">
+            <div className="text-muted-foreground flex h-48 items-center justify-center">
               <p className="text-sm">Нет данных за выбранный период</p>
             </div>
           )}
 
           {/* Progress section */}
           {progress && (
-            <div className="space-y-3 p-3 rounded-lg bg-muted/30">
+            <div className="bg-muted/30 space-y-3 rounded-lg p-3">
               <div className="flex items-center gap-2 text-sm font-medium">
-                <Target className="w-4 h-4" />
+                <Target className="h-4 w-4" />
                 Прогресс
               </div>
-              
+
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div>
-                  <p className="text-xs text-muted-foreground">Старт</p>
+                  <p className="text-muted-foreground text-xs">Старт</p>
                   <p className="font-bold">{progress.startWeight.toFixed(1)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Текущий</p>
-                  <p className="font-bold text-primary">{progress.currentWeight.toFixed(1)}</p>
+                  <p className="text-muted-foreground text-xs">Текущий</p>
+                  <p className="text-primary font-bold">{progress.currentWeight.toFixed(1)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Цель</p>
+                  <p className="text-muted-foreground text-xs">Цель</p>
                   <p className="font-bold text-emerald-400">{progress.targetWeight.toFixed(1)}</p>
                 </div>
               </div>
 
               <div>
-                <div className="flex justify-between text-xs mb-1">
+                <div className="mb-1 flex justify-between text-xs">
                   <span>Прогресс</span>
                   <span>{Math.round(progress.percent)}%</span>
                 </div>
                 <Progress value={progress.percent} className="h-2" />
               </div>
 
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Потеряно: {progress.lost > 0 ? '-' : '+'}{Math.abs(progress.lost).toFixed(1)} кг</span>
-                <span>Осталось: {progress.toLose > 0 ? '-' : '+'}{Math.abs(progress.toLose).toFixed(1)} кг</span>
+              <div className="text-muted-foreground flex justify-between text-xs">
+                <span>
+                  Потеряно: {progress.lost > 0 ? "-" : "+"}
+                  {Math.abs(progress.lost).toFixed(1)} кг
+                </span>
+                <span>
+                  Осталось: {progress.toLose > 0 ? "-" : "+"}
+                  {Math.abs(progress.toLose).toFixed(1)} кг
+                </span>
               </div>
             </div>
           )}
 
           {/* Forecast section */}
           {forecast && (
-            <div className="space-y-2 p-3 rounded-lg bg-muted/30">
+            <div className="bg-muted/30 space-y-2 rounded-lg p-3">
               <div className="flex items-center gap-2 text-sm font-medium">
-                <TrendingDown className="w-4 h-4" />
+                <TrendingDown className="h-4 w-4" />
                 Прогноз
               </div>
-              
+
               <div className="space-y-1">
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Темп:</span>
-                  <span className={forecast.direction === 'losing' ? 'text-emerald-400' : forecast.direction === 'gaining' ? 'text-red-400' : ''}>
-                    {forecast.ratePerWeek > 0 ? '-' : '+'}{Math.abs(forecast.ratePerWeek)} кг/неделю
+                  <span
+                    className={
+                      forecast.direction === "losing"
+                        ? "text-emerald-400"
+                        : forecast.direction === "gaining"
+                          ? "text-red-400"
+                          : ""
+                    }
+                  >
+                    {forecast.ratePerWeek > 0 ? "-" : "+"}
+                    {Math.abs(forecast.ratePerWeek)} кг/неделю
                   </span>
                 </div>
-                
+
                 {forecast.predictedDate && (
                   <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">Прогноз цели:</span>
                     <span>
-                      {new Date(forecast.predictedDate).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+                      {new Date(forecast.predictedDate).toLocaleDateString("ru-RU", {
+                        day: "numeric",
+                        month: "short",
+                      })}
                     </span>
                   </div>
                 )}
 
                 {forecast.deadlineStatus && (
-                  <p className={`text-xs ${forecast.deadlineStatus.willMakeIt ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  <p
+                    className={`text-xs ${forecast.deadlineStatus.willMakeIt ? "text-emerald-400" : "text-amber-400"}`}
+                  >
                     {forecast.deadlineStatus.message}
                   </p>
                 )}
@@ -357,17 +393,17 @@ export function WeightHistoryModal({ open, onOpenChange, onOpenRecords, onOpenGo
           {/* Stats */}
           {stats && stats.min && (
             <div className="grid grid-cols-3 gap-2">
-              <div className="text-center p-2 rounded-lg bg-muted/30">
-                <p className="text-xs text-muted-foreground">Мин</p>
-                <p className="font-bold text-sm">{stats.min.toFixed(1)} кг</p>
+              <div className="bg-muted/30 rounded-lg p-2 text-center">
+                <p className="text-muted-foreground text-xs">Мин</p>
+                <p className="text-sm font-bold">{stats.min.toFixed(1)} кг</p>
               </div>
-              <div className="text-center p-2 rounded-lg bg-muted/30">
-                <p className="text-xs text-muted-foreground">Макс</p>
-                <p className="font-bold text-sm">{stats.max?.toFixed(1)} кг</p>
+              <div className="bg-muted/30 rounded-lg p-2 text-center">
+                <p className="text-muted-foreground text-xs">Макс</p>
+                <p className="text-sm font-bold">{stats.max?.toFixed(1)} кг</p>
               </div>
-              <div className="text-center p-2 rounded-lg bg-muted/30">
-                <p className="text-xs text-muted-foreground">Средн</p>
-                <p className="font-bold text-sm">{stats.avg?.toFixed(1)} кг</p>
+              <div className="bg-muted/30 rounded-lg p-2 text-center">
+                <p className="text-muted-foreground text-xs">Средн</p>
+                <p className="text-sm font-bold">{stats.avg?.toFixed(1)} кг</p>
               </div>
             </div>
           )}
@@ -375,16 +411,16 @@ export function WeightHistoryModal({ open, onOpenChange, onOpenRecords, onOpenGo
           {/* Action buttons */}
           <div className="flex gap-2">
             <Button variant="outline" className="flex-1" onClick={onOpenRecords}>
-              <List className="w-4 h-4 mr-1" />
+              <List className="mr-1 h-4 w-4" />
               Все записи
             </Button>
             <Button variant="outline" className="flex-1" onClick={onOpenGoal}>
-              <Edit className="w-4 h-4 mr-1" />
+              <Edit className="mr-1 h-4 w-4" />
               Цель
             </Button>
           </div>
         </div>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

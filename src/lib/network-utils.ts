@@ -7,13 +7,13 @@
  * - Retry logic for failed requests
  */
 
-import { toast } from 'sonner'
+import { toast } from "sonner";
 
 export interface ApiError {
-  message: string
-  code?: string
-  status?: number
-  retry?: boolean
+  message: string;
+  code?: string;
+  status?: number;
+  retry?: boolean;
 }
 
 /**
@@ -21,83 +21,87 @@ export interface ApiError {
  */
 export function parseApiError(error: unknown, context?: string): ApiError {
   // Network errors (fetch failed)
-  if (error instanceof TypeError && error.message === 'fetch failed') {
+  if (error instanceof TypeError && error.message === "fetch failed") {
     return {
-      message: 'Нет подключения к интернету',
-      code: 'NETWORK_ERROR',
-      retry: true
-    }
+      message: "Нет подключения к интернету",
+      code: "NETWORK_ERROR",
+      retry: true,
+    };
   }
 
   // Response errors
   if (error instanceof Response) {
-    const status = error.status
+    const status = error.status;
     const messages: Record<number, string> = {
-      400: 'Неверные данные',
-      401: 'Требуется авторизация',
-      403: 'Нет доступа',
-      404: 'Не найдено',
-      429: 'Слишком много запросов',
-      500: 'Ошибка сервера',
-      502: 'Сервер недоступен',
-      503: 'Сервер перегружен',
-    }
+      400: "Неверные данные",
+      401: "Требуется авторизация",
+      403: "Нет доступа",
+      404: "Не найдено",
+      429: "Слишком много запросов",
+      500: "Ошибка сервера",
+      502: "Сервер недоступен",
+      503: "Сервер перегружен",
+    };
     return {
       message: messages[status] || `Ошибка ${status}`,
       code: `HTTP_${status}`,
       status,
-      retry: status >= 500
-    }
+      retry: status >= 500,
+    };
   }
 
   // Error objects with message
   if (error instanceof Error) {
     // Check for common network error patterns
-    if (error.message.includes('Failed to fetch') ||
-        error.message.includes('NetworkError') ||
-        error.message.includes('Network request failed')) {
+    if (
+      error.message.includes("Failed to fetch") ||
+      error.message.includes("NetworkError") ||
+      error.message.includes("Network request failed")
+    ) {
       return {
-        message: 'Нет подключения к интернету',
-        code: 'NETWORK_ERROR',
-        retry: true
-      }
+        message: "Нет подключения к интернету",
+        code: "NETWORK_ERROR",
+        retry: true,
+      };
     }
 
     return {
-      message: error.message || 'Произошла ошибка',
-      retry: false
-    }
+      message: error.message || "Произошла ошибка",
+      retry: false,
+    };
   }
 
   // Unknown error format
   return {
-    message: context ? `Ошибка: ${context}` : 'Неизвестная ошибка',
-    retry: false
-  }
+    message: context ? `Ошибка: ${context}` : "Неизвестная ошибка",
+    retry: false,
+  };
 }
 
 /**
  * Show error toast with consistent styling
  */
 export function showErrorToast(error: unknown, context?: string): ApiError {
-  const apiError = parseApiError(error, context)
+  const apiError = parseApiError(error, context);
 
   toast.error(apiError.message, {
-    description: apiError.retry ? 'Попробуйте позже' : undefined,
-    action: apiError.retry ? {
-      label: 'Повторить',
-      onClick: () => window.location.reload()
-    } : undefined
-  })
+    description: apiError.retry ? "Попробуйте позже" : undefined,
+    action: apiError.retry
+      ? {
+          label: "Повторить",
+          onClick: () => window.location.reload(),
+        }
+      : undefined,
+  });
 
-  return apiError
+  return apiError;
 }
 
 /**
  * Show success toast
  */
 export function showSuccessToast(message: string, description?: string) {
-  toast.success(message, { description })
+  toast.success(message, { description });
 }
 
 /**
@@ -109,18 +113,18 @@ export async function apiFetch<T>(
   context?: string
 ): Promise<{ data: T | null; error: ApiError | null }> {
   try {
-    const response = await fetch(url, options)
+    const response = await fetch(url, options);
 
     if (!response.ok) {
-      const error = parseApiError(response, context)
-      return { data: null, error }
+      const error = parseApiError(response, context);
+      return { data: null, error };
     }
 
-    const data = await response.json()
-    return { data, error: null }
+    const data = await response.json();
+    return { data, error: null };
   } catch (error) {
-    const apiError = parseApiError(error, context)
-    return { data: null, error: apiError }
+    const apiError = parseApiError(error, context);
+    return { data: null, error: apiError };
   }
 }
 
@@ -131,27 +135,27 @@ export async function apiFetch<T>(
 export async function withErrorHandling<T>(
   fn: () => Promise<T>,
   options?: {
-    successMessage?: string
-    errorContext?: string
-    showToast?: boolean
+    successMessage?: string;
+    errorContext?: string;
+    showToast?: boolean;
   }
 ): Promise<{ data: T | null; error: ApiError | null }> {
   try {
-    const data = await fn()
+    const data = await fn();
 
     if (options?.successMessage) {
-      showSuccessToast(options.successMessage)
+      showSuccessToast(options.successMessage);
     }
 
-    return { data, error: null }
+    return { data, error: null };
   } catch (error) {
-    const apiError = parseApiError(error, options?.errorContext)
+    const apiError = parseApiError(error, options?.errorContext);
 
     if (options?.showToast !== false) {
-      showErrorToast(error, options?.errorContext)
+      showErrorToast(error, options?.errorContext);
     }
 
-    return { data: null, error: apiError }
+    return { data: null, error: apiError };
   }
 }
 
@@ -163,59 +167,59 @@ export async function retryWithBackoff<T>(
   maxRetries: number = 3,
   baseDelay: number = 1000
 ): Promise<T> {
-  let lastError: unknown
+  let lastError: unknown;
 
   for (let i = 0; i < maxRetries; i++) {
     try {
-      return await fn()
+      return await fn();
     } catch (error) {
-      lastError = error
+      lastError = error;
 
       // Don't retry non-retryable errors
-      const apiError = parseApiError(error)
+      const apiError = parseApiError(error);
       if (!apiError.retry) {
-        throw error
+        throw error;
       }
 
       // Wait before retrying
       if (i < maxRetries - 1) {
-        const delay = baseDelay * Math.pow(2, i)
-        await new Promise(resolve => setTimeout(resolve, delay))
+        const delay = baseDelay * Math.pow(2, i);
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
   }
 
-  throw lastError
+  throw lastError;
 }
 
 /**
  * Check if online
  */
 export function isOnline(): boolean {
-  return typeof navigator !== 'undefined' ? navigator.onLine : true
+  return typeof navigator !== "undefined" ? navigator.onLine : true;
 }
 
 /**
  * Get offline message
  */
 export function getOfflineMessage(): string {
-  return 'Нет подключения к интернету. Проверьте соединение.'
+  return "Нет подключения к интернету. Проверьте соединение.";
 }
 
 /**
  * Safe parseFloat — returns null instead of NaN
  */
 export function safeParseFloat(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null
-  const n = parseFloat(String(value))
-  return isNaN(n) ? null : n
+  if (value === null || value === undefined || value === "") return null;
+  const n = parseFloat(String(value));
+  return isNaN(n) ? null : n;
 }
 
 /**
  * Safe parseInt — returns null instead of NaN
  */
 export function safeParseInt(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null
-  const n = parseInt(String(value), 10)
-  return isNaN(n) ? null : n
+  if (value === null || value === undefined || value === "") return null;
+  const n = parseInt(String(value), 10);
+  return isNaN(n) ? null : n;
 }

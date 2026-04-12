@@ -1,33 +1,33 @@
-'use client'
+"use client";
 
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Heart, ExternalLink, Coffee } from 'lucide-react'
-import { DONATE_URL } from '../constants'
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Heart, ExternalLink, Coffee } from "lucide-react";
+import { DONATE_URL } from "../constants";
 
 export function DonateCard() {
   return (
-    <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
+    <Card className="from-primary/10 to-primary/5 border-primary/20 bg-gradient-to-br">
       <CardContent className="pt-4">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
-            <Coffee className="w-6 h-6 text-primary" />
+          <div className="bg-primary/20 flex h-12 w-12 items-center justify-center rounded-full">
+            <Coffee className="text-primary h-6 w-6" />
           </div>
           <div className="flex-1">
             <p className="font-medium">Поддержать проект</p>
-            <p className="text-xs text-muted-foreground">Помочь развитию LeakFixer</p>
+            <p className="text-muted-foreground text-xs">Помочь развитию LeakFixer</p>
           </div>
           <Button
             variant="default"
             className="bg-primary"
-            onClick={() => window.open(DONATE_URL, '_blank')}
+            onClick={() => window.open(DONATE_URL, "_blank")}
           >
-            <Heart className="w-4 h-4 mr-1" />
+            <Heart className="mr-1 h-4 w-4" />
             Донат
-            <ExternalLink className="w-3 h-3 ml-1" />
+            <ExternalLink className="ml-1 h-3 w-3" />
           </Button>
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }

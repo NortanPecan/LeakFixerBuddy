@@ -1,163 +1,163 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { requireSelf } from '@/lib/server-auth'
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { requireSelf } from "@/lib/server-auth";
 
 // GET /api/accounts?userId=xxx - Get user accounts
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get("userId");
 
     if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 })
+      return NextResponse.json({ error: "userId is required" }, { status: 400 });
     }
 
-    const auth = requireSelf(request, userId)
-    if ('error' in auth) return auth.error
+    const auth = requireSelf(request, userId);
+    if ("error" in auth) return auth.error;
 
     const accounts = await db.account.findMany({
       where: { userId, isActive: true },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { sortOrder: "asc" },
       include: {
-        _count: { select: { transactions: true } }
-      }
-    })
+        _count: { select: { transactions: true } },
+      },
+    });
 
     // Calculate current balance for each account
     const accountsWithBalance = await Promise.all(
       accounts.map(async (account) => {
         const transactions = await db.transaction.findMany({
-          where: { accountId: account.id }
-        })
-        const transactionSum = transactions.reduce((sum, t) => sum + t.amount, 0)
+          where: { accountId: account.id },
+        });
+        const transactionSum = transactions.reduce((sum, t) => sum + t.amount, 0);
         return {
           ...account,
-          currentBalance: account.initialBalance + transactionSum
-        }
+          currentBalance: account.initialBalance + transactionSum,
+        };
       })
-    )
+    );
 
-    return NextResponse.json({ success: true, accounts: accountsWithBalance })
+    return NextResponse.json({ success: true, accounts: accountsWithBalance });
   } catch (error) {
-    console.error('Error fetching accounts:', error)
-    return NextResponse.json({ error: 'Failed to fetch accounts' }, { status: 500 })
+    console.error("Error fetching accounts:", error);
+    return NextResponse.json({ error: "Failed to fetch accounts" }, { status: 500 });
   }
 }
 
 // POST /api/accounts - Create account
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { userId, name, type, currency, initialBalance, icon, color, sortOrder } = body
+    const body = await request.json();
+    const { userId, name, type, currency, initialBalance, icon, color, sortOrder } = body;
 
     if (!userId || !name) {
-      return NextResponse.json({ error: 'userId and name are required' }, { status: 400 })
+      return NextResponse.json({ error: "userId and name are required" }, { status: 400 });
     }
 
-    const auth = requireSelf(request, userId)
-    if ('error' in auth) return auth.error
+    const auth = requireSelf(request, userId);
+    if ("error" in auth) return auth.error;
 
     // Check for duplicate account name
     const existingAccount = await db.account.findFirst({
-      where: { 
-        userId, 
-        name: { equals: name, mode: 'insensitive' },
-        isActive: true 
-      }
-    })
-    
+      where: {
+        userId,
+        name: { equals: name, mode: "insensitive" },
+        isActive: true,
+      },
+    });
+
     if (existingAccount) {
       return NextResponse.json(
-        { error: `Счёт с названием "${name}" уже существует` }, 
+        { error: `Счёт с названием "${name}" уже существует` },
         { status: 400 }
-      )
+      );
     }
 
     const account = await db.account.create({
       data: {
         userId,
         name,
-        type: type || 'cash',
-        currency: currency || 'RUB',
+        type: type || "cash",
+        currency: currency || "RUB",
         initialBalance: initialBalance || 0,
         icon,
         color,
-        sortOrder: sortOrder || 0
-      }
-    })
+        sortOrder: sortOrder || 0,
+      },
+    });
 
-    return NextResponse.json({ success: true, account })
+    return NextResponse.json({ success: true, account });
   } catch (error) {
-    console.error('Error creating account:', error)
-    return NextResponse.json({ error: 'Failed to create account' }, { status: 500 })
+    console.error("Error creating account:", error);
+    return NextResponse.json({ error: "Failed to create account" }, { status: 500 });
   }
 }
 
 // PATCH /api/accounts - Update account
 export async function PATCH(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { id, ...data } = body
+    const body = await request.json();
+    const { id, ...data } = body;
 
     if (!id) {
-      return NextResponse.json({ error: 'id is required' }, { status: 400 })
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
     const existingAccount = await db.account.findUnique({
       where: { id },
       select: { userId: true },
-    })
+    });
 
     if (!existingAccount) {
-      return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+      return NextResponse.json({ error: "Account not found" }, { status: 404 });
     }
 
-    const auth = requireSelf(request, existingAccount.userId)
-    if ('error' in auth) return auth.error
+    const auth = requireSelf(request, existingAccount.userId);
+    if ("error" in auth) return auth.error;
 
     const account = await db.account.update({
       where: { id },
-      data
-    })
+      data,
+    });
 
-    return NextResponse.json({ success: true, account })
+    return NextResponse.json({ success: true, account });
   } catch (error) {
-    console.error('Error updating account:', error)
-    return NextResponse.json({ error: 'Failed to update account' }, { status: 500 })
+    console.error("Error updating account:", error);
+    return NextResponse.json({ error: "Failed to update account" }, { status: 500 });
   }
 }
 
 // DELETE /api/accounts?id=xxx - Delete account (soft delete)
 export async function DELETE(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const id = searchParams.get('id')
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
 
     if (!id) {
-      return NextResponse.json({ error: 'id is required' }, { status: 400 })
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
     const existingAccount = await db.account.findUnique({
       where: { id },
       select: { userId: true },
-    })
+    });
 
     if (!existingAccount) {
-      return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+      return NextResponse.json({ error: "Account not found" }, { status: 404 });
     }
 
-    const auth = requireSelf(request, existingAccount.userId)
-    if ('error' in auth) return auth.error
+    const auth = requireSelf(request, existingAccount.userId);
+    if ("error" in auth) return auth.error;
 
     // Soft delete by setting isActive to false
     const account = await db.account.update({
       where: { id },
-      data: { isActive: false }
-    })
+      data: { isActive: false },
+    });
 
-    return NextResponse.json({ success: true, account })
+    return NextResponse.json({ success: true, account });
   } catch (error) {
-    console.error('Error deleting account:', error)
-    return NextResponse.json({ error: 'Failed to delete account' }, { status: 500 })
+    console.error("Error deleting account:", error);
+    return NextResponse.json({ error: "Failed to delete account" }, { status: 500 });
   }
 }

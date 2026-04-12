@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { useAppStore } from '@/lib/store'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
+import { useEffect, useState } from "react";
+import { useAppStore } from "@/lib/store";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft,
   Flame,
@@ -14,8 +14,8 @@ import {
   Activity,
   Moon,
   Zap,
-  Brain
-} from 'lucide-react'
+  Brain,
+} from "lucide-react";
 import {
   AreaChart,
   Area,
@@ -30,126 +30,144 @@ import {
   Line,
   PieChart,
   Pie,
-  Cell
-} from 'recharts'
+  Cell,
+} from "recharts";
 
 interface HistoryEntry {
-  date: string
-  ritualsTotal: number
-  ritualsCompleted: number
-  ritualsRate: number
-  habitsTotal: number
-  habitsCompleted: number
-  habitsRate: number
-  tasksCompleted: number
-  mood: number | null
-  energy: number | null
-  stress: number | null
-  sleepHours: number | null
-  morningEnergy: number | null
-  eveningRating: number | null
-  calories: number | null
-  water: number | null
-  waterTarget: number | null
-  weight: number | null
-  overallScore: number
+  date: string;
+  ritualsTotal: number;
+  ritualsCompleted: number;
+  ritualsRate: number;
+  habitsTotal: number;
+  habitsCompleted: number;
+  habitsRate: number;
+  tasksCompleted: number;
+  mood: number | null;
+  energy: number | null;
+  stress: number | null;
+  sleepHours: number | null;
+  morningEnergy: number | null;
+  eveningRating: number | null;
+  calories: number | null;
+  water: number | null;
+  waterTarget: number | null;
+  weight: number | null;
+  overallScore: number;
 }
 
 interface WeeklySummary {
-  week: string
-  avgScore: number
-  avgRituals: number
-  avgHabits: number
+  week: string;
+  avgScore: number;
+  avgRituals: number;
+  avgHabits: number;
 }
 
 interface StatsData {
-  history: HistoryEntry[]
+  history: HistoryEntry[];
   streaks: {
-    current: number
-    max: number
-  }
-  weeklySummary: (WeeklySummary & { isBest: boolean })[]
+    current: number;
+    max: number;
+  };
+  weeklySummary: (WeeklySummary & { isBest: boolean })[];
   totals: {
-    totalRituals: number
-    totalHabits: number
-    totalTasks: number
-    avgMood: number | null
-    avgEnergy: number | null
-    avgMorningEnergy: number | null
-    avgEveningRating: number | null
-    avgDayScore: number | null
-  }
+    totalRituals: number;
+    totalHabits: number;
+    totalTasks: number;
+    avgMood: number | null;
+    avgEnergy: number | null;
+    avgMorningEnergy: number | null;
+    avgEveningRating: number | null;
+    avgDayScore: number | null;
+  };
 }
 
-const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6']
+const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6"];
 
 export function StatsScreen() {
-  const { user, setScreen } = useAppStore()
-  const [data, setData] = useState<StatsData | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [period, setPeriod] = useState<7 | 14 | 30 | 90>(14)
+  const { user, setScreen } = useAppStore();
+  const [data, setData] = useState<StatsData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [period, setPeriod] = useState<7 | 14 | 30 | 90>(14);
 
   useEffect(() => {
     const loadData = async () => {
-      if (!user?.id) return
-      setIsLoading(true)
+      if (!user?.id) return;
+      setIsLoading(true);
       try {
-        const response = await fetch(`/api/stats/history?userId=${user.id}&days=${period}`)
-        if (!response.ok) throw new Error('Failed to load stats')
-        const statsData = await response.json()
-        setData(statsData)
+        const response = await fetch(`/api/stats/history?userId=${user.id}&days=${period}`);
+        if (!response.ok) throw new Error("Failed to load stats");
+        const statsData = await response.json();
+        setData(statsData);
       } catch (error) {
-        console.error('Failed to load stats:', error)
+        console.error("Failed to load stats:", error);
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
-    }
-    loadData()
-  }, [user?.id, period])
+    };
+    loadData();
+  }, [user?.id, period]);
 
   // Prepare chart data — show all loaded days, limit mood/rituals charts to avoid crowding
-  const allDays = data?.history || []
-  const chartDays = period > 30 ? allDays.slice(-30) : allDays  // max 30 bars for readability
-  const last14Days = allDays.slice(-14)
-  const last7Days = allDays.slice(-7)
+  const allDays = data?.history || [];
+  const chartDays = period > 30 ? allDays.slice(-30) : allDays; // max 30 bars for readability
+  const last14Days = allDays.slice(-14);
+  const last7Days = allDays.slice(-7);
 
   // Trend arrows: compare first half vs second half of the period
-  const avgField = (days: HistoryEntry[], key: 'mood' | 'energy') => {
-    const vals = days.map(d => d[key]).filter((v): v is number => v !== null)
-    return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null
-  }
-  const half = Math.floor(allDays.length / 2)
-  const firstHalf = allDays.slice(0, half)
-  const secondHalf = allDays.slice(half)
-  const moodTrend = allDays.length >= 4
-    ? (() => { const f = avgField(firstHalf, 'mood'); const s = avgField(secondHalf, 'mood'); return f !== null && s !== null ? s - f : null })()
-    : null
-  const energyTrend = allDays.length >= 4
-    ? (() => { const f = avgField(firstHalf, 'energy'); const s = avgField(secondHalf, 'energy'); return f !== null && s !== null ? s - f : null })()
-    : null
+  const avgField = (days: HistoryEntry[], key: "mood" | "energy") => {
+    const vals = days.map((d) => d[key]).filter((v): v is number => v !== null);
+    return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+  };
+  const half = Math.floor(allDays.length / 2);
+  const firstHalf = allDays.slice(0, half);
+  const secondHalf = allDays.slice(half);
+  const moodTrend =
+    allDays.length >= 4
+      ? (() => {
+          const f = avgField(firstHalf, "mood");
+          const s = avgField(secondHalf, "mood");
+          return f !== null && s !== null ? s - f : null;
+        })()
+      : null;
+  const energyTrend =
+    allDays.length >= 4
+      ? (() => {
+          const f = avgField(firstHalf, "energy");
+          const s = avgField(secondHalf, "energy");
+          return f !== null && s !== null ? s - f : null;
+        })()
+      : null;
 
   // Format date for display
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
-  }
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+  };
 
   // Custom tooltip
-  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) => {
+  const CustomTooltip = ({
+    active,
+    payload,
+    label,
+  }: {
+    active?: boolean;
+    payload?: Array<{ name: string; value: number; color: string }>;
+    label?: string;
+  }) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
-          <p className="text-sm font-medium mb-2">{label}</p>
+        <div className="bg-card border-border rounded-lg border p-3 shadow-lg">
+          <p className="mb-2 text-sm font-medium">{label}</p>
           {payload.map((entry, index) => (
             <p key={index} className="text-xs" style={{ color: entry.color }}>
               {entry.name}: {entry.value}
             </p>
           ))}
         </div>
-      )
+      );
     }
-    return null
-  }
+    return null;
+  };
 
   return (
     <div className="flex flex-col gap-4 pb-20">
@@ -159,20 +177,20 @@ export function StatsScreen() {
           variant="ghost"
           size="sm"
           className="h-8 w-8 p-0"
-          onClick={() => setScreen('profile')}
+          onClick={() => setScreen("profile")}
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="h-4 w-4" />
         </Button>
-        <h1 className="text-2xl font-bold text-foreground">Статистика</h1>
+        <h1 className="text-foreground text-2xl font-bold">Статистика</h1>
       </div>
 
       {/* Period selector */}
       <div className="flex gap-1">
-        {([7, 14, 30, 90] as const).map(days => (
+        {([7, 14, 30, 90] as const).map((days) => (
           <Button
             key={days}
             size="sm"
-            variant={period === days ? 'default' : 'outline'}
+            variant={period === days ? "default" : "outline"}
             onClick={() => setPeriod(days)}
             className="flex-1 text-xs"
           >
@@ -183,7 +201,7 @@ export function StatsScreen() {
 
       {isLoading ? (
         <div className="space-y-4">
-          {[1, 2, 3].map(i => (
+          {[1, 2, 3].map((i) => (
             <Card key={i} className="bg-card/50 backdrop-blur">
               <CardContent className="pt-4">
                 <Skeleton className="h-32 w-full" />
@@ -195,18 +213,18 @@ export function StatsScreen() {
         <>
           {/* Streak cards */}
           <div className="grid grid-cols-2 gap-3">
-            <Card className="bg-gradient-to-br from-orange-500/20 to-orange-600/10 border-orange-500/30">
+            <Card className="border-orange-500/30 bg-gradient-to-br from-orange-500/20 to-orange-600/10">
               <CardContent className="pt-4 text-center">
-                <Flame className="w-8 h-8 mx-auto text-orange-400 mb-2" />
+                <Flame className="mx-auto mb-2 h-8 w-8 text-orange-400" />
                 <p className="text-3xl font-bold text-orange-400">{data.streaks.current}</p>
-                <p className="text-xs text-muted-foreground">Текущая серия</p>
+                <p className="text-muted-foreground text-xs">Текущая серия</p>
               </CardContent>
             </Card>
-            <Card className="bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border-emerald-500/30">
+            <Card className="border-emerald-500/30 bg-gradient-to-br from-emerald-500/20 to-emerald-600/10">
               <CardContent className="pt-4 text-center">
-                <Trophy className="w-8 h-8 mx-auto text-emerald-400 mb-2" />
+                <Trophy className="mx-auto mb-2 h-8 w-8 text-emerald-400" />
                 <p className="text-3xl font-bold text-emerald-400">{data.streaks.max}</p>
-                <p className="text-xs text-muted-foreground">Лучшая серия</p>
+                <p className="text-muted-foreground text-xs">Лучшая серия</p>
               </CardContent>
             </Card>
           </div>
@@ -214,50 +232,56 @@ export function StatsScreen() {
           {/* Totals */}
           <Card className="bg-card/50 backdrop-blur">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Target className="w-5 h-5" />
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Target className="h-5 w-5" />
                 Всего за {period} дней
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-4 gap-3 text-center">
                 <div>
-                  <p className="text-2xl font-bold text-primary">{data.totals.totalRituals}</p>
-                  <p className="text-xs text-muted-foreground">Ритуалов</p>
+                  <p className="text-primary text-2xl font-bold">{data.totals.totalRituals}</p>
+                  <p className="text-muted-foreground text-xs">Ритуалов</p>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-primary">{data.totals.totalHabits}</p>
-                  <p className="text-xs text-muted-foreground">Привычек</p>
+                  <p className="text-primary text-2xl font-bold">{data.totals.totalHabits}</p>
+                  <p className="text-muted-foreground text-xs">Привычек</p>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-primary">{data.totals.totalTasks}</p>
-                  <p className="text-xs text-muted-foreground">Дел</p>
+                  <p className="text-primary text-2xl font-bold">{data.totals.totalTasks}</p>
+                  <p className="text-muted-foreground text-xs">Дел</p>
                 </div>
                 {data.totals.avgDayScore !== null && (
                   <div>
                     <p className="text-2xl font-bold text-yellow-400">{data.totals.avgDayScore}</p>
-                    <p className="text-xs text-muted-foreground">Ср. балл</p>
+                    <p className="text-muted-foreground text-xs">Ср. балл</p>
                   </div>
                 )}
               </div>
               {(data.totals.avgMood !== null || data.totals.avgEnergy !== null) && (
-                <div className="flex gap-4 mt-3 pt-3 border-t border-border/30">
+                <div className="border-border/30 mt-3 flex gap-4 border-t pt-3">
                   {data.totals.avgMood !== null && (
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-muted-foreground text-sm">
                       😊 {data.totals.avgMood.toFixed(1)}
                       {moodTrend !== null && Math.abs(moodTrend) >= 0.3 && (
-                        <span className={`ml-1 font-medium ${moodTrend > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {moodTrend > 0 ? '↑' : '↓'}{Math.abs(moodTrend).toFixed(1)}
+                        <span
+                          className={`ml-1 font-medium ${moodTrend > 0 ? "text-emerald-400" : "text-red-400"}`}
+                        >
+                          {moodTrend > 0 ? "↑" : "↓"}
+                          {Math.abs(moodTrend).toFixed(1)}
                         </span>
                       )}
                     </span>
                   )}
                   {data.totals.avgEnergy !== null && (
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-muted-foreground text-sm">
                       ⚡ {data.totals.avgEnergy.toFixed(1)}
                       {energyTrend !== null && Math.abs(energyTrend) >= 0.3 && (
-                        <span className={`ml-1 font-medium ${energyTrend > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {energyTrend > 0 ? '↑' : '↓'}{Math.abs(energyTrend).toFixed(1)}
+                        <span
+                          className={`ml-1 font-medium ${energyTrend > 0 ? "text-emerald-400" : "text-red-400"}`}
+                        >
+                          {energyTrend > 0 ? "↑" : "↓"}
+                          {Math.abs(energyTrend).toFixed(1)}
                         </span>
                       )}
                     </span>
@@ -270,8 +294,8 @@ export function StatsScreen() {
           {/* Overall Score Chart */}
           <Card className="bg-card/50 backdrop-blur">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Activity className="w-5 h-5" />
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Activity className="h-5 w-5" />
                 Общий прогресс
               </CardTitle>
             </CardHeader>
@@ -281,17 +305,17 @@ export function StatsScreen() {
                   <AreaChart data={chartDays}>
                     <defs>
                       <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis
                       dataKey="date"
                       tickFormatter={formatDate}
-                      tick={{ fontSize: 10, fill: '#9ca3af' }}
+                      tick={{ fontSize: 10, fill: "#9ca3af" }}
                     />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "#9ca3af" }} />
                     <Tooltip content={<CustomTooltip />} />
                     <Area
                       type="monotone"
@@ -310,8 +334,8 @@ export function StatsScreen() {
           {/* Rituals & Habits Rate */}
           <Card className="bg-card/50 backdrop-blur">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <TrendingUp className="w-5 h-5" />
+              <CardTitle className="flex items-center gap-2 text-base">
+                <TrendingUp className="h-5 w-5" />
                 Выполнение ритуалов и привычек
               </CardTitle>
             </CardHeader>
@@ -323,23 +347,33 @@ export function StatsScreen() {
                     <XAxis
                       dataKey="date"
                       tickFormatter={formatDate}
-                      tick={{ fontSize: 10, fill: '#9ca3af' }}
+                      tick={{ fontSize: 10, fill: "#9ca3af" }}
                     />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "#9ca3af" }} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="ritualsRate" name="Ритуалы %" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="habitsRate" name="Привычки %" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    <Bar
+                      dataKey="ritualsRate"
+                      name="Ритуалы %"
+                      fill="#8b5cf6"
+                      radius={[4, 4, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="habitsRate"
+                      name="Привычки %"
+                      fill="#3b82f6"
+                      radius={[4, 4, 0, 0]}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <div className="flex justify-center gap-6 mt-2">
+              <div className="mt-2 flex justify-center gap-6">
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded bg-purple-500" />
-                  <span className="text-xs text-muted-foreground">Ритуалы</span>
+                  <div className="h-3 w-3 rounded bg-purple-500" />
+                  <span className="text-muted-foreground text-xs">Ритуалы</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded bg-blue-500" />
-                  <span className="text-xs text-muted-foreground">Привычки</span>
+                  <div className="h-3 w-3 rounded bg-blue-500" />
+                  <span className="text-muted-foreground text-xs">Привычки</span>
                 </div>
               </div>
             </CardContent>
@@ -348,17 +382,23 @@ export function StatsScreen() {
           {/* Mood & Energy Chart */}
           <Card className="bg-card/50 backdrop-blur">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Brain className="w-5 h-5" />
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Brain className="h-5 w-5" />
                 Настроение и энергия
                 {moodTrend !== null && Math.abs(moodTrend) >= 0.3 && (
-                  <span className={`text-xs font-normal ml-1 ${moodTrend > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    😊{moodTrend > 0 ? '↑' : '↓'}{Math.abs(moodTrend).toFixed(1)}
+                  <span
+                    className={`ml-1 text-xs font-normal ${moodTrend > 0 ? "text-emerald-400" : "text-red-400"}`}
+                  >
+                    😊{moodTrend > 0 ? "↑" : "↓"}
+                    {Math.abs(moodTrend).toFixed(1)}
                   </span>
                 )}
                 {energyTrend !== null && Math.abs(energyTrend) >= 0.3 && (
-                  <span className={`text-xs font-normal ml-1 ${energyTrend > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    ⚡{energyTrend > 0 ? '↑' : '↓'}{Math.abs(energyTrend).toFixed(1)}
+                  <span
+                    className={`ml-1 text-xs font-normal ${energyTrend > 0 ? "text-emerald-400" : "text-red-400"}`}
+                  >
+                    ⚡{energyTrend > 0 ? "↑" : "↓"}
+                    {Math.abs(energyTrend).toFixed(1)}
                   </span>
                 )}
               </CardTitle>
@@ -366,14 +406,18 @@ export function StatsScreen() {
             <CardContent>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartDays.filter(d => d.mood || d.energy || d.morningEnergy || d.eveningRating)}>
+                  <LineChart
+                    data={chartDays.filter(
+                      (d) => d.mood || d.energy || d.morningEnergy || d.eveningRating
+                    )}
+                  >
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis
                       dataKey="date"
                       tickFormatter={formatDate}
-                      tick={{ fontSize: 10, fill: '#9ca3af' }}
+                      tick={{ fontSize: 10, fill: "#9ca3af" }}
                     />
-                    <YAxis domain={[1, 10]} tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                    <YAxis domain={[1, 10]} tick={{ fontSize: 10, fill: "#9ca3af" }} />
                     <Tooltip content={<CustomTooltip />} />
                     <Line
                       type="monotone"
@@ -381,7 +425,7 @@ export function StatsScreen() {
                       name="Настроение"
                       stroke="#f59e0b"
                       strokeWidth={2}
-                      dot={{ fill: '#f59e0b', r: 3 }}
+                      dot={{ fill: "#f59e0b", r: 3 }}
                       connectNulls
                     />
                     <Line
@@ -390,10 +434,10 @@ export function StatsScreen() {
                       name="Энергия"
                       stroke="#10b981"
                       strokeWidth={2}
-                      dot={{ fill: '#10b981', r: 3 }}
+                      dot={{ fill: "#10b981", r: 3 }}
                       connectNulls
                     />
-                    {chartDays.some(d => d.morningEnergy) && (
+                    {chartDays.some((d) => d.morningEnergy) && (
                       <Line
                         type="monotone"
                         dataKey="morningEnergy"
@@ -405,7 +449,7 @@ export function StatsScreen() {
                         connectNulls
                       />
                     )}
-                    {chartDays.some(d => d.eveningRating) && (
+                    {chartDays.some((d) => d.eveningRating) && (
                       <Line
                         type="monotone"
                         dataKey="eveningRating"
@@ -420,25 +464,25 @@ export function StatsScreen() {
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-              <div className="flex flex-wrap justify-center gap-4 mt-2">
+              <div className="mt-2 flex flex-wrap justify-center gap-4">
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-amber-500" />
-                  <span className="text-xs text-muted-foreground">Настроение</span>
+                  <div className="h-3 w-3 rounded-full bg-amber-500" />
+                  <span className="text-muted-foreground text-xs">Настроение</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                  <span className="text-xs text-muted-foreground">Энергия</span>
+                  <div className="h-3 w-3 rounded-full bg-emerald-500" />
+                  <span className="text-muted-foreground text-xs">Энергия</span>
                 </div>
-                {chartDays.some(d => d.morningEnergy) && (
+                {chartDays.some((d) => d.morningEnergy) && (
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-indigo-500" />
-                    <span className="text-xs text-muted-foreground">Утр. энергия</span>
+                    <div className="h-3 w-3 rounded-full bg-indigo-500" />
+                    <span className="text-muted-foreground text-xs">Утр. энергия</span>
                   </div>
                 )}
-                {chartDays.some(d => d.eveningRating) && (
+                {chartDays.some((d) => d.eveningRating) && (
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-pink-500" />
-                    <span className="text-xs text-muted-foreground">Оценка дня</span>
+                    <div className="h-3 w-3 rounded-full bg-pink-500" />
+                    <span className="text-muted-foreground text-xs">Оценка дня</span>
                   </div>
                 )}
               </div>
@@ -448,8 +492,8 @@ export function StatsScreen() {
           {/* Tasks per day */}
           <Card className="bg-card/50 backdrop-blur">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Calendar className="w-5 h-5" />
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Calendar className="h-5 w-5" />
                 Выполненные дела
               </CardTitle>
             </CardHeader>
@@ -461,11 +505,16 @@ export function StatsScreen() {
                     <XAxis
                       dataKey="date"
                       tickFormatter={formatDate}
-                      tick={{ fontSize: 10, fill: '#9ca3af' }}
+                      tick={{ fontSize: 10, fill: "#9ca3af" }}
                     />
-                    <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                    <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="tasksCompleted" name="Дела" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                    <Bar
+                      dataKey="tasksCompleted"
+                      name="Дела"
+                      fill="#f59e0b"
+                      radius={[4, 4, 0, 0]}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -473,31 +522,31 @@ export function StatsScreen() {
           </Card>
 
           {/* Sleep chart if data available */}
-          {chartDays.some(d => d.sleepHours) && (
+          {chartDays.some((d) => d.sleepHours) && (
             <Card className="bg-card/50 backdrop-blur">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Moon className="w-5 h-5" />
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Moon className="h-5 w-5" />
                   Сон (часы)
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-32">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartDays.filter(d => d.sleepHours)}>
+                    <AreaChart data={chartDays.filter((d) => d.sleepHours)}>
                       <defs>
                         <linearGradient id="colorSleep" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                          <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis 
-                        dataKey="date" 
+                      <XAxis
+                        dataKey="date"
                         tickFormatter={formatDate}
-                        tick={{ fontSize: 10, fill: '#9ca3af' }}
+                        tick={{ fontSize: 10, fill: "#9ca3af" }}
                       />
-                      <YAxis domain={[0, 12]} tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                      <YAxis domain={[0, 12]} tick={{ fontSize: 10, fill: "#9ca3af" }} />
                       <Tooltip content={<CustomTooltip />} />
                       <Area
                         type="monotone"
@@ -515,10 +564,10 @@ export function StatsScreen() {
           )}
 
           {/* Calories chart */}
-          {chartDays.some(d => d.calories) && (
+          {chartDays.some((d) => d.calories) && (
             <Card className="bg-card/50 backdrop-blur">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-base">
                   🍽️ Калории ({period > 30 ? 30 : period} дней)
                 </CardTitle>
               </CardHeader>
@@ -528,15 +577,27 @@ export function StatsScreen() {
                     <AreaChart data={chartDays}>
                       <defs>
                         <linearGradient id="colorCal" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 10, fill: '#9ca3af' }} />
-                      <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                      <XAxis
+                        dataKey="date"
+                        tickFormatter={formatDate}
+                        tick={{ fontSize: 10, fill: "#9ca3af" }}
+                      />
+                      <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} />
                       <Tooltip content={<CustomTooltip />} />
-                      <Area type="monotone" dataKey="calories" name="Калории" stroke="#f59e0b" fillOpacity={1} fill="url(#colorCal)" connectNulls />
+                      <Area
+                        type="monotone"
+                        dataKey="calories"
+                        name="Калории"
+                        stroke="#f59e0b"
+                        fillOpacity={1}
+                        fill="url(#colorCal)"
+                        connectNulls
+                      />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -545,10 +606,10 @@ export function StatsScreen() {
           )}
 
           {/* Water chart */}
-          {chartDays.some(d => d.water) && (
+          {chartDays.some((d) => d.water) && (
             <Card className="bg-card/50 backdrop-blur">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-base">
                   💧 Вода (мл, {period > 30 ? 30 : period} дней)
                 </CardTitle>
               </CardHeader>
@@ -558,15 +619,27 @@ export function StatsScreen() {
                     <AreaChart data={chartDays}>
                       <defs>
                         <linearGradient id="colorWater" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#38bdf8" stopOpacity={0}/>
+                          <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#38bdf8" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 10, fill: '#9ca3af' }} />
-                      <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                      <XAxis
+                        dataKey="date"
+                        tickFormatter={formatDate}
+                        tick={{ fontSize: 10, fill: "#9ca3af" }}
+                      />
+                      <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} />
                       <Tooltip content={<CustomTooltip />} />
-                      <Area type="monotone" dataKey="water" name="Вода мл" stroke="#38bdf8" fillOpacity={1} fill="url(#colorWater)" connectNulls />
+                      <Area
+                        type="monotone"
+                        dataKey="water"
+                        name="Вода мл"
+                        stroke="#38bdf8"
+                        fillOpacity={1}
+                        fill="url(#colorWater)"
+                        connectNulls
+                      />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -575,22 +648,37 @@ export function StatsScreen() {
           )}
 
           {/* Weight chart */}
-          {chartDays.some(d => d.weight) && (
+          {chartDays.some((d) => d.weight) && (
             <Card className="bg-card/50 backdrop-blur">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-base">
                   ⚖️ Вес (кг, {period > 30 ? 30 : period} дней)
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-32">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartDays.filter(d => d.weight)}>
+                    <LineChart data={chartDays.filter((d) => d.weight)}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 10, fill: '#9ca3af' }} />
-                      <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} domain={['dataMin - 1', 'dataMax + 1']} />
+                      <XAxis
+                        dataKey="date"
+                        tickFormatter={formatDate}
+                        tick={{ fontSize: 10, fill: "#9ca3af" }}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10, fill: "#9ca3af" }}
+                        domain={["dataMin - 1", "dataMax + 1"]}
+                      />
                       <Tooltip content={<CustomTooltip />} />
-                      <Line type="monotone" dataKey="weight" name="Вес кг" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                      <Line
+                        type="monotone"
+                        dataKey="weight"
+                        name="Вес кг"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                        connectNulls
+                      />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -602,8 +690,8 @@ export function StatsScreen() {
           {data.weeklySummary.length > 1 && (
             <Card className="bg-card/50 backdrop-blur">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5" />
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <TrendingUp className="h-5 w-5" />
                   По неделям
                 </CardTitle>
               </CardHeader>
@@ -612,23 +700,21 @@ export function StatsScreen() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={data.weeklySummary}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis
-                        dataKey="week"
-                        tick={{ fontSize: 9, fill: '#9ca3af' }}
-                      />
-                      <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                      <XAxis dataKey="week" tick={{ fontSize: 9, fill: "#9ca3af" }} />
+                      <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "#9ca3af" }} />
                       <Tooltip content={<CustomTooltip />} />
                       <Bar dataKey="avgScore" name="Общий %" radius={[4, 4, 0, 0]}>
                         {data.weeklySummary.map((entry, index) => (
-                          <Cell key={index} fill={entry.isBest ? '#f59e0b' : '#10b981'} />
+                          <Cell key={index} fill={entry.isBest ? "#f59e0b" : "#10b981"} />
                         ))}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-                {data.weeklySummary.some(w => w.isBest) && (
-                  <p className="text-xs text-yellow-400 mt-2 text-center">
-                    🏆 Лучшая неделя — {data.weeklySummary.find(w => w.isBest)?.week} ({data.weeklySummary.find(w => w.isBest)?.avgScore} баллов)
+                {data.weeklySummary.some((w) => w.isBest) && (
+                  <p className="mt-2 text-center text-xs text-yellow-400">
+                    🏆 Лучшая неделя — {data.weeklySummary.find((w) => w.isBest)?.week} (
+                    {data.weeklySummary.find((w) => w.isBest)?.avgScore} баллов)
                   </p>
                 )}
               </CardContent>
@@ -643,7 +729,7 @@ export function StatsScreen() {
         </Card>
       )}
     </div>
-  )
+  );
 }
 
 // Trophy icon component
@@ -668,5 +754,5 @@ function Trophy({ className }: { className?: string }) {
       <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
       <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
     </svg>
-  )
+  );
 }

@@ -1,496 +1,503 @@
-﻿'use client'
+﻿"use client";
 
-import { useEffect, useMemo, useState } from 'react'
-import { useAppStore, type Screen } from '@/lib/store'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { LeakAiAnalysisCard } from '@/components/LeakAiAnalysisCard'
-import { showErrorToast, showSuccessToast } from '@/lib/network-utils'
-import { Brain, Lightbulb, NotebookPen, RefreshCw, Sparkles } from 'lucide-react'
+import { useEffect, useMemo, useState } from "react";
+import { useAppStore, type Screen } from "@/lib/store";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LeakAiAnalysisCard } from "@/components/LeakAiAnalysisCard";
+import { showErrorToast, showSuccessToast } from "@/lib/network-utils";
+import { Brain, Lightbulb, NotebookPen, RefreshCw, Sparkles } from "lucide-react";
 
 interface LeakEntity {
-  id: string
-  title: string
-  description: string | null
-  source: 'manual' | 'signal' | 'imported' | 'ai_suggested'
-  status: 'new' | 'in_progress' | 'resolved' | 'archived'
-  severity: 'info' | 'warning' | 'critical'
-  sphere: string | null
-  createdAt: string
-  updatedAt: string
-  resolvedAt: string | null
-  contextSnapshot?: Record<string, unknown> | null
-  actions: LeakActionLink[]
+  id: string;
+  title: string;
+  description: string | null;
+  source: "manual" | "signal" | "imported" | "ai_suggested";
+  status: "new" | "in_progress" | "resolved" | "archived";
+  severity: "info" | "warning" | "critical";
+  sphere: string | null;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt: string | null;
+  contextSnapshot?: Record<string, unknown> | null;
+  actions: LeakActionLink[];
 }
 
 interface LeakActionLink {
-  id: string
-  entityType: 'task' | 'ritual' | 'challenge' | 'content' | 'skill' | 'trait'
-  entityId: string
-  label: string
-  status: string
-  metadata?: Record<string, unknown> | null
-  createdAt: string
-  updatedAt: string
+  id: string;
+  entityType: "task" | "ritual" | "challenge" | "content" | "skill" | "trait";
+  entityId: string;
+  label: string;
+  status: string;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface LeakPlanAction {
-  id: string
-  kind: 'task' | 'ritual' | 'skill' | 'trait' | 'challenge' | 'content'
-  title: string
-  description: string | null
-  payload?: Record<string, unknown> | null
-  sortOrder: number
-  createdAt: string
-  updatedAt: string
-  feedbacks: LeakPlanFeedback[]
+  id: string;
+  kind: "task" | "ritual" | "skill" | "trait" | "challenge" | "content";
+  title: string;
+  description: string | null;
+  payload?: Record<string, unknown> | null;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  feedbacks: LeakPlanFeedback[];
 }
 
 interface LeakPlanFeedback {
-  id: string
-  leakId: string
-  solutionActionId: string
-  result: 'worked' | 'partially' | 'not_worked'
-  comment: string | null
-  createdAt: string
-  updatedAt: string
+  id: string;
+  leakId: string;
+  solutionActionId: string;
+  result: "worked" | "partially" | "not_worked";
+  comment: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface LeakSolutionPlan {
-  id: string
-  leakId: string
-  mode: 'minimum' | 'base' | 'maximum'
-  summary: string
-  confidenceLabel: 'low' | 'medium' | 'high'
-  confidenceReason: string | null
-  isSelected: boolean
-  source: string
-  createdAt: string
-  updatedAt: string
-  actions: LeakPlanAction[]
+  id: string;
+  leakId: string;
+  mode: "minimum" | "base" | "maximum";
+  summary: string;
+  confidenceLabel: "low" | "medium" | "high";
+  confidenceReason: string | null;
+  isSelected: boolean;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+  actions: LeakPlanAction[];
 }
 
 interface LeakHint {
-  type: string
-  severity: 'info' | 'warning' | 'critical'
-  message: string
-  emoji: string
-  days?: string[]
+  type: string;
+  severity: "info" | "warning" | "critical";
+  message: string;
+  emoji: string;
+  days?: string[];
 }
 
 interface LeakPattern {
-  leakType: string
-  analysisCount: number
-  whatWorked: string[]
-  clusterKey?: string
-  clusterLabel?: string
-  clusterSize?: number
-  clusterConfidence?: number
-  clusterRawConfidence?: number
-  clusterConflict?: 'none' | 'mixed' | 'high'
-  clusterConflictRatio?: number
-  clusterWorkedCount?: number
-  clusterPartialCount?: number
-  clusterFailedCount?: number
-  clusterLeakTypes?: string[]
-  clusterWorkedExamples?: string[]
-  clusterFailedExamples?: string[]
-  linkType?: 'exact' | 'fuzzy' | 'none'
+  leakType: string;
+  analysisCount: number;
+  whatWorked: string[];
+  clusterKey?: string;
+  clusterLabel?: string;
+  clusterSize?: number;
+  clusterConfidence?: number;
+  clusterRawConfidence?: number;
+  clusterConflict?: "none" | "mixed" | "high";
+  clusterConflictRatio?: number;
+  clusterWorkedCount?: number;
+  clusterPartialCount?: number;
+  clusterFailedCount?: number;
+  clusterLeakTypes?: string[];
+  clusterWorkedExamples?: string[];
+  clusterFailedExamples?: string[];
+  linkType?: "exact" | "fuzzy" | "none";
   triedSolutions?: Array<{
-    text: string
-    worked: boolean | null
-    result?: 'worked' | 'partially' | 'not_worked'
-    comment?: string | null
-    updatedAt?: string | null
-    sourceActionKind?: string | null
-    sourcePlanMode?: string | null
-    linkedEntityType?: string | null
-    linkedEntityLabel?: string | null
-  }>
-  workedCount?: number
-  partialCount?: number
-  failedCount?: number
+    text: string;
+    worked: boolean | null;
+    result?: "worked" | "partially" | "not_worked";
+    comment?: string | null;
+    updatedAt?: string | null;
+    sourceActionKind?: string | null;
+    sourcePlanMode?: string | null;
+    linkedEntityType?: string | null;
+    linkedEntityLabel?: string | null;
+  }>;
+  workedCount?: number;
+  partialCount?: number;
+  failedCount?: number;
   workedExamples?: Array<{
-    text: string
-    worked: boolean | null
-    result?: 'worked' | 'partially' | 'not_worked'
-    comment?: string | null
-    updatedAt?: string | null
-    sourceActionKind?: string | null
-    sourcePlanMode?: string | null
-    linkedEntityType?: string | null
-    linkedEntityLabel?: string | null
-  }>
-  updatedAt: string
-  activeLeakCount?: number
+    text: string;
+    worked: boolean | null;
+    result?: "worked" | "partially" | "not_worked";
+    comment?: string | null;
+    updatedAt?: string | null;
+    sourceActionKind?: string | null;
+    sourcePlanMode?: string | null;
+    linkedEntityType?: string | null;
+    linkedEntityLabel?: string | null;
+  }>;
+  updatedAt: string;
+  activeLeakCount?: number;
   activeLeaks?: Array<{
-    id: string
-    title: string
-    status: string
-    updatedAt: string
-    matchType?: 'exact' | 'fuzzy'
-  }>
+    id: string;
+    title: string;
+    status: string;
+    updatedAt: string;
+    matchType?: "exact" | "fuzzy";
+  }>;
 }
 
 interface NextBestActionHint {
-  type: 'generate' | 'create_entity' | 'give_feedback' | 'retry' | 'switch_mode' | 'regenerate_context'
-  reason: string
-  actionId?: string | null
-  targetMode?: LeakSolutionPlan['mode'] | null
-  confidence: 'low' | 'medium' | 'high'
-  correlationId?: string | null
-  factors?: Array<{ key: string; weight: number; detail?: string }>
+  type:
+    | "generate"
+    | "create_entity"
+    | "give_feedback"
+    | "retry"
+    | "switch_mode"
+    | "regenerate_context";
+  reason: string;
+  actionId?: string | null;
+  targetMode?: LeakSolutionPlan["mode"] | null;
+  confidence: "low" | "medium" | "high";
+  correlationId?: string | null;
+  factors?: Array<{ key: string; weight: number; detail?: string }>;
 }
 
 interface ContextDriftHint {
-  isStale: boolean
-  score: number
-  generatedAt: string | null
-  checkedAt: string
+  isStale: boolean;
+  score: number;
+  generatedAt: string | null;
+  checkedAt: string;
   changedMetrics: Array<{
-    key: string
-    before: number
-    now: number
-    deltaPct: number
-  }>
+    key: string;
+    before: number;
+    now: number;
+    deltaPct: number;
+  }>;
 }
 
 interface ExecutionScoreHint {
-  value: number
+  value: number;
   breakdown: {
-    createdCoverage: number
-    feedbackCoverage: number
-    workedShare: number
-    attemptsPenalty: number
-    driftPenalty: number
-  }
+    createdCoverage: number;
+    feedbackCoverage: number;
+    workedShare: number;
+    attemptsPenalty: number;
+    driftPenalty: number;
+  };
 }
 
 interface AdaptiveModeHint {
-  targetMode: LeakSolutionPlan['mode']
-  reason: string
+  targetMode: LeakSolutionPlan["mode"];
+  reason: string;
 }
 
 interface LeakPolicyHint {
-  policyVersion?: number
-  computedAt?: string
-  selectedMode: LeakSolutionPlan['mode'] | null
-  nextBestAction: NextBestActionHint | null
-  contextDrift: ContextDriftHint | null
-  executionScore: ExecutionScoreHint | null
-  adaptiveModeSuggestion: AdaptiveModeHint | null
+  policyVersion?: number;
+  computedAt?: string;
+  selectedMode: LeakSolutionPlan["mode"] | null;
+  nextBestAction: NextBestActionHint | null;
+  contextDrift: ContextDriftHint | null;
+  executionScore: ExecutionScoreHint | null;
+  adaptiveModeSuggestion: AdaptiveModeHint | null;
   runJournal?: Array<{
-    type: string
-    at: string
-    actionId?: string | null
-    actionKind?: string | null
-    note?: string | null
-    policyCorrelationId?: string | null
-    policyActionType?: string | null
-    actionTitle?: string | null
-    result?: string | null
-    actor?: string | null
-    decision?: string | null
-    attempt?: number | null
-    factors?: Array<{ key: string; weight: number; detail?: string }>
-  }>
+    type: string;
+    at: string;
+    actionId?: string | null;
+    actionKind?: string | null;
+    note?: string | null;
+    policyCorrelationId?: string | null;
+    policyActionType?: string | null;
+    actionTitle?: string | null;
+    result?: string | null;
+    actor?: string | null;
+    decision?: string | null;
+    attempt?: number | null;
+    factors?: Array<{ key: string; weight: number; detail?: string }>;
+  }>;
   summary?: {
-    accepted: number
-    rejected: number
-    outcomes: number
-    outcomeWorked: number
-    outcomePartial: number
-    outcomeFailed: number
-    rejectReasons: Record<string, number>
+    accepted: number;
+    rejected: number;
+    outcomes: number;
+    outcomeWorked: number;
+    outcomePartial: number;
+    outcomeFailed: number;
+    rejectReasons: Record<string, number>;
     currentFunnel?: {
-      correlationId: string
-      suggestedAt: string | null
-      acceptedAt: string | null
-      rejectedAt: string | null
-      entityCreatedCount: number
-      outcomeCount: number
-      outcomeWorked: number
-      outcomePartial: number
-      outcomeFailed: number
-      lastOutcomeAt: string | null
-      pendingOutcomeActionIds: string[]
-      pendingOutcomeActionTitles: string[]
-      nextPendingOutcomeActionId: string | null
-      nextPendingOutcomeActionTitle: string | null
-      stage: 'suggested' | 'accepted' | 'awaiting_feedback' | 'learning' | 'completed' | 'rejected'
-      suggestedAgeMinutes: number | null
-      acceptedAgeMinutes: number | null
-      lastOutcomeAgeMinutes: number | null
-      maxPendingOutcomeAgeMinutes: number | null
-      oldestPendingOutcomeActionId: string | null
-      oldestPendingOutcomeActionTitle: string | null
-      oldestPendingOutcomeAgeMinutes: number | null
+      correlationId: string;
+      suggestedAt: string | null;
+      acceptedAt: string | null;
+      rejectedAt: string | null;
+      entityCreatedCount: number;
+      outcomeCount: number;
+      outcomeWorked: number;
+      outcomePartial: number;
+      outcomeFailed: number;
+      lastOutcomeAt: string | null;
+      pendingOutcomeActionIds: string[];
+      pendingOutcomeActionTitles: string[];
+      nextPendingOutcomeActionId: string | null;
+      nextPendingOutcomeActionTitle: string | null;
+      stage: "suggested" | "accepted" | "awaiting_feedback" | "learning" | "completed" | "rejected";
+      suggestedAgeMinutes: number | null;
+      acceptedAgeMinutes: number | null;
+      lastOutcomeAgeMinutes: number | null;
+      maxPendingOutcomeAgeMinutes: number | null;
+      oldestPendingOutcomeActionId: string | null;
+      oldestPendingOutcomeActionTitle: string | null;
+      oldestPendingOutcomeAgeMinutes: number | null;
       stuckSignals: {
-        noDecision: boolean
-        noEntityAfterAccept: boolean
-        pendingFeedback: boolean
-        noOutcomeAfterCreate: boolean
-      }
-      primaryStuckSignal: 'pending_feedback' | 'no_entity_after_accept' | 'no_decision' | 'none'
-      stuckScore: number
-      urgency: 'low' | 'medium' | 'high'
-      urgencyReason: string
-      recommendedNudge: 'accept_or_reject' | 'create_entity' | 'collect_feedback' | 'none'
-      recommendedNudgeReason: string
-    } | null
+        noDecision: boolean;
+        noEntityAfterAccept: boolean;
+        pendingFeedback: boolean;
+        noOutcomeAfterCreate: boolean;
+      };
+      primaryStuckSignal: "pending_feedback" | "no_entity_after_accept" | "no_decision" | "none";
+      stuckScore: number;
+      urgency: "low" | "medium" | "high";
+      urgencyReason: string;
+      recommendedNudge: "accept_or_reject" | "create_entity" | "collect_feedback" | "none";
+      recommendedNudgeReason: string;
+    } | null;
     recentFunnels?: Array<{
-      correlationId: string
-      suggestedAt: string | null
-      acceptedAt: string | null
-      rejectedAt: string | null
-      entityCreatedCount: number
-      outcomeCount: number
-      outcomeWorked: number
-      outcomePartial: number
-      outcomeFailed: number
-      lastOutcomeAt: string | null
-      pendingOutcomeActionIds: string[]
-      pendingOutcomeActionTitles: string[]
-      nextPendingOutcomeActionId: string | null
-      nextPendingOutcomeActionTitle: string | null
-      stage: 'suggested' | 'accepted' | 'awaiting_feedback' | 'learning' | 'completed' | 'rejected'
-      isCurrent: boolean
-      suggestedAgeMinutes: number | null
-      acceptedAgeMinutes: number | null
-      lastOutcomeAgeMinutes: number | null
-      maxPendingOutcomeAgeMinutes: number | null
-      oldestPendingOutcomeActionId: string | null
-      oldestPendingOutcomeActionTitle: string | null
-      oldestPendingOutcomeAgeMinutes: number | null
+      correlationId: string;
+      suggestedAt: string | null;
+      acceptedAt: string | null;
+      rejectedAt: string | null;
+      entityCreatedCount: number;
+      outcomeCount: number;
+      outcomeWorked: number;
+      outcomePartial: number;
+      outcomeFailed: number;
+      lastOutcomeAt: string | null;
+      pendingOutcomeActionIds: string[];
+      pendingOutcomeActionTitles: string[];
+      nextPendingOutcomeActionId: string | null;
+      nextPendingOutcomeActionTitle: string | null;
+      stage: "suggested" | "accepted" | "awaiting_feedback" | "learning" | "completed" | "rejected";
+      isCurrent: boolean;
+      suggestedAgeMinutes: number | null;
+      acceptedAgeMinutes: number | null;
+      lastOutcomeAgeMinutes: number | null;
+      maxPendingOutcomeAgeMinutes: number | null;
+      oldestPendingOutcomeActionId: string | null;
+      oldestPendingOutcomeActionTitle: string | null;
+      oldestPendingOutcomeAgeMinutes: number | null;
       stuckSignals: {
-        noDecision: boolean
-        noEntityAfterAccept: boolean
-        pendingFeedback: boolean
-        noOutcomeAfterCreate: boolean
-      }
-      primaryStuckSignal: 'pending_feedback' | 'no_entity_after_accept' | 'no_decision' | 'none'
-      stuckScore: number
-      urgency: 'low' | 'medium' | 'high'
-      urgencyReason: string
-      recommendedNudge: 'accept_or_reject' | 'create_entity' | 'collect_feedback' | 'none'
-      recommendedNudgeReason: string
-    }>
+        noDecision: boolean;
+        noEntityAfterAccept: boolean;
+        pendingFeedback: boolean;
+        noOutcomeAfterCreate: boolean;
+      };
+      primaryStuckSignal: "pending_feedback" | "no_entity_after_accept" | "no_decision" | "none";
+      stuckScore: number;
+      urgency: "low" | "medium" | "high";
+      urgencyReason: string;
+      recommendedNudge: "accept_or_reject" | "create_entity" | "collect_feedback" | "none";
+      recommendedNudgeReason: string;
+    }>;
     learningSignals?: {
-      loopHealth: number
-      recentFeedbackCount: number
-      recentWorkedCount: number
-      recentPartialCount: number
-      recentFailedCount: number
-      topFailureReasons: Array<{ text: string; count: number }>
+      loopHealth: number;
+      recentFeedbackCount: number;
+      recentWorkedCount: number;
+      recentPartialCount: number;
+      recentFailedCount: number;
+      topFailureReasons: Array<{ text: string; count: number }>;
       failureBuckets: {
-        time: number
-        energy: number
-        context: number
-        complexity: number
-        unknown: number
-      }
-      dominantFailureBucket: 'time' | 'energy' | 'context' | 'complexity' | 'unknown'
-      repeatedActions: Array<{ actionId: string; actionTitle: string; attempt: number }>
+        time: number;
+        energy: number;
+        context: number;
+        complexity: number;
+        unknown: number;
+      };
+      dominantFailureBucket: "time" | "energy" | "context" | "complexity" | "unknown";
+      repeatedActions: Array<{ actionId: string; actionTitle: string; attempt: number }>;
       unstableActions: Array<{
-        actionId: string
-        actionTitle: string
-        attempts: number
-        failures: number
-        partials: number
-        worked: number
-        lastResult: 'worked' | 'partially' | 'not_worked' | 'unknown'
-        lastUpdatedAt: string | null
-      }>
-    }
+        actionId: string;
+        actionTitle: string;
+        attempts: number;
+        failures: number;
+        partials: number;
+        worked: number;
+        lastResult: "worked" | "partially" | "not_worked" | "unknown";
+        lastUpdatedAt: string | null;
+      }>;
+    };
     stuckOverview?: {
-      totalFunnels: number
-      high: number
-      medium: number
-      low: number
-      blockedFunnels: number
-      maxStuckScore: number
-    }
-  }
+      totalFunnels: number;
+      high: number;
+      medium: number;
+      low: number;
+      blockedFunnels: number;
+      maxStuckScore: number;
+    };
+  };
 }
 
 interface LeakDraft {
-  leakType: string
-  leakMessage: string
-  severity: 'info' | 'warning' | 'critical'
+  leakType: string;
+  leakMessage: string;
+  severity: "info" | "warning" | "critical";
 }
 
-type LeakStatusFilter = 'all' | 'new' | 'in_progress' | 'resolved' | 'archived'
-type LeakSourceFilter = 'all' | 'manual' | 'signal' | 'imported' | 'ai_suggested'
-type LeakSortOption = 'updated_desc' | 'created_desc' | 'severity_desc'
-type LeakFocusFilter = 'all' | 'focus'
-type LeakGroupOption = 'none' | 'sphere' | 'source'
-type PatternFilter = 'all' | 'linked'
-type FeedbackHistoryFilter = 'all' | 'problem'
+type LeakStatusFilter = "all" | "new" | "in_progress" | "resolved" | "archived";
+type LeakSourceFilter = "all" | "manual" | "signal" | "imported" | "ai_suggested";
+type LeakSortOption = "updated_desc" | "created_desc" | "severity_desc";
+type LeakFocusFilter = "all" | "focus";
+type LeakGroupOption = "none" | "sphere" | "source";
+type PatternFilter = "all" | "linked";
+type FeedbackHistoryFilter = "all" | "problem";
 type FeedbackLogItem = {
-  actionId: string | null
-  actionTitle: string
-  actionKind: string
-  mode: string | null
-  result: LeakPlanFeedback['result']
-  comment: string | null
-  policyCorrelationId?: string | null
-  feedbackSource?: 'manual' | 'policy'
-  attempt?: number
-  updatedAt: string
-}
+  actionId: string | null;
+  actionTitle: string;
+  actionKind: string;
+  mode: string | null;
+  result: LeakPlanFeedback["result"];
+  comment: string | null;
+  policyCorrelationId?: string | null;
+  feedbackSource?: "manual" | "policy";
+  attempt?: number;
+  updatedAt: string;
+};
 
 const SEVERITY_OPTIONS: Array<{
-  id: 'info' | 'warning' | 'critical'
-  label: string
-  description: string
+  id: "info" | "warning" | "critical";
+  label: string;
+  description: string;
 }> = [
-  { id: 'info', label: 'Сигнал', description: 'Наблюдение, которое стоит проверить' },
-  { id: 'warning', label: 'Проблема', description: 'Повторяется и уже мешает' },
-  { id: 'critical', label: 'Срочно', description: 'Сильно влияет и требует реакции' },
-]
+  { id: "info", label: "Сигнал", description: "Наблюдение, которое стоит проверить" },
+  { id: "warning", label: "Проблема", description: "Повторяется и уже мешает" },
+  { id: "critical", label: "Срочно", description: "Сильно влияет и требует реакции" },
+];
 
 const STATUS_OPTIONS: Array<{ id: LeakStatusFilter; label: string }> = [
-  { id: 'all', label: 'Все' },
-  { id: 'new', label: 'Новые' },
-  { id: 'in_progress', label: 'В работе' },
-  { id: 'resolved', label: 'Решённые' },
-  { id: 'archived', label: 'Архив' },
-]
+  { id: "all", label: "Все" },
+  { id: "new", label: "Новые" },
+  { id: "in_progress", label: "В работе" },
+  { id: "resolved", label: "Решённые" },
+  { id: "archived", label: "Архив" },
+];
 
 const SOURCE_OPTIONS: Array<{ id: LeakSourceFilter; label: string }> = [
-  { id: 'all', label: 'Все источники' },
-  { id: 'manual', label: 'Ручные' },
-  { id: 'signal', label: 'Сигналы' },
-  { id: 'ai_suggested', label: 'AI' },
-  { id: 'imported', label: 'Импорт' },
-]
+  { id: "all", label: "Все источники" },
+  { id: "manual", label: "Ручные" },
+  { id: "signal", label: "Сигналы" },
+  { id: "ai_suggested", label: "AI" },
+  { id: "imported", label: "Импорт" },
+];
 
 const SORT_OPTIONS: Array<{ id: LeakSortOption; label: string }> = [
-  { id: 'updated_desc', label: 'Сначала обновлённые' },
-  { id: 'created_desc', label: 'Сначала новые' },
-  { id: 'severity_desc', label: 'Сначала критичные' },
-]
+  { id: "updated_desc", label: "Сначала обновлённые" },
+  { id: "created_desc", label: "Сначала новые" },
+  { id: "severity_desc", label: "Сначала критичные" },
+];
 
 const GROUP_OPTIONS: Array<{ id: LeakGroupOption; label: string }> = [
-  { id: 'none', label: 'Без групп' },
-  { id: 'sphere', label: 'По сфере' },
-  { id: 'source', label: 'По источнику' },
-]
+  { id: "none", label: "Без групп" },
+  { id: "sphere", label: "По сфере" },
+  { id: "source", label: "По источнику" },
+];
 
-const STATUS_LABELS: Record<Exclude<LeakStatusFilter, 'all'>, string> = {
-  new: 'Новый',
-  in_progress: 'В работе',
-  resolved: 'Решён',
-  archived: 'Архив',
-}
+const STATUS_LABELS: Record<Exclude<LeakStatusFilter, "all">, string> = {
+  new: "Новый",
+  in_progress: "В работе",
+  resolved: "Решён",
+  archived: "Архив",
+};
 
-const STATUS_STYLES: Record<Exclude<LeakStatusFilter, 'all'>, string> = {
-  new: 'bg-white/10 text-white/80 border-white/10',
-  in_progress: 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20',
-  resolved: 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20',
-  archived: 'bg-white/5 text-white/45 border-white/10',
-}
+const STATUS_STYLES: Record<Exclude<LeakStatusFilter, "all">, string> = {
+  new: "bg-white/10 text-white/80 border-white/10",
+  in_progress: "bg-indigo-500/10 text-indigo-200 border-indigo-500/20",
+  resolved: "bg-emerald-500/10 text-emerald-200 border-emerald-500/20",
+  archived: "bg-white/5 text-white/45 border-white/10",
+};
 
-const SEVERITY_STYLES: Record<'info' | 'warning' | 'critical', string> = {
-  info: 'bg-sky-500/10 text-sky-300 border-sky-500/20',
-  warning: 'bg-amber-500/10 text-amber-300 border-amber-500/20',
-  critical: 'bg-rose-500/10 text-rose-300 border-rose-500/20',
-}
+const SEVERITY_STYLES: Record<"info" | "warning" | "critical", string> = {
+  info: "bg-sky-500/10 text-sky-300 border-sky-500/20",
+  warning: "bg-amber-500/10 text-amber-300 border-amber-500/20",
+  critical: "bg-rose-500/10 text-rose-300 border-rose-500/20",
+};
 
-const PLAN_MODE_LABELS: Record<LeakSolutionPlan['mode'], string> = {
-  minimum: 'Минимум',
-  base: 'База',
-  maximum: 'Максимум',
-}
+const PLAN_MODE_LABELS: Record<LeakSolutionPlan["mode"], string> = {
+  minimum: "Минимум",
+  base: "База",
+  maximum: "Максимум",
+};
 
-const PLAN_MODE_STYLES: Record<LeakSolutionPlan['mode'], string> = {
-  minimum: 'bg-sky-500/10 text-sky-300 border-sky-500/20',
-  base: 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20',
-  maximum: 'bg-fuchsia-500/10 text-fuchsia-200 border-fuchsia-500/20',
-}
+const PLAN_MODE_STYLES: Record<LeakSolutionPlan["mode"], string> = {
+  minimum: "bg-sky-500/10 text-sky-300 border-sky-500/20",
+  base: "bg-emerald-500/10 text-emerald-200 border-emerald-500/20",
+  maximum: "bg-fuchsia-500/10 text-fuchsia-200 border-fuchsia-500/20",
+};
 
-const PLAN_CONFIDENCE_STYLES: Record<LeakSolutionPlan['confidenceLabel'], string> = {
-  low: 'bg-rose-500/10 text-rose-200 border-rose-500/20',
-  medium: 'bg-amber-500/10 text-amber-200 border-amber-500/20',
-  high: 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20',
-}
+const PLAN_CONFIDENCE_STYLES: Record<LeakSolutionPlan["confidenceLabel"], string> = {
+  low: "bg-rose-500/10 text-rose-200 border-rose-500/20",
+  medium: "bg-amber-500/10 text-amber-200 border-amber-500/20",
+  high: "bg-emerald-500/10 text-emerald-200 border-emerald-500/20",
+};
 
-const PLAN_KIND_LABELS: Record<LeakPlanAction['kind'], string> = {
-  task: 'Задача',
-  ritual: 'Ритуал',
-  skill: 'Навык',
-  trait: 'Качество',
-  challenge: 'Челлендж',
-  content: 'Материал',
-}
+const PLAN_KIND_LABELS: Record<LeakPlanAction["kind"], string> = {
+  task: "Задача",
+  ritual: "Ритуал",
+  skill: "Навык",
+  trait: "Качество",
+  challenge: "Челлендж",
+  content: "Материал",
+};
 
 const SPHERE_OPTIONS = [
-  { id: 'work', label: 'Работа' },
-  { id: 'body', label: 'Тело' },
-  { id: 'relationships', label: 'Отношения' },
-  { id: 'mindset', label: 'Мышление' },
-  { id: 'finance', label: 'Финансы' },
-  { id: 'learning', label: 'Развитие' },
-  { id: 'poker', label: 'Покер' },
-] as const
+  { id: "work", label: "Работа" },
+  { id: "body", label: "Тело" },
+  { id: "relationships", label: "Отношения" },
+  { id: "mindset", label: "Мышление" },
+  { id: "finance", label: "Финансы" },
+  { id: "learning", label: "Развитие" },
+  { id: "poker", label: "Покер" },
+] as const;
 
 const LEAK_GUIDANCE_STYLES = {
-  indigo: 'border-indigo-500/20 bg-indigo-500/10',
-  emerald: 'border-emerald-500/20 bg-emerald-500/10',
-  amber: 'border-amber-500/20 bg-amber-500/10',
-} as const
+  indigo: "border-indigo-500/20 bg-indigo-500/10",
+  emerald: "border-emerald-500/20 bg-emerald-500/10",
+  amber: "border-amber-500/20 bg-amber-500/10",
+} as const;
 
-const SHOW_POLICY_INSPECTOR = false
-const SHOW_FUNNELS = false
-const SHOW_PRIORITY_PENDING_QUEUE = false
-const SHOW_PATTERN_ANALYTICS = false
+const SHOW_POLICY_INSPECTOR = false;
+const SHOW_FUNNELS = false;
+const SHOW_PRIORITY_PENDING_QUEUE = false;
+const SHOW_PATTERN_ANALYTICS = false;
 
 function getCurrentMonday(): string {
-  const today = new Date()
-  const day = today.getDay()
-  const diff = day === 0 ? -6 : 1 - day
-  const monday = new Date(today)
-  monday.setDate(today.getDate() + diff)
-  monday.setHours(0, 0, 0, 0)
-  return monday.toISOString().split('T')[0]
+  const today = new Date();
+  const day = today.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() + diff);
+  monday.setHours(0, 0, 0, 0);
+  return monday.toISOString().split("T")[0];
 }
 
 function formatDate(date: string) {
   try {
-    return new Date(date).toLocaleDateString('ru-RU', {
-      day: '2-digit',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    return new Date(date).toLocaleDateString("ru-RU", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   } catch {
-    return date
+    return date;
   }
 }
 
 function buildLeakMessage(leak: LeakEntity) {
-  return leak.description?.trim() || leak.title
+  return leak.description?.trim() || leak.title;
 }
 
 function normalizeLookupValue(value: string | null | undefined) {
-  return String(value || '').trim().toLowerCase()
+  return String(value || "")
+    .trim()
+    .toLowerCase();
 }
-
 
 function normalizeLeak(rawLeak: LeakEntity): LeakEntity {
   return {
     ...rawLeak,
     actions: Array.isArray(rawLeak.actions) ? rawLeak.actions : [],
     contextSnapshot:
-      rawLeak.contextSnapshot && typeof rawLeak.contextSnapshot === 'object'
+      rawLeak.contextSnapshot && typeof rawLeak.contextSnapshot === "object"
         ? rawLeak.contextSnapshot
         : null,
-  }
+  };
 }
 
 function normalizePlan(rawPlan: LeakSolutionPlan): LeakSolutionPlan {
@@ -500,117 +507,118 @@ function normalizePlan(rawPlan: LeakSolutionPlan): LeakSolutionPlan {
       ? rawPlan.actions.map((action) => ({
           ...action,
           payload:
-            action.payload && typeof action.payload === 'object' && !Array.isArray(action.payload)
+            action.payload && typeof action.payload === "object" && !Array.isArray(action.payload)
               ? action.payload
               : null,
           feedbacks: Array.isArray(action.feedbacks) ? action.feedbacks : [],
         }))
       : [],
-  }
+  };
 }
 
 function normalizePlans(rawPlans: LeakSolutionPlan[]) {
-  return Array.isArray(rawPlans) ? rawPlans.map(normalizePlan) : []
+  return Array.isArray(rawPlans) ? rawPlans.map(normalizePlan) : [];
 }
 
-function getActionScreen(entityType: LeakActionLink['entityType']): Screen {
+function getActionScreen(entityType: LeakActionLink["entityType"]): Screen {
   switch (entityType) {
-    case 'task':
-      return 'tasks'
-    case 'ritual':
-      return 'rituals'
-    case 'content':
-      return 'development'
-    case 'skill':
-      return 'skills'
-    case 'trait':
-      return 'traits'
-    case 'challenge':
+    case "task":
+      return "tasks";
+    case "ritual":
+      return "rituals";
+    case "content":
+      return "development";
+    case "skill":
+      return "skills";
+    case "trait":
+      return "traits";
+    case "challenge":
     default:
-      return 'challenges'
+      return "challenges";
   }
 }
 
-function getActionLabel(entityType: LeakActionLink['entityType']) {
+function getActionLabel(entityType: LeakActionLink["entityType"]) {
   switch (entityType) {
-    case 'task':
-      return 'Задача'
-    case 'ritual':
-      return 'Ритуал'
-    case 'content':
-      return 'Материал'
-    case 'skill':
-      return 'Навык'
-    case 'trait':
-      return 'Качество'
-    case 'challenge':
+    case "task":
+      return "Задача";
+    case "ritual":
+      return "Ритуал";
+    case "content":
+      return "Материал";
+    case "skill":
+      return "Навык";
+    case "trait":
+      return "Качество";
+    case "challenge":
     default:
-      return 'Челлендж'
+      return "Челлендж";
   }
 }
 
-function getSourceLabel(source: LeakEntity['source']) {
+function getSourceLabel(source: LeakEntity["source"]) {
   switch (source) {
-    case 'manual':
-      return 'Ручной ввод'
-    case 'signal':
-      return 'Автосигнал'
-    case 'imported':
-      return 'Импорт'
-    case 'ai_suggested':
+    case "manual":
+      return "Ручной ввод";
+    case "signal":
+      return "Автосигнал";
+    case "imported":
+      return "Импорт";
+    case "ai_suggested":
     default:
-      return 'AI'
+      return "AI";
   }
 }
 
-function getFeedbackResultLabel(result: LeakPlanFeedback['result']) {
-  if (result === 'worked') return 'Сработало'
-  if (result === 'partially') return 'Частично'
-  return 'Не помогло'
+function getFeedbackResultLabel(result: LeakPlanFeedback["result"]) {
+  if (result === "worked") return "Сработало";
+  if (result === "partially") return "Частично";
+  return "Не помогло";
 }
 
-function getConfidenceLabelText(label: LeakSolutionPlan['confidenceLabel']) {
-  if (label === 'high') return 'Высокий'
-  if (label === 'medium') return 'Средний'
-  return 'Низкий'
+function getConfidenceLabelText(label: LeakSolutionPlan["confidenceLabel"]) {
+  if (label === "high") return "Высокий";
+  if (label === "medium") return "Средний";
+  return "Низкий";
 }
 
 function getSphereLabel(sphere: string | null | undefined) {
-  if (!sphere) return 'Без сферы'
+  if (!sphere) return "Без сферы";
 
-  const option = SPHERE_OPTIONS.find((item) => item.id === sphere)
-  return option?.label || sphere
+  const option = SPHERE_OPTIONS.find((item) => item.id === sphere);
+  return option?.label || sphere;
 }
 
 function isConvertedPlanAction(action: LeakPlanAction) {
-  return Boolean(action.payload?.convertedEntityId && action.payload?.convertedEntityType)
+  return Boolean(action.payload?.convertedEntityId && action.payload?.convertedEntityType);
 }
 
 function getLatestPlanFeedback(action: LeakPlanAction) {
-  return action.feedbacks?.[0] || null
+  return action.feedbacks?.[0] || null;
 }
 
 function getSelectedPlan(plans?: LeakSolutionPlan[]) {
-  return plans?.find((plan) => plan.isSelected) || plans?.[0] || null
+  return plans?.find((plan) => plan.isSelected) || plans?.[0] || null;
 }
 
-type LeakGuidanceTone = keyof typeof LEAK_GUIDANCE_STYLES
-type LeakGuidanceAction = 'generate' | 'retry' | 'resolve' | 'reopen' | null
+type LeakGuidanceTone = keyof typeof LEAK_GUIDANCE_STYLES;
+type LeakGuidanceAction = "generate" | "retry" | "resolve" | "reopen" | null;
 
 function getPlanActionAnchorId(leakId: string, actionId: string) {
-  return `leak-plan-action-${leakId}-${actionId}`
+  return `leak-plan-action-${leakId}-${actionId}`;
 }
 
 function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
-  const selectedPlan = getSelectedPlan(plans)
+  const selectedPlan = getSelectedPlan(plans);
 
   if (!selectedPlan) {
     return {
-      tone: 'indigo' as LeakGuidanceTone,
-      title: 'Собери три режима решения',
-      description: 'Minimum, base и maximum помогут быстро выбрать реалистичный путь, а не зависнуть на одном совете.',
-      action: 'generate' as LeakGuidanceAction,
-      actionLabel: 'Сделать 3 плана',
+      tone: "indigo" as LeakGuidanceTone,
+      title: "Собери три режима решения",
+      description:
+        "Minimum, base и maximum помогут быстро выбрать реалистичный путь, а не зависнуть на одном совете.",
+      action: "generate" as LeakGuidanceAction,
+      actionLabel: "Сделать 3 плана",
       selectedPlan: null,
       totalActions: 0,
       createdActions: 0,
@@ -619,40 +627,44 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       failedActions: 0,
       pendingActions: 0,
       feedbackActions: 0,
-      bottleneckText: 'Нет выбранного режима: сначала собери минимум/base/maximum.',
+      bottleneckText: "Нет выбранного режима: сначала собери минимум/base/maximum.",
       bottleneckActionId: null,
-    }
+    };
   }
 
-  const totalActions = selectedPlan.actions.length
-  const createdActions = selectedPlan.actions.filter(isConvertedPlanAction).length
+  const totalActions = selectedPlan.actions.length;
+  const createdActions = selectedPlan.actions.filter(isConvertedPlanAction).length;
   const workedActions = selectedPlan.actions.filter(
-    (action) => getLatestPlanFeedback(action)?.result === 'worked',
-  ).length
+    (action) => getLatestPlanFeedback(action)?.result === "worked"
+  ).length;
   const partialActions = selectedPlan.actions.filter(
-    (action) => getLatestPlanFeedback(action)?.result === 'partially',
-  ).length
+    (action) => getLatestPlanFeedback(action)?.result === "partially"
+  ).length;
   const failedActions = selectedPlan.actions.filter(
-    (action) => getLatestPlanFeedback(action)?.result === 'not_worked',
-  ).length
-  const feedbackActions = workedActions + partialActions + failedActions
-  const pendingActions = Math.max(totalActions - createdActions, 0)
-  const firstPendingAction = selectedPlan.actions.find((action) => !isConvertedPlanAction(action)) || null
+    (action) => getLatestPlanFeedback(action)?.result === "not_worked"
+  ).length;
+  const feedbackActions = workedActions + partialActions + failedActions;
+  const pendingActions = Math.max(totalActions - createdActions, 0);
+  const firstPendingAction =
+    selectedPlan.actions.find((action) => !isConvertedPlanAction(action)) || null;
   const firstNoFeedbackAction =
-    selectedPlan.actions.find((action) => isConvertedPlanAction(action) && !getLatestPlanFeedback(action)) || null
+    selectedPlan.actions.find(
+      (action) => isConvertedPlanAction(action) && !getLatestPlanFeedback(action)
+    ) || null;
   const firstFailedAction =
-    selectedPlan.actions.find((action) => getLatestPlanFeedback(action)?.result === 'not_worked') || null
+    selectedPlan.actions.find((action) => getLatestPlanFeedback(action)?.result === "not_worked") ||
+    null;
 
-  if (leak.status === 'resolved' || leak.status === 'archived') {
+  if (leak.status === "resolved" || leak.status === "archived") {
     return {
-      tone: 'indigo' as LeakGuidanceTone,
-      title: 'Leak сейчас закрыт',
+      tone: "indigo" as LeakGuidanceTone,
+      title: "Leak сейчас закрыт",
       description:
         failedActions > 0 || partialActions > 0 || pendingActions > 0
-          ? 'Если проблема вернулась, верни leak в работу и продолжай уже с обновлённым режимом.'
-          : 'Если симптом вернётся, его можно быстро вернуть в работу без создания нового leak.',
-      action: 'reopen' as LeakGuidanceAction,
-      actionLabel: 'Вернуть в работу',
+          ? "Если проблема вернулась, верни leak в работу и продолжай уже с обновлённым режимом."
+          : "Если симптом вернётся, его можно быстро вернуть в работу без создания нового leak.",
+      action: "reopen" as LeakGuidanceAction,
+      actionLabel: "Вернуть в работу",
       selectedPlan,
       totalActions,
       createdActions,
@@ -665,18 +677,20 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
         firstFailedAction?.title ||
         firstNoFeedbackAction?.title ||
         firstPendingAction?.title ||
-        'Leak закрыт, но можно вернуть в работу при повторении симптома.',
-      bottleneckActionId: firstFailedAction?.id || firstNoFeedbackAction?.id || firstPendingAction?.id || null,
-    }
+        "Leak закрыт, но можно вернуть в работу при повторении симптома.",
+      bottleneckActionId:
+        firstFailedAction?.id || firstNoFeedbackAction?.id || firstPendingAction?.id || null,
+    };
   }
 
   if (failedActions > 0) {
     return {
-      tone: 'amber' as LeakGuidanceTone,
-      title: 'Часть решений не сработала',
-      description: 'Пересобери план или выбери другой режим, чтобы не застрять на нерабочем сценарии.',
-      action: 'retry' as LeakGuidanceAction,
-      actionLabel: 'Попробовать заново',
+      tone: "amber" as LeakGuidanceTone,
+      title: "Часть решений не сработала",
+      description:
+        "Пересобери план или выбери другой режим, чтобы не застрять на нерабочем сценарии.",
+      action: "retry" as LeakGuidanceAction,
+      actionLabel: "Попробовать заново",
       selectedPlan,
       totalActions,
       createdActions,
@@ -687,18 +701,18 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       feedbackActions,
       bottleneckText: firstFailedAction
         ? `Сбойный шаг: ${firstFailedAction.title}`
-        : 'Есть неуспешные шаги, лучше пересобрать подход.',
+        : "Есть неуспешные шаги, лучше пересобрать подход.",
       bottleneckActionId: firstFailedAction?.id || null,
-    }
+    };
   }
 
   if (pendingActions > 0) {
     return {
-      tone: 'indigo' as LeakGuidanceTone,
+      tone: "indigo" as LeakGuidanceTone,
       title: `Выбран режим «${PLAN_MODE_LABELS[selectedPlan.mode]}»`,
       description: `Создано ${createdActions} из ${totalActions} действий. Остальные можно применить по одному или целиком.`,
       action: null,
-      actionLabel: '',
+      actionLabel: "",
       selectedPlan,
       totalActions,
       createdActions,
@@ -709,18 +723,19 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       feedbackActions,
       bottleneckText: firstPendingAction
         ? `Не создано: ${firstPendingAction.title}`
-        : 'Есть неприменённые шаги в выбранном режиме.',
+        : "Есть неприменённые шаги в выбранном режиме.",
       bottleneckActionId: firstPendingAction?.id || null,
-    }
+    };
   }
 
   if (createdActions > 0 && feedbackActions < createdActions) {
     return {
-      tone: 'amber' as LeakGuidanceTone,
-      title: 'План уже применён',
-      description: 'Теперь важно отметить, что реально помогло, чтобы leak-модуль учился на живом опыте.',
+      tone: "amber" as LeakGuidanceTone,
+      title: "План уже применён",
+      description:
+        "Теперь важно отметить, что реально помогло, чтобы leak-модуль учился на живом опыте.",
       action: null,
-      actionLabel: '',
+      actionLabel: "",
       selectedPlan,
       totalActions,
       createdActions,
@@ -731,18 +746,18 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       feedbackActions,
       bottleneckText: firstNoFeedbackAction
         ? `Нет feedback: ${firstNoFeedbackAction.title}`
-        : 'Не по всем созданным шагам есть feedback.',
+        : "Не по всем созданным шагам есть feedback.",
       bottleneckActionId: firstNoFeedbackAction?.id || null,
-    }
+    };
   }
 
-  if (workedActions > 0 && leak.status !== 'resolved') {
+  if (workedActions > 0 && leak.status !== "resolved") {
     return {
-      tone: 'emerald' as LeakGuidanceTone,
-      title: 'Есть рабочие решения',
+      tone: "emerald" as LeakGuidanceTone,
+      title: "Есть рабочие решения",
       description: `Сработало ${workedActions} действий. Если проблема больше не возвращается, можно закрывать leak.`,
-      action: 'resolve' as LeakGuidanceAction,
-      actionLabel: 'Отметить решённым',
+      action: "resolve" as LeakGuidanceAction,
+      actionLabel: "Отметить решённым",
       selectedPlan,
       totalActions,
       createdActions,
@@ -751,18 +766,19 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       failedActions,
       pendingActions,
       feedbackActions,
-      bottleneckText: 'Есть рабочие шаги: зафиксируй результат и закрой leak, если симптом ушёл.',
+      bottleneckText: "Есть рабочие шаги: зафиксируй результат и закрой leak, если симптом ушёл.",
       bottleneckActionId: null,
-    }
+    };
   }
 
   if (partialActions > 0) {
     return {
-      tone: 'amber' as LeakGuidanceTone,
-      title: 'Можно усилить текущий подход',
-      description: 'Что-то уже помогает, но не полностью. Пересобери режим или попробуй другой сценарий.',
-      action: 'retry' as LeakGuidanceAction,
-      actionLabel: 'Усилить план',
+      tone: "amber" as LeakGuidanceTone,
+      title: "Можно усилить текущий подход",
+      description:
+        "Что-то уже помогает, но не полностью. Пересобери режим или попробуй другой сценарий.",
+      action: "retry" as LeakGuidanceAction,
+      actionLabel: "Усилить план",
       selectedPlan,
       totalActions,
       createdActions,
@@ -771,17 +787,18 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
       failedActions,
       pendingActions,
       feedbackActions,
-      bottleneckText: 'Есть частично успешные шаги: стоит усилить режим или сменить сценарий.',
+      bottleneckText: "Есть частично успешные шаги: стоит усилить режим или сменить сценарий.",
       bottleneckActionId: null,
-    }
+    };
   }
 
   return {
-    tone: 'indigo' as LeakGuidanceTone,
-    title: 'План готов к следующему шагу',
-    description: 'Можно открыть созданные сущности, собрать новый режим или уточнить leak, если контекст изменился.',
-    action: 'retry' as LeakGuidanceAction,
-    actionLabel: 'Пересобрать план',
+    tone: "indigo" as LeakGuidanceTone,
+    title: "План готов к следующему шагу",
+    description:
+      "Можно открыть созданные сущности, собрать новый режим или уточнить leak, если контекст изменился.",
+    action: "retry" as LeakGuidanceAction,
+    actionLabel: "Пересобрать план",
     selectedPlan,
     totalActions,
     createdActions,
@@ -790,424 +807,452 @@ function buildLeakGuidance(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
     failedActions,
     pendingActions,
     feedbackActions,
-    bottleneckText: 'Критичных блокеров нет: можно тестировать следующий шаг или уточнять контекст.',
+    bottleneckText:
+      "Критичных блокеров нет: можно тестировать следующий шаг или уточнять контекст.",
     bottleneckActionId: null,
-  }
+  };
 }
 
 function getMinutesSince(date: string | null | undefined) {
-  if (!date) return null
-  const ts = new Date(date).getTime()
-  if (!Number.isFinite(ts)) return null
-  return Math.max(0, Math.round((Date.now() - ts) / 60000))
+  if (!date) return null;
+  const ts = new Date(date).getTime();
+  if (!Number.isFinite(ts)) return null;
+  return Math.max(0, Math.round((Date.now() - ts) / 60000));
 }
 
-function isLeakEntityType(value: string): value is LeakActionLink['entityType'] {
+function isLeakEntityType(value: string): value is LeakActionLink["entityType"] {
   return (
-    value === 'task' ||
-    value === 'ritual' ||
-    value === 'challenge' ||
-    value === 'content' ||
-    value === 'skill' ||
-    value === 'trait'
-  )
+    value === "task" ||
+    value === "ritual" ||
+    value === "challenge" ||
+    value === "content" ||
+    value === "skill" ||
+    value === "trait"
+  );
 }
 
 function getContextSnapshotItems(contextSnapshot?: Record<string, unknown> | null) {
-  if (!contextSnapshot) return []
+  if (!contextSnapshot) return [];
 
   const LABELS: Record<string, string> = {
-    days: 'Дни',
-    analysisCount: 'AI-анализов',
-    whatWorked: 'Что помогало',
-    contextUpdatedAt: 'Контекст обновлён',
-    moodAvg: 'Среднее настроение',
-    energyAvg: 'Средняя энергия',
-    stressAvg: 'Средний стресс',
-    sleepHoursAvg: 'Сон (часы)',
-    sleepQualityAvg: 'Качество сна',
-    mealsLogged: 'Записей еды',
-    mealsWithBadQuality: 'Плохих приёмов еды',
-    caloriesAvg: 'Средние калории',
-    workoutsCompleted: 'Тренировок',
-    ritualsCompleted: 'Выполнено ритуалов',
-    waterAvg: 'Средняя вода (мл)',
-    waterTargetAvg: 'Средняя цель воды (мл)',
-    waterGoalHitRate: 'Попадание в цель воды (%)',
-    expenseSum7d: 'Расход за 7 дней',
-    incomeSum7d: 'Доход за 7 дней',
-    netCashflow7d: 'Net cashflow за 7 дней',
-    expenseDays7d: 'Дней с расходами (7д)',
-    openTasks: 'Открытых задач',
-    activeSupplements: 'Активных добавок',
-    supplementIntakeChecked7d: 'Приёмов добавок (7д)',
-    supplementAdherenceRate: 'Дисциплина добавок (%)',
-    emotionLogsCount7d: 'Эмоций отмечено (7д)',
-    emotionIntensityAvg: 'Средняя интенсивность эмоций',
-    negativeEmotionShare: 'Негативные эмоции (%)',
-    morningCheckins: 'Утренних check-in',
-    eveningCheckins: 'Вечерних check-in',
-    dayRatingAvg: 'Средняя оценка дня',
-    plannedEnergyAvg: 'Планируемая энергия',
-    doneTasks: 'Выполнено задач',
-    lookbackDays: 'Глубина контекста (дней)',
-    planActionsTotal: 'Шагов в плане',
-    linkedEntitiesTotal: 'Создано сущностей',
-    feedbackGivenTotal: 'Feedback получено',
-    feedbackCoverageRate: 'Покрытие feedback (%)',
-    feedbackWorkedCount: 'Сработало (count)',
-    feedbackPartiallyCount: 'Частично (count)',
-    feedbackFailedCount: 'Не помогло (count)',
-    latestFeedbackResult: 'Последний feedback',
-    latestFeedbackAt: 'Последний feedback (дата)',
-    latestFeedbackActionTitle: 'Последний feedback (шаг)',
-    recentFeedbackWindowSize: 'Свежих feedback',
-    recentFeedbackNegativeShare: 'Негативный feedback (%)',
-    recentFeedbackWorkedShare: 'Рабочий feedback (%)',
-    retryResolvedAt: 'Retry закрыт',
-    selectedPlanMode: 'Выбранный режим',
-    lastStableMode: 'Последний стабильный режим',
-    lastStableAt: 'Режим стабилизировался',
-  }
+    days: "Дни",
+    analysisCount: "AI-анализов",
+    whatWorked: "Что помогало",
+    contextUpdatedAt: "Контекст обновлён",
+    moodAvg: "Среднее настроение",
+    energyAvg: "Средняя энергия",
+    stressAvg: "Средний стресс",
+    sleepHoursAvg: "Сон (часы)",
+    sleepQualityAvg: "Качество сна",
+    mealsLogged: "Записей еды",
+    mealsWithBadQuality: "Плохих приёмов еды",
+    caloriesAvg: "Средние калории",
+    workoutsCompleted: "Тренировок",
+    ritualsCompleted: "Выполнено ритуалов",
+    waterAvg: "Средняя вода (мл)",
+    waterTargetAvg: "Средняя цель воды (мл)",
+    waterGoalHitRate: "Попадание в цель воды (%)",
+    expenseSum7d: "Расход за 7 дней",
+    incomeSum7d: "Доход за 7 дней",
+    netCashflow7d: "Net cashflow за 7 дней",
+    expenseDays7d: "Дней с расходами (7д)",
+    openTasks: "Открытых задач",
+    activeSupplements: "Активных добавок",
+    supplementIntakeChecked7d: "Приёмов добавок (7д)",
+    supplementAdherenceRate: "Дисциплина добавок (%)",
+    emotionLogsCount7d: "Эмоций отмечено (7д)",
+    emotionIntensityAvg: "Средняя интенсивность эмоций",
+    negativeEmotionShare: "Негативные эмоции (%)",
+    morningCheckins: "Утренних check-in",
+    eveningCheckins: "Вечерних check-in",
+    dayRatingAvg: "Средняя оценка дня",
+    plannedEnergyAvg: "Планируемая энергия",
+    doneTasks: "Выполнено задач",
+    lookbackDays: "Глубина контекста (дней)",
+    planActionsTotal: "Шагов в плане",
+    linkedEntitiesTotal: "Создано сущностей",
+    feedbackGivenTotal: "Feedback получено",
+    feedbackCoverageRate: "Покрытие feedback (%)",
+    feedbackWorkedCount: "Сработало (count)",
+    feedbackPartiallyCount: "Частично (count)",
+    feedbackFailedCount: "Не помогло (count)",
+    latestFeedbackResult: "Последний feedback",
+    latestFeedbackAt: "Последний feedback (дата)",
+    latestFeedbackActionTitle: "Последний feedback (шаг)",
+    recentFeedbackWindowSize: "Свежих feedback",
+    recentFeedbackNegativeShare: "Негативный feedback (%)",
+    recentFeedbackWorkedShare: "Рабочий feedback (%)",
+    retryResolvedAt: "Retry закрыт",
+    selectedPlanMode: "Выбранный режим",
+    lastStableMode: "Последний стабильный режим",
+    lastStableAt: "Режим стабилизировался",
+  };
 
-  const lines: string[] = []
+  const lines: string[] = [];
 
   const pushValue = (key: string, value: unknown) => {
-    if (value === null || value === undefined || value === '') return
-    const label = LABELS[key] || key
+    if (value === null || value === undefined || value === "") return;
+    const label = LABELS[key] || key;
 
     if (Array.isArray(value)) {
       const normalized = value
-        .map((item) => (typeof item === 'string' || typeof item === 'number' ? String(item) : null))
-        .filter((item): item is string => Boolean(item))
+        .map((item) => (typeof item === "string" || typeof item === "number" ? String(item) : null))
+        .filter((item): item is string => Boolean(item));
       if (normalized.length > 0) {
-        lines.push(`${label}: ${normalized.join(', ')}`)
+        lines.push(`${label}: ${normalized.join(", ")}`);
       }
-      return
+      return;
     }
 
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      lines.push(`${label}: ${String(value)}`)
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      lines.push(`${label}: ${String(value)}`);
     }
-  }
+  };
 
   Object.entries(contextSnapshot).forEach(([key, value]) => {
-    if (key === 'live' && value && typeof value === 'object' && !Array.isArray(value)) {
-      const live = value as Record<string, unknown>
-      if (typeof live.generatedAt === 'string') {
-        lines.push(`Контекст собран: ${formatDate(live.generatedAt)}`)
+    if (key === "live" && value && typeof value === "object" && !Array.isArray(value)) {
+      const live = value as Record<string, unknown>;
+      if (typeof live.generatedAt === "string") {
+        lines.push(`Контекст собран: ${formatDate(live.generatedAt)}`);
       }
-      if (live.metrics && typeof live.metrics === 'object' && !Array.isArray(live.metrics)) {
-        const metrics = live.metrics as Record<string, unknown>
+      if (live.metrics && typeof live.metrics === "object" && !Array.isArray(live.metrics)) {
+        const metrics = live.metrics as Record<string, unknown>;
         Object.entries(metrics).forEach(([metricKey, metricValue]) => {
           if (
-            metricKey === 'latestFeedbackResult' ||
-            metricKey === 'latestFeedbackAt' ||
-            metricKey === 'latestFeedbackActionTitle'
+            metricKey === "latestFeedbackResult" ||
+            metricKey === "latestFeedbackAt" ||
+            metricKey === "latestFeedbackActionTitle"
           ) {
-            return
+            return;
           }
-          pushValue(metricKey, metricValue)
-        })
+          pushValue(metricKey, metricValue);
+        });
 
         const latestFeedbackResult =
-          typeof metrics.latestFeedbackResult === 'string'
-            ? metrics.latestFeedbackResult
-            : null
+          typeof metrics.latestFeedbackResult === "string" ? metrics.latestFeedbackResult : null;
         const latestFeedbackAt =
-          typeof metrics.latestFeedbackAt === 'string'
-            ? metrics.latestFeedbackAt
-            : null
+          typeof metrics.latestFeedbackAt === "string" ? metrics.latestFeedbackAt : null;
         const latestFeedbackActionTitle =
-          typeof metrics.latestFeedbackActionTitle === 'string'
+          typeof metrics.latestFeedbackActionTitle === "string"
             ? metrics.latestFeedbackActionTitle
-            : null
+            : null;
         if (latestFeedbackResult || latestFeedbackActionTitle || latestFeedbackAt) {
           const resultLabel =
-            latestFeedbackResult === 'worked'
-              ? 'Сработало'
-              : latestFeedbackResult === 'partially'
-                ? 'Частично'
-                : latestFeedbackResult === 'not_worked'
-                  ? 'Не помогло'
-                  : latestFeedbackResult
+            latestFeedbackResult === "worked"
+              ? "Сработало"
+              : latestFeedbackResult === "partially"
+                ? "Частично"
+                : latestFeedbackResult === "not_worked"
+                  ? "Не помогло"
+                  : latestFeedbackResult;
           const parts = [
             latestFeedbackActionTitle ? `шаг: ${latestFeedbackActionTitle}` : null,
             resultLabel ? `результат: ${resultLabel}` : null,
             latestFeedbackAt ? `дата: ${formatDate(latestFeedbackAt)}` : null,
-          ].filter(Boolean)
+          ].filter(Boolean);
           if (parts.length > 0) {
-            lines.push(`Последний feedback: ${parts.join(' • ')}`)
+            lines.push(`Последний feedback: ${parts.join(" • ")}`);
           }
         }
       }
-      if (typeof live.lookbackDays === 'number') {
-        pushValue('lookbackDays', live.lookbackDays)
+      if (typeof live.lookbackDays === "number") {
+        pushValue("lookbackDays", live.lookbackDays);
       }
-      return
+      return;
     }
 
-    if (key === 'history') {
-      return
+    if (key === "history") {
+      return;
     }
 
-    if (key === 'retry' && value && typeof value === 'object' && !Array.isArray(value)) {
-      const retry = value as Record<string, unknown>
-      if (typeof retry.actionTitle === 'string') {
-        lines.push(`Retry-фокус: ${retry.actionTitle}`)
+    if (key === "retry" && value && typeof value === "object" && !Array.isArray(value)) {
+      const retry = value as Record<string, unknown>;
+      if (typeof retry.actionTitle === "string") {
+        lines.push(`Retry-фокус: ${retry.actionTitle}`);
       }
-      if (typeof retry.failureReason === 'string' && retry.failureReason.trim()) {
-        lines.push(`Почему не сработало: ${retry.failureReason}`)
+      if (typeof retry.failureReason === "string" && retry.failureReason.trim()) {
+        lines.push(`Почему не сработало: ${retry.failureReason}`);
       }
-      if (typeof retry.requestedAt === 'string') {
-        lines.push(`Retry запрошен: ${formatDate(retry.requestedAt)}`)
+      if (typeof retry.requestedAt === "string") {
+        lines.push(`Retry запрошен: ${formatDate(retry.requestedAt)}`);
       }
-      return
+      return;
     }
-    if (key === 'retryResolvedAt') {
-      if (typeof value === 'string') {
-        lines.push(`Retry закрыт: ${formatDate(value)}`)
+    if (key === "retryResolvedAt") {
+      if (typeof value === "string") {
+        lines.push(`Retry закрыт: ${formatDate(value)}`);
       }
-      return
+      return;
     }
 
-    pushValue(key, value)
-  })
+    pushValue(key, value);
+  });
 
-  return lines
+  return lines;
 }
 
 function getRetryFocus(contextSnapshot?: Record<string, unknown> | null) {
-  if (!contextSnapshot) return null
+  if (!contextSnapshot) return null;
   const retry =
-    contextSnapshot.retry && typeof contextSnapshot.retry === 'object' && !Array.isArray(contextSnapshot.retry)
+    contextSnapshot.retry &&
+    typeof contextSnapshot.retry === "object" &&
+    !Array.isArray(contextSnapshot.retry)
       ? (contextSnapshot.retry as Record<string, unknown>)
-      : null
-  if (!retry) return null
+      : null;
+  if (!retry) return null;
 
   return {
-    actionTitle: typeof retry.actionTitle === 'string' ? retry.actionTitle : null,
-    actionKind: typeof retry.actionKind === 'string' ? retry.actionKind : null,
-    failureReason: typeof retry.failureReason === 'string' ? retry.failureReason : null,
-    requestedAt: typeof retry.requestedAt === 'string' ? retry.requestedAt : null,
-  }
+    actionTitle: typeof retry.actionTitle === "string" ? retry.actionTitle : null,
+    actionKind: typeof retry.actionKind === "string" ? retry.actionKind : null,
+    failureReason: typeof retry.failureReason === "string" ? retry.failureReason : null,
+    requestedAt: typeof retry.requestedAt === "string" ? retry.requestedAt : null,
+  };
 }
 
 function getLeakActionMetadata(action: LeakActionLink) {
-  if (!action.metadata || typeof action.metadata !== 'object' || Array.isArray(action.metadata)) {
-    return null
+  if (!action.metadata || typeof action.metadata !== "object" || Array.isArray(action.metadata)) {
+    return null;
   }
 
-  return action.metadata as Record<string, unknown>
+  return action.metadata as Record<string, unknown>;
 }
 
 function isFocusLeak(leak: LeakEntity) {
-  if (!leak.contextSnapshot || typeof leak.contextSnapshot !== 'object' || Array.isArray(leak.contextSnapshot)) {
-    return false
+  if (
+    !leak.contextSnapshot ||
+    typeof leak.contextSnapshot !== "object" ||
+    Array.isArray(leak.contextSnapshot)
+  ) {
+    return false;
   }
 
-  return Boolean((leak.contextSnapshot as Record<string, unknown>).isFocus)
+  return Boolean((leak.contextSnapshot as Record<string, unknown>).isFocus);
 }
 
 function getLinkedEntityForPlanAction(leak: LeakEntity, action: LeakPlanAction) {
   const byMetadata = leak.actions.find((link) => {
-    const metadata = getLeakActionMetadata(link)
-    return metadata?.sourceActionId === action.id
-  })
+    const metadata = getLeakActionMetadata(link);
+    return metadata?.sourceActionId === action.id;
+  });
 
-  if (byMetadata) return byMetadata
+  if (byMetadata) return byMetadata;
 
   const convertedEntityId =
-    typeof action.payload?.convertedEntityId === 'string' ? action.payload.convertedEntityId : null
+    typeof action.payload?.convertedEntityId === "string" ? action.payload.convertedEntityId : null;
   const convertedEntityType =
-    typeof action.payload?.convertedEntityType === 'string'
+    typeof action.payload?.convertedEntityType === "string"
       ? action.payload.convertedEntityType
-      : null
-  if (!convertedEntityId || !convertedEntityType) return null
+      : null;
+  if (!convertedEntityId || !convertedEntityType) return null;
 
   return (
     leak.actions.find(
-      (link) => link.entityId === convertedEntityId && link.entityType === convertedEntityType,
+      (link) => link.entityId === convertedEntityId && link.entityType === convertedEntityType
     ) || null
-  )
+  );
 }
 
 function getFeedbackByActionId(plans?: LeakSolutionPlan[]) {
-  const map = new Map<string, LeakPlanFeedback>()
+  const map = new Map<string, LeakPlanFeedback>();
   plans?.forEach((plan) => {
     plan.actions.forEach((action) => {
-      const latest = getLatestPlanFeedback(action)
-      if (!latest) return
+      const latest = getLatestPlanFeedback(action);
+      if (!latest) return;
 
-      const existing = map.get(action.id)
-      if (!existing || new Date(latest.updatedAt).getTime() > new Date(existing.updatedAt).getTime()) {
-        map.set(action.id, latest)
+      const existing = map.get(action.id);
+      if (
+        !existing ||
+        new Date(latest.updatedAt).getTime() > new Date(existing.updatedAt).getTime()
+      ) {
+        map.set(action.id, latest);
       }
-    })
-  })
-  return map
+    });
+  });
+  return map;
 }
 
 function getPlanActionById(plans?: LeakSolutionPlan[]) {
-  const map = new Map<string, LeakPlanAction>()
+  const map = new Map<string, LeakPlanAction>();
   plans?.forEach((plan) => {
     plan.actions.forEach((action) => {
-      map.set(action.id, action)
-    })
-  })
-  return map
+      map.set(action.id, action);
+    });
+  });
+  return map;
 }
 
 function normalizePattern(rawPattern: unknown): LeakPattern | null {
-  if (!rawPattern || typeof rawPattern !== 'object') return null
-  const pattern = rawPattern as Record<string, unknown>
-  if (typeof pattern.leakType !== 'string' || !pattern.leakType.trim()) return null
+  if (!rawPattern || typeof rawPattern !== "object") return null;
+  const pattern = rawPattern as Record<string, unknown>;
+  if (typeof pattern.leakType !== "string" || !pattern.leakType.trim()) return null;
 
   const normalizeTried = (item: unknown) => {
-    if (!item || typeof item !== 'object') return null
-    const candidate = item as Record<string, unknown>
-    if (typeof candidate.text !== 'string' || !candidate.text.trim()) return null
+    if (!item || typeof item !== "object") return null;
+    const candidate = item as Record<string, unknown>;
+    if (typeof candidate.text !== "string" || !candidate.text.trim()) return null;
 
-    const result = candidate.result
+    const result = candidate.result;
     return {
       text: candidate.text.trim(),
-      worked: typeof candidate.worked === 'boolean' ? candidate.worked : null,
+      worked: typeof candidate.worked === "boolean" ? candidate.worked : null,
       result:
-        result === 'worked' || result === 'partially' || result === 'not_worked'
+        result === "worked" || result === "partially" || result === "not_worked"
           ? result
           : undefined,
-      comment: typeof candidate.comment === 'string' ? candidate.comment : null,
-      updatedAt: typeof candidate.updatedAt === 'string' ? candidate.updatedAt : null,
-      sourceActionKind: typeof candidate.sourceActionKind === 'string' ? candidate.sourceActionKind : null,
-      sourcePlanMode: typeof candidate.sourcePlanMode === 'string' ? candidate.sourcePlanMode : null,
-      linkedEntityType: typeof candidate.linkedEntityType === 'string' ? candidate.linkedEntityType : null,
-      linkedEntityLabel: typeof candidate.linkedEntityLabel === 'string' ? candidate.linkedEntityLabel : null,
-    } as LeakPattern['triedSolutions'][number]
-  }
+      comment: typeof candidate.comment === "string" ? candidate.comment : null,
+      updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : null,
+      sourceActionKind:
+        typeof candidate.sourceActionKind === "string" ? candidate.sourceActionKind : null,
+      sourcePlanMode:
+        typeof candidate.sourcePlanMode === "string" ? candidate.sourcePlanMode : null,
+      linkedEntityType:
+        typeof candidate.linkedEntityType === "string" ? candidate.linkedEntityType : null,
+      linkedEntityLabel:
+        typeof candidate.linkedEntityLabel === "string" ? candidate.linkedEntityLabel : null,
+    } as LeakPattern["triedSolutions"][number];
+  };
 
   const triedSolutions = Array.isArray(pattern.triedSolutions)
     ? pattern.triedSolutions
         .map(normalizeTried)
         .filter((item): item is NonNullable<ReturnType<typeof normalizeTried>> => Boolean(item))
-    : []
+    : [];
   const fallbackWorkedExamples = triedSolutions
-    .filter((item) => item.result === 'worked' || item.worked === true)
-    .slice(0, 6)
+    .filter((item) => item.result === "worked" || item.worked === true)
+    .slice(0, 6);
   const workedExamples = Array.isArray(pattern.workedExamples)
     ? pattern.workedExamples
         .map(normalizeTried)
         .filter((item): item is NonNullable<ReturnType<typeof normalizeTried>> => Boolean(item))
-    : fallbackWorkedExamples
+    : fallbackWorkedExamples;
 
   return {
     leakType: pattern.leakType.trim(),
-    analysisCount: typeof pattern.analysisCount === 'number' ? pattern.analysisCount : 0,
+    analysisCount: typeof pattern.analysisCount === "number" ? pattern.analysisCount : 0,
     whatWorked: Array.isArray(pattern.whatWorked)
-      ? pattern.whatWorked.filter((item): item is string => typeof item === 'string')
+      ? pattern.whatWorked.filter((item): item is string => typeof item === "string")
       : [],
     linkType:
-      pattern.linkType === 'exact' || pattern.linkType === 'fuzzy' || pattern.linkType === 'none'
+      pattern.linkType === "exact" || pattern.linkType === "fuzzy" || pattern.linkType === "none"
         ? pattern.linkType
         : undefined,
     triedSolutions,
     workedCount:
-      typeof pattern.workedCount === 'number'
+      typeof pattern.workedCount === "number"
         ? pattern.workedCount
-        : triedSolutions.filter((item) => item.result === 'worked').length,
+        : triedSolutions.filter((item) => item.result === "worked").length,
     partialCount:
-      typeof pattern.partialCount === 'number'
+      typeof pattern.partialCount === "number"
         ? pattern.partialCount
-        : triedSolutions.filter((item) => item.result === 'partially').length,
+        : triedSolutions.filter((item) => item.result === "partially").length,
     failedCount:
-      typeof pattern.failedCount === 'number'
+      typeof pattern.failedCount === "number"
         ? pattern.failedCount
-        : triedSolutions.filter((item) => item.result === 'not_worked').length,
-    clusterKey: typeof pattern.clusterKey === 'string' ? pattern.clusterKey : undefined,
-    clusterLabel: typeof pattern.clusterLabel === 'string' ? pattern.clusterLabel : undefined,
-    clusterSize: typeof pattern.clusterSize === 'number' ? pattern.clusterSize : undefined,
+        : triedSolutions.filter((item) => item.result === "not_worked").length,
+    clusterKey: typeof pattern.clusterKey === "string" ? pattern.clusterKey : undefined,
+    clusterLabel: typeof pattern.clusterLabel === "string" ? pattern.clusterLabel : undefined,
+    clusterSize: typeof pattern.clusterSize === "number" ? pattern.clusterSize : undefined,
     clusterConfidence:
-      typeof pattern.clusterConfidence === 'number' ? pattern.clusterConfidence : undefined,
+      typeof pattern.clusterConfidence === "number" ? pattern.clusterConfidence : undefined,
     clusterWorkedCount:
-      typeof pattern.clusterWorkedCount === 'number' ? pattern.clusterWorkedCount : undefined,
+      typeof pattern.clusterWorkedCount === "number" ? pattern.clusterWorkedCount : undefined,
     clusterPartialCount:
-      typeof pattern.clusterPartialCount === 'number' ? pattern.clusterPartialCount : undefined,
+      typeof pattern.clusterPartialCount === "number" ? pattern.clusterPartialCount : undefined,
     clusterFailedCount:
-      typeof pattern.clusterFailedCount === 'number' ? pattern.clusterFailedCount : undefined,
+      typeof pattern.clusterFailedCount === "number" ? pattern.clusterFailedCount : undefined,
     clusterLeakTypes: Array.isArray(pattern.clusterLeakTypes)
-      ? pattern.clusterLeakTypes.filter((item): item is string => typeof item === 'string').slice(0, 8)
+      ? pattern.clusterLeakTypes
+          .filter((item): item is string => typeof item === "string")
+          .slice(0, 8)
       : undefined,
     clusterWorkedExamples: Array.isArray(pattern.clusterWorkedExamples)
-      ? pattern.clusterWorkedExamples.filter((item): item is string => typeof item === 'string').slice(0, 6)
+      ? pattern.clusterWorkedExamples
+          .filter((item): item is string => typeof item === "string")
+          .slice(0, 6)
       : undefined,
     clusterFailedExamples: Array.isArray(pattern.clusterFailedExamples)
-      ? pattern.clusterFailedExamples.filter((item): item is string => typeof item === 'string').slice(0, 6)
+      ? pattern.clusterFailedExamples
+          .filter((item): item is string => typeof item === "string")
+          .slice(0, 6)
       : undefined,
     workedExamples,
-    updatedAt: typeof pattern.updatedAt === 'string' ? pattern.updatedAt : new Date().toISOString(),
-    activeLeakCount: typeof pattern.activeLeakCount === 'number' ? pattern.activeLeakCount : undefined,
+    updatedAt: typeof pattern.updatedAt === "string" ? pattern.updatedAt : new Date().toISOString(),
+    activeLeakCount:
+      typeof pattern.activeLeakCount === "number" ? pattern.activeLeakCount : undefined,
     activeLeaks: Array.isArray(pattern.activeLeaks)
       ? pattern.activeLeaks
-          .filter((item): item is { id: string; title: string; status: string; updatedAt: string; matchType?: 'exact' | 'fuzzy' } => {
-            if (!item || typeof item !== 'object') return false
-            const leak = item as Record<string, unknown>
-            return (
-              typeof leak.id === 'string' &&
-              typeof leak.title === 'string' &&
-              typeof leak.status === 'string' &&
-              typeof leak.updatedAt === 'string'
-            )
-          })
+          .filter(
+            (
+              item
+            ): item is {
+              id: string;
+              title: string;
+              status: string;
+              updatedAt: string;
+              matchType?: "exact" | "fuzzy";
+            } => {
+              if (!item || typeof item !== "object") return false;
+              const leak = item as Record<string, unknown>;
+              return (
+                typeof leak.id === "string" &&
+                typeof leak.title === "string" &&
+                typeof leak.status === "string" &&
+                typeof leak.updatedAt === "string"
+              );
+            }
+          )
           .map((item) => ({
             ...item,
             matchType:
-              item.matchType === 'exact' || item.matchType === 'fuzzy'
-                ? item.matchType
-                : undefined,
+              item.matchType === "exact" || item.matchType === "fuzzy" ? item.matchType : undefined,
           }))
       : undefined,
-  }
+  };
 }
 
-function getPatternLinkTypeForLeak(pattern: LeakPattern, leak: LeakEntity): 'exact' | 'fuzzy' | 'none' {
-  const fromActiveLeak = pattern.activeLeaks?.find((item) => item.id === leak.id)
-  if (fromActiveLeak?.matchType === 'exact' || fromActiveLeak?.matchType === 'fuzzy') {
-    return fromActiveLeak.matchType
+function getPatternLinkTypeForLeak(
+  pattern: LeakPattern,
+  leak: LeakEntity
+): "exact" | "fuzzy" | "none" {
+  const fromActiveLeak = pattern.activeLeaks?.find((item) => item.id === leak.id);
+  if (fromActiveLeak?.matchType === "exact" || fromActiveLeak?.matchType === "fuzzy") {
+    return fromActiveLeak.matchType;
   }
 
-  const patternKey = normalizeLookupValue(pattern.leakType)
-  const leakKey = normalizeLookupValue(leak.title)
-  if (!patternKey || !leakKey) return 'none'
-  if (patternKey === leakKey) return 'exact'
-  if (patternKey.includes(leakKey) || leakKey.includes(patternKey)) return 'fuzzy'
-  return 'none'
+  const patternKey = normalizeLookupValue(pattern.leakType);
+  const leakKey = normalizeLookupValue(leak.title);
+  if (!patternKey || !leakKey) return "none";
+  if (patternKey === leakKey) return "exact";
+  if (patternKey.includes(leakKey) || leakKey.includes(patternKey)) return "fuzzy";
+  return "none";
 }
 
 function getBestPatternForLeak(patterns: LeakPattern[], leak: LeakEntity): LeakPattern | null {
-  if (!patterns.length) return null
+  if (!patterns.length) return null;
 
-  const exact = patterns.find((pattern) => getPatternLinkTypeForLeak(pattern, leak) === 'exact')
-  if (exact) return exact
+  const exact = patterns.find((pattern) => getPatternLinkTypeForLeak(pattern, leak) === "exact");
+  if (exact) return exact;
 
-  const fuzzy = patterns.find((pattern) => getPatternLinkTypeForLeak(pattern, leak) === 'fuzzy')
-  return fuzzy || null
+  const fuzzy = patterns.find((pattern) => getPatternLinkTypeForLeak(pattern, leak) === "fuzzy");
+  return fuzzy || null;
 }
 
 function getLeakFeedbackTimeline(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
   const rows: Array<{
-    actionId: string
-    actionTitle: string
-    actionKind: LeakPlanAction['kind']
-    result: LeakPlanFeedback['result']
-    comment: string | null
-    updatedAt: string
-    mode: LeakSolutionPlan['mode']
-    linkedEntity: LeakActionLink | null
-  }> = []
+    actionId: string;
+    actionTitle: string;
+    actionKind: LeakPlanAction["kind"];
+    result: LeakPlanFeedback["result"];
+    comment: string | null;
+    updatedAt: string;
+    mode: LeakSolutionPlan["mode"];
+    linkedEntity: LeakActionLink | null;
+  }> = [];
 
   plans?.forEach((plan) => {
     plan.actions.forEach((action) => {
-      const feedback = getLatestPlanFeedback(action)
-      if (!feedback) return
+      const feedback = getLatestPlanFeedback(action);
+      if (!feedback) return;
 
       rows.push({
         actionId: action.id,
@@ -1218,99 +1263,110 @@ function getLeakFeedbackTimeline(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
         updatedAt: feedback.updatedAt,
         mode: plan.mode,
         linkedEntity: getLinkedEntityForPlanAction(leak, action),
-      })
-    })
-  })
+      });
+    });
+  });
 
-  return rows.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  return rows.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 }
 
-function getFeedbackLogFromSnapshot(contextSnapshot?: Record<string, unknown> | null): FeedbackLogItem[] {
-  if (!contextSnapshot || typeof contextSnapshot !== 'object' || Array.isArray(contextSnapshot)) {
-    return []
+function getFeedbackLogFromSnapshot(
+  contextSnapshot?: Record<string, unknown> | null
+): FeedbackLogItem[] {
+  if (!contextSnapshot || typeof contextSnapshot !== "object" || Array.isArray(contextSnapshot)) {
+    return [];
   }
 
-  const raw = contextSnapshot.feedbackLog
-  if (!Array.isArray(raw)) return []
+  const raw = contextSnapshot.feedbackLog;
+  if (!Array.isArray(raw)) return [];
 
   return raw
     .map((item) => {
-      if (!item || typeof item !== 'object') return null
-      const candidate = item as Record<string, unknown>
+      if (!item || typeof item !== "object") return null;
+      const candidate = item as Record<string, unknown>;
       if (
-        typeof candidate.actionTitle !== 'string' ||
-        typeof candidate.actionKind !== 'string' ||
-        typeof candidate.updatedAt !== 'string'
+        typeof candidate.actionTitle !== "string" ||
+        typeof candidate.actionKind !== "string" ||
+        typeof candidate.updatedAt !== "string"
       ) {
-        return null
+        return null;
       }
       if (
-        candidate.result !== 'worked' &&
-        candidate.result !== 'partially' &&
-        candidate.result !== 'not_worked'
+        candidate.result !== "worked" &&
+        candidate.result !== "partially" &&
+        candidate.result !== "not_worked"
       ) {
-        return null
+        return null;
       }
       return {
-        actionId: typeof candidate.actionId === 'string' ? candidate.actionId : null,
+        actionId: typeof candidate.actionId === "string" ? candidate.actionId : null,
         actionTitle: candidate.actionTitle,
         actionKind: candidate.actionKind,
-        mode: typeof candidate.mode === 'string' ? candidate.mode : null,
-        result: candidate.result as LeakPlanFeedback['result'],
-        comment: typeof candidate.comment === 'string' ? candidate.comment : null,
+        mode: typeof candidate.mode === "string" ? candidate.mode : null,
+        result: candidate.result as LeakPlanFeedback["result"],
+        comment: typeof candidate.comment === "string" ? candidate.comment : null,
         policyCorrelationId:
-          typeof candidate.policyCorrelationId === 'string' ? candidate.policyCorrelationId : null,
+          typeof candidate.policyCorrelationId === "string" ? candidate.policyCorrelationId : null,
         feedbackSource:
-          candidate.feedbackSource === 'manual' || candidate.feedbackSource === 'policy'
+          candidate.feedbackSource === "manual" || candidate.feedbackSource === "policy"
             ? candidate.feedbackSource
             : undefined,
-        attempt: typeof candidate.attempt === 'number' ? Math.round(candidate.attempt) : undefined,
+        attempt: typeof candidate.attempt === "number" ? Math.round(candidate.attempt) : undefined,
         updatedAt: candidate.updatedAt,
-      }
+      };
     })
-    .filter((item): item is FeedbackLogItem => Boolean(item))
+    .filter((item): item is FeedbackLogItem => Boolean(item));
 }
 
 function getLeakFeedbackByAction(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
-  const rawEvents = getFeedbackLogFromSnapshot(leak.contextSnapshot)
-  const grouped = new Map<string, {
-    actionId: string | null
-    actionTitle: string
-    actionKind: LeakPlanAction['kind']
-    mode: LeakSolutionPlan['mode'] | null
-    result: LeakPlanFeedback['result']
-    comment: string | null
-    policyCorrelationId: string | null
-    feedbackSource: 'manual' | 'policy' | null
-    updatedAt: string
-    attempts: number
-    linkedEntity: LeakActionLink | null
-  }>()
+  const rawEvents = getFeedbackLogFromSnapshot(leak.contextSnapshot);
+  const grouped = new Map<
+    string,
+    {
+      actionId: string | null;
+      actionTitle: string;
+      actionKind: LeakPlanAction["kind"];
+      mode: LeakSolutionPlan["mode"] | null;
+      result: LeakPlanFeedback["result"];
+      comment: string | null;
+      policyCorrelationId: string | null;
+      feedbackSource: "manual" | "policy" | null;
+      updatedAt: string;
+      attempts: number;
+      linkedEntity: LeakActionLink | null;
+    }
+  >();
 
-  const planActionsById = new Map<string, { action: LeakPlanAction; mode: LeakSolutionPlan['mode'] }>()
+  const planActionsById = new Map<
+    string,
+    { action: LeakPlanAction; mode: LeakSolutionPlan["mode"] }
+  >();
   plans?.forEach((plan) => {
     plan.actions.forEach((action) => {
-      planActionsById.set(action.id, { action, mode: plan.mode })
-    })
-  })
+      planActionsById.set(action.id, { action, mode: plan.mode });
+    });
+  });
 
   rawEvents
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     .forEach((item) => {
-      const fallbackKey = `${item.actionKind}|${normalizeLookupValue(item.actionTitle)}`
-      const key = item.actionId || fallbackKey
-      const existing = grouped.get(key)
-      const planAction = item.actionId ? planActionsById.get(item.actionId)?.action : null
-      const linkedEntity = planAction ? getLinkedEntityForPlanAction(leak, planAction) : null
+      const fallbackKey = `${item.actionKind}|${normalizeLookupValue(item.actionTitle)}`;
+      const key = item.actionId || fallbackKey;
+      const existing = grouped.get(key);
+      const planAction = item.actionId ? planActionsById.get(item.actionId)?.action : null;
+      const linkedEntity = planAction ? getLinkedEntityForPlanAction(leak, planAction) : null;
       if (!existing) {
         grouped.set(key, {
           actionId: item.actionId,
           actionTitle: item.actionTitle,
-          actionKind: item.actionKind as LeakPlanAction['kind'],
+          actionKind: item.actionKind as LeakPlanAction["kind"],
           mode:
-            item.mode && (item.mode === 'minimum' || item.mode === 'base' || item.mode === 'maximum')
+            item.mode &&
+            (item.mode === "minimum" || item.mode === "base" || item.mode === "maximum")
               ? item.mode
-              : (item.actionId ? planActionsById.get(item.actionId)?.mode || null : null),
+              : item.actionId
+                ? planActionsById.get(item.actionId)?.mode || null
+                : null,
           result: item.result,
           comment: item.comment,
           policyCorrelationId: item.policyCorrelationId || null,
@@ -1318,15 +1374,15 @@ function getLeakFeedbackByAction(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
           updatedAt: item.updatedAt,
           attempts: 1,
           linkedEntity,
-        })
-        return
+        });
+        return;
       }
-      existing.attempts += 1
-    })
+      existing.attempts += 1;
+    });
 
   if (grouped.size === 0) {
     getLeakFeedbackTimeline(leak, plans).forEach((item) => {
-      const key = item.actionId || `${item.actionKind}|${normalizeLookupValue(item.actionTitle)}`
+      const key = item.actionId || `${item.actionKind}|${normalizeLookupValue(item.actionTitle)}`;
       if (!grouped.has(key)) {
         grouped.set(key, {
           actionId: item.actionId,
@@ -1340,43 +1396,43 @@ function getLeakFeedbackByAction(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
           updatedAt: item.updatedAt,
           attempts: 1,
           linkedEntity: item.linkedEntity,
-        })
+        });
       }
-    })
+    });
   }
 
   return Array.from(grouped.values()).sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-  )
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
 }
 
 function getSnapshotMode(
   contextSnapshot: Record<string, unknown> | null | undefined,
-  key: 'selectedPlanMode' | 'lastStableMode',
+  key: "selectedPlanMode" | "lastStableMode"
 ) {
-  if (!contextSnapshot || typeof contextSnapshot !== 'object' || Array.isArray(contextSnapshot)) {
-    return null
+  if (!contextSnapshot || typeof contextSnapshot !== "object" || Array.isArray(contextSnapshot)) {
+    return null;
   }
-  const value = contextSnapshot[key]
-  if (value !== 'minimum' && value !== 'base' && value !== 'maximum') {
-    return null
+  const value = contextSnapshot[key];
+  if (value !== "minimum" && value !== "base" && value !== "maximum") {
+    return null;
   }
-  return value as LeakSolutionPlan['mode']
+  return value as LeakSolutionPlan["mode"];
 }
 
 function getLatestWorkedOutcome(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
   const workedRows: Array<{
-    actionTitle: string
-    actionKind: LeakPlanAction['kind']
-    mode: LeakSolutionPlan['mode']
-    updatedAt: string
-    linkedEntity: LeakActionLink | null
-  }> = []
+    actionTitle: string;
+    actionKind: LeakPlanAction["kind"];
+    mode: LeakSolutionPlan["mode"];
+    updatedAt: string;
+    linkedEntity: LeakActionLink | null;
+  }> = [];
 
   plans?.forEach((plan) => {
     plan.actions.forEach((action) => {
-      const feedback = getLatestPlanFeedback(action)
-      if (!feedback || feedback.result !== 'worked') return
+      const feedback = getLatestPlanFeedback(action);
+      if (!feedback || feedback.result !== "worked") return;
 
       workedRows.push({
         actionTitle: action.title,
@@ -1384,157 +1440,161 @@ function getLatestWorkedOutcome(leak: LeakEntity, plans?: LeakSolutionPlan[]) {
         mode: plan.mode,
         updatedAt: feedback.updatedAt,
         linkedEntity: getLinkedEntityForPlanAction(leak, action),
-      })
-    })
-  })
+      });
+    });
+  });
 
-  workedRows.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-  return workedRows[0] || null
+  workedRows.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  return workedRows[0] || null;
 }
 
 function getLeakGroupKey(leak: LeakEntity, groupBy: LeakGroupOption) {
-  if (groupBy === 'sphere') {
-    return leak.sphere || '__no_sphere__'
+  if (groupBy === "sphere") {
+    return leak.sphere || "__no_sphere__";
   }
 
-  if (groupBy === 'source') {
-    return leak.source
+  if (groupBy === "source") {
+    return leak.source;
   }
 
-  return '__all__'
+  return "__all__";
 }
 
 function getLeakGroupLabel(groupKey: string, groupBy: LeakGroupOption) {
-  if (groupBy === 'sphere') {
-    return groupKey === '__no_sphere__' ? 'Без сферы' : getSphereLabel(groupKey)
+  if (groupBy === "sphere") {
+    return groupKey === "__no_sphere__" ? "Без сферы" : getSphereLabel(groupKey);
   }
 
-  if (groupBy === 'source') {
-    return getSourceLabel(groupKey as LeakEntity['source'])
+  if (groupBy === "source") {
+    return getSourceLabel(groupKey as LeakEntity["source"]);
   }
 
-  return 'Все leaks'
+  return "Все leaks";
 }
 
 function getLiveContextMetrics(contextSnapshot?: Record<string, unknown> | null) {
-  if (!contextSnapshot || typeof contextSnapshot !== 'object' || Array.isArray(contextSnapshot)) {
-    return null
+  if (!contextSnapshot || typeof contextSnapshot !== "object" || Array.isArray(contextSnapshot)) {
+    return null;
   }
 
   const live =
-    contextSnapshot.live && typeof contextSnapshot.live === 'object' && !Array.isArray(contextSnapshot.live)
+    contextSnapshot.live &&
+    typeof contextSnapshot.live === "object" &&
+    !Array.isArray(contextSnapshot.live)
       ? (contextSnapshot.live as Record<string, unknown>)
-      : null
+      : null;
   const metrics =
-    live?.metrics && typeof live.metrics === 'object' && !Array.isArray(live.metrics)
+    live?.metrics && typeof live.metrics === "object" && !Array.isArray(live.metrics)
       ? (live.metrics as Record<string, unknown>)
-      : null
+      : null;
 
-  return metrics
+  return metrics;
 }
 
 function getContextMetricNumber(
   contextSnapshot: Record<string, unknown> | null | undefined,
-  key: string,
+  key: string
 ) {
-  const metrics = getLiveContextMetrics(contextSnapshot)
-  if (!metrics) return null
-  return typeof metrics[key] === 'number' ? metrics[key] : null
+  const metrics = getLiveContextMetrics(contextSnapshot);
+  if (!metrics) return null;
+  return typeof metrics[key] === "number" ? metrics[key] : null;
 }
 
 function getSnapshotHistory(contextSnapshot?: Record<string, unknown> | null) {
-  if (!contextSnapshot || typeof contextSnapshot !== 'object' || Array.isArray(contextSnapshot)) {
-    return { linkedEntities: [], actionFeedback: [] } as const
+  if (!contextSnapshot || typeof contextSnapshot !== "object" || Array.isArray(contextSnapshot)) {
+    return { linkedEntities: [], actionFeedback: [] } as const;
   }
   const history =
-    contextSnapshot.history && typeof contextSnapshot.history === 'object' && !Array.isArray(contextSnapshot.history)
+    contextSnapshot.history &&
+    typeof contextSnapshot.history === "object" &&
+    !Array.isArray(contextSnapshot.history)
       ? (contextSnapshot.history as Record<string, unknown>)
-      : null
+      : null;
   if (!history) {
-    return { linkedEntities: [], actionFeedback: [] } as const
+    return { linkedEntities: [], actionFeedback: [] } as const;
   }
 
   const linkedEntities = Array.isArray(history.linkedEntities)
     ? history.linkedEntities
         .map((item) => {
-          if (!item || typeof item !== 'object') return null
-          const row = item as Record<string, unknown>
+          if (!item || typeof item !== "object") return null;
+          const row = item as Record<string, unknown>;
           if (
-            typeof row.entityType !== 'string' ||
-            typeof row.label !== 'string' ||
-            typeof row.createdAt !== 'string'
+            typeof row.entityType !== "string" ||
+            typeof row.label !== "string" ||
+            typeof row.createdAt !== "string"
           ) {
-            return null
+            return null;
           }
           return {
             entityType: row.entityType,
             label: row.label,
-            sourceActionId: typeof row.sourceActionId === 'string' ? row.sourceActionId : null,
-            sourceActionTitle: typeof row.sourceActionTitle === 'string' ? row.sourceActionTitle : null,
-            sourceActionKind: typeof row.sourceActionKind === 'string' ? row.sourceActionKind : null,
-            sourcePlanMode: typeof row.sourcePlanMode === 'string' ? row.sourcePlanMode : null,
+            sourceActionId: typeof row.sourceActionId === "string" ? row.sourceActionId : null,
+            sourceActionTitle:
+              typeof row.sourceActionTitle === "string" ? row.sourceActionTitle : null,
+            sourceActionKind:
+              typeof row.sourceActionKind === "string" ? row.sourceActionKind : null,
+            sourcePlanMode: typeof row.sourcePlanMode === "string" ? row.sourcePlanMode : null,
             policyCorrelationId:
-              typeof row.policyCorrelationId === 'string' ? row.policyCorrelationId : null,
+              typeof row.policyCorrelationId === "string" ? row.policyCorrelationId : null,
             reused: row.reused === true,
             createdAt: row.createdAt,
-          }
+          };
         })
         .filter((item): item is NonNullable<typeof item> => Boolean(item))
-    : []
+    : [];
 
   const actionFeedback = Array.isArray(history.actionFeedback)
     ? history.actionFeedback
         .map((item) => {
-          if (!item || typeof item !== 'object') return null
-          const row = item as Record<string, unknown>
+          if (!item || typeof item !== "object") return null;
+          const row = item as Record<string, unknown>;
           if (
-            typeof row.actionTitle !== 'string' ||
-            typeof row.actionKind !== 'string' ||
-            typeof row.result !== 'string' ||
-            typeof row.updatedAt !== 'string'
+            typeof row.actionTitle !== "string" ||
+            typeof row.actionKind !== "string" ||
+            typeof row.result !== "string" ||
+            typeof row.updatedAt !== "string"
           ) {
-            return null
+            return null;
           }
           return {
-            actionId: typeof row.actionId === 'string' ? row.actionId : null,
+            actionId: typeof row.actionId === "string" ? row.actionId : null,
             actionTitle: row.actionTitle,
             actionKind: row.actionKind,
             result: row.result,
-            comment: typeof row.comment === 'string' ? row.comment : null,
+            comment: typeof row.comment === "string" ? row.comment : null,
             policyCorrelationId:
-              typeof row.policyCorrelationId === 'string' ? row.policyCorrelationId : null,
+              typeof row.policyCorrelationId === "string" ? row.policyCorrelationId : null,
             feedbackSource:
-              row.feedbackSource === 'manual' || row.feedbackSource === 'policy'
+              row.feedbackSource === "manual" || row.feedbackSource === "policy"
                 ? row.feedbackSource
                 : null,
-            attempt: typeof row.attempt === 'number' ? Math.round(row.attempt) : null,
+            attempt: typeof row.attempt === "number" ? Math.round(row.attempt) : null,
             updatedAt: row.updatedAt,
-          }
+          };
         })
         .filter((item): item is NonNullable<typeof item> => Boolean(item))
-    : []
+    : [];
 
-  return { linkedEntities, actionFeedback } as const
+  return { linkedEntities, actionFeedback } as const;
 }
 
 function getRecentFeedbackTrend(contextSnapshot?: Record<string, unknown> | null) {
-  const metrics = getLiveContextMetrics(contextSnapshot)
-  if (!metrics) return null
+  const metrics = getLiveContextMetrics(contextSnapshot);
+  if (!metrics) return null;
 
   const windowSize =
-    typeof metrics.recentFeedbackWindowSize === 'number'
-      ? metrics.recentFeedbackWindowSize
-      : null
+    typeof metrics.recentFeedbackWindowSize === "number" ? metrics.recentFeedbackWindowSize : null;
   const negativeShare =
-    typeof metrics.recentFeedbackNegativeShare === 'number'
+    typeof metrics.recentFeedbackNegativeShare === "number"
       ? metrics.recentFeedbackNegativeShare
-      : null
+      : null;
   const workedShare =
-    typeof metrics.recentFeedbackWorkedShare === 'number'
+    typeof metrics.recentFeedbackWorkedShare === "number"
       ? metrics.recentFeedbackWorkedShare
-      : null
+      : null;
 
-  if (windowSize === null || windowSize <= 0 || negativeShare === null) return null
+  if (windowSize === null || windowSize <= 0 || negativeShare === null) return null;
 
   return {
     windowSize,
@@ -1542,81 +1602,120 @@ function getRecentFeedbackTrend(contextSnapshot?: Record<string, unknown> | null
     workedShare,
     isRisky: windowSize >= 3 && negativeShare >= 67,
     isStable: windowSize >= 3 && workedShare !== null && workedShare >= 67 && negativeShare <= 33,
-  }
+  };
 }
 
 function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null) {
-  const metrics = getLiveContextMetrics(contextSnapshot)
-  if (!metrics) return []
+  const metrics = getLiveContextMetrics(contextSnapshot);
+  if (!metrics) return [];
 
-  const toNum = (key: string) => (typeof metrics[key] === 'number' ? (metrics[key] as number) : null)
-  const hypotheses: string[] = []
+  const toNum = (key: string) =>
+    typeof metrics[key] === "number" ? (metrics[key] as number) : null;
+  const hypotheses: string[] = [];
 
-  const energyAvg = toNum('energyAvg')
-  const moodAvg = toNum('moodAvg')
-  const sleepHoursAvg = toNum('sleepHoursAvg')
-  const stressAvg = toNum('stressAvg')
-  const workoutsCompleted = toNum('workoutsCompleted')
-  const ritualsCompleted = toNum('ritualsCompleted')
-  const mealsWithBadQuality = toNum('mealsWithBadQuality')
-  const waterGoalHitRate = toNum('waterGoalHitRate')
-  const netCashflow7d = toNum('netCashflow7d')
-  const expenseDays7d = toNum('expenseDays7d')
-  const openTasks = toNum('openTasks')
-  const activeSupplements = toNum('activeSupplements')
-  const supplementAdherenceRate = toNum('supplementAdherenceRate')
-  const negativeEmotionShare = toNum('negativeEmotionShare')
-  const planActionsTotal = toNum('planActionsTotal')
-  const feedbackCoverageRate = toNum('feedbackCoverageRate')
-  const feedbackWorkedCount = toNum('feedbackWorkedCount')
-  const feedbackFailedCount = toNum('feedbackFailedCount')
+  const energyAvg = toNum("energyAvg");
+  const moodAvg = toNum("moodAvg");
+  const sleepHoursAvg = toNum("sleepHoursAvg");
+  const stressAvg = toNum("stressAvg");
+  const workoutsCompleted = toNum("workoutsCompleted");
+  const ritualsCompleted = toNum("ritualsCompleted");
+  const mealsWithBadQuality = toNum("mealsWithBadQuality");
+  const waterGoalHitRate = toNum("waterGoalHitRate");
+  const netCashflow7d = toNum("netCashflow7d");
+  const expenseDays7d = toNum("expenseDays7d");
+  const openTasks = toNum("openTasks");
+  const activeSupplements = toNum("activeSupplements");
+  const supplementAdherenceRate = toNum("supplementAdherenceRate");
+  const negativeEmotionShare = toNum("negativeEmotionShare");
+  const planActionsTotal = toNum("planActionsTotal");
+  const feedbackCoverageRate = toNum("feedbackCoverageRate");
+  const feedbackWorkedCount = toNum("feedbackWorkedCount");
+  const feedbackFailedCount = toNum("feedbackFailedCount");
   const latestFeedbackResult =
-    typeof metrics.latestFeedbackResult === 'string' ? metrics.latestFeedbackResult : null
-  const recentFeedbackWindowSize = toNum('recentFeedbackWindowSize')
-  const recentFeedbackNegativeShare = toNum('recentFeedbackNegativeShare')
-  const recentFeedbackWorkedShare = toNum('recentFeedbackWorkedShare')
+    typeof metrics.latestFeedbackResult === "string" ? metrics.latestFeedbackResult : null;
+  const recentFeedbackWindowSize = toNum("recentFeedbackWindowSize");
+  const recentFeedbackNegativeShare = toNum("recentFeedbackNegativeShare");
+  const recentFeedbackWorkedShare = toNum("recentFeedbackWorkedShare");
 
   if (sleepHoursAvg !== null && sleepHoursAvg < 6.5) {
-    hypotheses.push('Наблюдение: недосып может усиливать leak. Стоит проверить связь сна и срывов.')
+    hypotheses.push(
+      "Наблюдение: недосып может усиливать leak. Стоит проверить связь сна и срывов."
+    );
   }
   if (stressAvg !== null && stressAvg >= 7) {
-    hypotheses.push('Наблюдение: высокий стресс совпадает с leak. Проверь, нужен ли anti-stress шаг в режиме.')
+    hypotheses.push(
+      "Наблюдение: высокий стресс совпадает с leak. Проверь, нужен ли anti-stress шаг в режиме."
+    );
   }
   if (energyAvg !== null && energyAvg <= 5) {
-    hypotheses.push('Наблюдение: низкая энергия — вероятный триггер leak. Имеет смысл добавить более лёгкий режим.')
+    hypotheses.push(
+      "Наблюдение: низкая энергия — вероятный триггер leak. Имеет смысл добавить более лёгкий режим."
+    );
   }
   if (moodAvg !== null && moodAvg <= 5) {
-    hypotheses.push('Наблюдение: просадка настроения совпадает с leak. Полезно добавить быстрый стабилизирующий ритуал.')
+    hypotheses.push(
+      "Наблюдение: просадка настроения совпадает с leak. Полезно добавить быстрый стабилизирующий ритуал."
+    );
   }
   if (workoutsCompleted !== null && workoutsCompleted === 0) {
-    hypotheses.push('Наблюдение: в окне контекста нет тренировок. Проверь влияние движения на устойчивость к leak.')
+    hypotheses.push(
+      "Наблюдение: в окне контекста нет тренировок. Проверь влияние движения на устойчивость к leak."
+    );
   }
   if (ritualsCompleted !== null && ritualsCompleted <= 2) {
-    hypotheses.push('Наблюдение: ритуалы выполнялись редко. Возможно, leak связан с потерей структуры дня.')
+    hypotheses.push(
+      "Наблюдение: ритуалы выполнялись редко. Возможно, leak связан с потерей структуры дня."
+    );
   }
   if (mealsWithBadQuality !== null && mealsWithBadQuality >= 3) {
-    hypotheses.push('Наблюдение: качество питания часто проседает. Стоит проверить, не усиливает ли это leak.')
+    hypotheses.push(
+      "Наблюдение: качество питания часто проседает. Стоит проверить, не усиливает ли это leak."
+    );
   }
   if (waterGoalHitRate !== null && waterGoalHitRate < 50) {
-    hypotheses.push('Наблюдение: вода часто ниже цели. Проверь, влияет ли гидратация на устойчивость к leak.')
+    hypotheses.push(
+      "Наблюдение: вода часто ниже цели. Проверь, влияет ли гидратация на устойчивость к leak."
+    );
   }
   if (expenseDays7d !== null && expenseDays7d >= 5) {
-    hypotheses.push('Наблюдение: почти каждый день есть расходы. Проверь импульсные траты как триггер leak.')
+    hypotheses.push(
+      "Наблюдение: почти каждый день есть расходы. Проверь импульсные траты как триггер leak."
+    );
   }
   if (netCashflow7d !== null && netCashflow7d < 0) {
-    hypotheses.push('Наблюдение: cashflow за неделю отрицательный. Для leak в финансах нужен более жёсткий minimum-режим.')
+    hypotheses.push(
+      "Наблюдение: cashflow за неделю отрицательный. Для leak в финансах нужен более жёсткий minimum-режим."
+    );
   }
   if (openTasks !== null && openTasks >= 18) {
-    hypotheses.push('Наблюдение: накопилось много открытых задач. Leak может усиливаться из-за перегруза и распыления.')
+    hypotheses.push(
+      "Наблюдение: накопилось много открытых задач. Leak может усиливаться из-за перегруза и распыления."
+    );
   }
-  if (activeSupplements !== null && activeSupplements > 0 && supplementAdherenceRate !== null && supplementAdherenceRate < 50) {
-    hypotheses.push('Наблюдение: низкая дисциплина по добавкам. Это может усиливать просадки в энергии и устойчивости.')
+  if (
+    activeSupplements !== null &&
+    activeSupplements > 0 &&
+    supplementAdherenceRate !== null &&
+    supplementAdherenceRate < 50
+  ) {
+    hypotheses.push(
+      "Наблюдение: низкая дисциплина по добавкам. Это может усиливать просадки в энергии и устойчивости."
+    );
   }
   if (negativeEmotionShare !== null && negativeEmotionShare >= 60) {
-    hypotheses.push('Наблюдение: преобладают негативные эмоции. Для leak полезно добавить шаг на стабилизацию состояния.')
+    hypotheses.push(
+      "Наблюдение: преобладают негативные эмоции. Для leak полезно добавить шаг на стабилизацию состояния."
+    );
   }
-  if (planActionsTotal !== null && planActionsTotal > 0 && feedbackCoverageRate !== null && feedbackCoverageRate < 50) {
-    hypotheses.push('Наблюдение: по части шагов нет feedback. Закрой цикл обратной связи, чтобы learning работал точнее.')
+  if (
+    planActionsTotal !== null &&
+    planActionsTotal > 0 &&
+    feedbackCoverageRate !== null &&
+    feedbackCoverageRate < 50
+  ) {
+    hypotheses.push(
+      "Наблюдение: по части шагов нет feedback. Закрой цикл обратной связи, чтобы learning работал точнее."
+    );
   }
   if (
     feedbackWorkedCount !== null &&
@@ -1624,10 +1723,14 @@ function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null
     feedbackFailedCount > feedbackWorkedCount &&
     feedbackFailedCount >= 2
   ) {
-    hypotheses.push('Наблюдение: нерабочих шагов больше, чем сработавших. Имеет смысл перейти на другой режим и пересобрать план.')
+    hypotheses.push(
+      "Наблюдение: нерабочих шагов больше, чем сработавших. Имеет смысл перейти на другой режим и пересобрать план."
+    );
   }
-  if (latestFeedbackResult === 'not_worked') {
-    hypotheses.push('Наблюдение: последний feedback отрицательный. Лучше быстро сделать retry с фокусом на этот шаг, пока контекст свежий.')
+  if (latestFeedbackResult === "not_worked") {
+    hypotheses.push(
+      "Наблюдение: последний feedback отрицательный. Лучше быстро сделать retry с фокусом на этот шаг, пока контекст свежий."
+    );
   }
   if (
     recentFeedbackWindowSize !== null &&
@@ -1635,7 +1738,9 @@ function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null
     recentFeedbackNegativeShare !== null &&
     recentFeedbackNegativeShare >= 67
   ) {
-    hypotheses.push('Наблюдение: последние шаги часто не срабатывают. Стоит временно упростить режим до minimum и проверить базовые триггеры.')
+    hypotheses.push(
+      "Наблюдение: последние шаги часто не срабатывают. Стоит временно упростить режим до minimum и проверить базовые триггеры."
+    );
   }
   if (
     recentFeedbackWindowSize !== null &&
@@ -1643,316 +1748,342 @@ function buildContextHypotheses(contextSnapshot?: Record<string, unknown> | null
     recentFeedbackWorkedShare !== null &&
     recentFeedbackWorkedShare >= 67
   ) {
-    hypotheses.push('Наблюдение: большинство последних шагов сработали. Можно закреплять режим и постепенно масштабировать его.')
+    hypotheses.push(
+      "Наблюдение: большинство последних шагов сработали. Можно закреплять режим и постепенно масштабировать его."
+    );
   }
 
-  return hypotheses.slice(0, 3)
+  return hypotheses.slice(0, 3);
 }
 
 function normalizeNextBestAction(value: unknown): NextBestActionHint | null {
-  if (!value || typeof value !== 'object') return null
-  const candidate = value as Record<string, unknown>
-  const type = candidate.type
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  const type = candidate.type;
   if (
-    type !== 'generate' &&
-    type !== 'create_entity' &&
-    type !== 'give_feedback' &&
-    type !== 'retry' &&
-    type !== 'switch_mode' &&
-    type !== 'regenerate_context'
+    type !== "generate" &&
+    type !== "create_entity" &&
+    type !== "give_feedback" &&
+    type !== "retry" &&
+    type !== "switch_mode" &&
+    type !== "regenerate_context"
   ) {
-    return null
+    return null;
   }
-  if (typeof candidate.reason !== 'string' || !candidate.reason.trim()) return null
+  if (typeof candidate.reason !== "string" || !candidate.reason.trim()) return null;
   const confidence =
-    candidate.confidence === 'low' || candidate.confidence === 'medium' || candidate.confidence === 'high'
+    candidate.confidence === "low" ||
+    candidate.confidence === "medium" ||
+    candidate.confidence === "high"
       ? candidate.confidence
-      : 'medium'
+      : "medium";
   const targetMode =
-    candidate.targetMode === 'minimum' || candidate.targetMode === 'base' || candidate.targetMode === 'maximum'
+    candidate.targetMode === "minimum" ||
+    candidate.targetMode === "base" ||
+    candidate.targetMode === "maximum"
       ? candidate.targetMode
-      : null
+      : null;
   const factors = Array.isArray(candidate.factors)
     ? candidate.factors
         .map((item) => {
-          if (!item || typeof item !== 'object') return null
-          const factor = item as Record<string, unknown>
-          if (typeof factor.key !== 'string' || typeof factor.weight !== 'number') return null
+          if (!item || typeof item !== "object") return null;
+          const factor = item as Record<string, unknown>;
+          if (typeof factor.key !== "string" || typeof factor.weight !== "number") return null;
           return {
             key: factor.key,
             weight: factor.weight,
-            detail: typeof factor.detail === 'string' ? factor.detail : undefined,
-          }
+            detail: typeof factor.detail === "string" ? factor.detail : undefined,
+          };
         })
-        .filter((item): item is NonNullable<NextBestActionHint['factors']>[number] => Boolean(item))
+        .filter((item): item is NonNullable<NextBestActionHint["factors"]>[number] => Boolean(item))
         .slice(0, 5)
-    : []
+    : [];
   return {
     type,
     reason: candidate.reason.trim(),
     confidence,
-    actionId: typeof candidate.actionId === 'string' ? candidate.actionId : null,
+    actionId: typeof candidate.actionId === "string" ? candidate.actionId : null,
     targetMode,
-    correlationId: typeof candidate.correlationId === 'string' ? candidate.correlationId : null,
+    correlationId: typeof candidate.correlationId === "string" ? candidate.correlationId : null,
     factors,
-  }
+  };
 }
 
 function getPolicyEventLabel(type: string) {
   switch (type) {
-    case 'policy_suggested':
-      return 'Совет предложен'
-    case 'policy_accepted':
-      return 'Совет принят'
-    case 'policy_rejected':
-      return 'Совет отклонён'
-    case 'policy_outcome':
-      return 'Результат совета'
+    case "policy_suggested":
+      return "Совет предложен";
+    case "policy_accepted":
+      return "Совет принят";
+    case "policy_rejected":
+      return "Совет отклонён";
+    case "policy_outcome":
+      return "Результат совета";
     default:
-      return type
+      return type;
   }
 }
 
 function getPolicyActionLabel(type: string | null | undefined) {
-  if (!type) return 'n/a'
+  if (!type) return "n/a";
   switch (type) {
-    case 'switch_mode':
-      return 'Смена режима'
-    case 'retry':
-      return 'Retry'
-    case 'regenerate_context':
-      return 'Пересбор контекста'
-    case 'focus_action':
-      return 'Фокус на шаг'
-    case 'generate':
-      return 'Генерация'
-    case 'create_entity':
-      return 'Создать сущность'
-    case 'give_feedback':
-      return 'Дать feedback'
+    case "switch_mode":
+      return "Смена режима";
+    case "retry":
+      return "Retry";
+    case "regenerate_context":
+      return "Пересбор контекста";
+    case "focus_action":
+      return "Фокус на шаг";
+    case "generate":
+      return "Генерация";
+    case "create_entity":
+      return "Создать сущность";
+    case "give_feedback":
+      return "Дать feedback";
     default:
-      return type
+      return type;
   }
 }
 
 function getPolicyResultLabel(result: string | null | undefined) {
-  if (!result) return null
-  if (result === 'worked') return 'Сработало'
-  if (result === 'partially') return 'Частично'
-  if (result === 'not_worked') return 'Не помогло'
-  return result
+  if (!result) return null;
+  if (result === "worked") return "Сработало";
+  if (result === "partially") return "Частично";
+  if (result === "not_worked") return "Не помогло";
+  return result;
 }
 
-function getPolicyUrgencyLabel(value: 'low' | 'medium' | 'high') {
-  if (value === 'high') return 'Высокая'
-  if (value === 'medium') return 'Средняя'
-  return 'Низкая'
+function getPolicyUrgencyLabel(value: "low" | "medium" | "high") {
+  if (value === "high") return "Высокая";
+  if (value === "medium") return "Средняя";
+  return "Низкая";
 }
 
-function getPolicyNudgeLabel(value: 'accept_or_reject' | 'create_entity' | 'collect_feedback' | 'none') {
-  if (value === 'accept_or_reject') return 'Принять/отклонить совет'
-  if (value === 'create_entity') return 'Создать сущность'
-  if (value === 'collect_feedback') return 'Собрать outcome'
-  return 'Без срочного nudge'
+function getPolicyNudgeLabel(
+  value: "accept_or_reject" | "create_entity" | "collect_feedback" | "none"
+) {
+  if (value === "accept_or_reject") return "Принять/отклонить совет";
+  if (value === "create_entity") return "Создать сущность";
+  if (value === "collect_feedback") return "Собрать outcome";
+  return "Без срочного nudge";
 }
 
-function getPolicyStuckSignalLabel(value: 'pending_feedback' | 'no_entity_after_accept' | 'no_decision' | 'none') {
-  if (value === 'pending_feedback') return 'Долго нет feedback'
-  if (value === 'no_entity_after_accept') return 'Принято, но не запущено'
-  if (value === 'no_decision') return 'Нет решения по совету'
-  return 'Нет блокировок'
+function getPolicyStuckSignalLabel(
+  value: "pending_feedback" | "no_entity_after_accept" | "no_decision" | "none"
+) {
+  if (value === "pending_feedback") return "Долго нет feedback";
+  if (value === "no_entity_after_accept") return "Принято, но не запущено";
+  if (value === "no_decision") return "Нет решения по совету";
+  return "Нет блокировок";
 }
 
 function normalizeContextDrift(value: unknown): ContextDriftHint | null {
-  if (!value || typeof value !== 'object') return null
-  const candidate = value as Record<string, unknown>
-  if (typeof candidate.isStale !== 'boolean' || typeof candidate.score !== 'number') return null
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.isStale !== "boolean" || typeof candidate.score !== "number") return null;
   const changedMetrics = Array.isArray(candidate.changedMetrics)
     ? candidate.changedMetrics
         .map((item) => {
-          if (!item || typeof item !== 'object') return null
-          const metric = item as Record<string, unknown>
+          if (!item || typeof item !== "object") return null;
+          const metric = item as Record<string, unknown>;
           if (
-            typeof metric.key !== 'string' ||
-            typeof metric.before !== 'number' ||
-            typeof metric.now !== 'number' ||
-            typeof metric.deltaPct !== 'number'
+            typeof metric.key !== "string" ||
+            typeof metric.before !== "number" ||
+            typeof metric.now !== "number" ||
+            typeof metric.deltaPct !== "number"
           ) {
-            return null
+            return null;
           }
           return {
             key: metric.key,
             before: metric.before,
             now: metric.now,
             deltaPct: metric.deltaPct,
-          }
+          };
         })
-        .filter((item): item is ContextDriftHint['changedMetrics'][number] => Boolean(item))
-    : []
+        .filter((item): item is ContextDriftHint["changedMetrics"][number] => Boolean(item))
+    : [];
   return {
     isStale: candidate.isStale,
     score: Math.round(candidate.score),
-    generatedAt: typeof candidate.generatedAt === 'string' ? candidate.generatedAt : null,
-    checkedAt: typeof candidate.checkedAt === 'string' ? candidate.checkedAt : new Date().toISOString(),
+    generatedAt: typeof candidate.generatedAt === "string" ? candidate.generatedAt : null,
+    checkedAt:
+      typeof candidate.checkedAt === "string" ? candidate.checkedAt : new Date().toISOString(),
     changedMetrics,
-  }
+  };
 }
 
 function normalizeExecutionScore(value: unknown): ExecutionScoreHint | null {
-  if (!value || typeof value !== 'object') return null
-  const candidate = value as Record<string, unknown>
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
   const breakdown =
-    candidate.breakdown && typeof candidate.breakdown === 'object' && !Array.isArray(candidate.breakdown)
+    candidate.breakdown &&
+    typeof candidate.breakdown === "object" &&
+    !Array.isArray(candidate.breakdown)
       ? (candidate.breakdown as Record<string, unknown>)
-      : null
-  if (typeof candidate.value !== 'number' || !breakdown) return null
+      : null;
+  if (typeof candidate.value !== "number" || !breakdown) return null;
   return {
     value: Math.round(candidate.value),
     breakdown: {
-      createdCoverage: typeof breakdown.createdCoverage === 'number' ? Math.round(breakdown.createdCoverage) : 0,
-      feedbackCoverage: typeof breakdown.feedbackCoverage === 'number' ? Math.round(breakdown.feedbackCoverage) : 0,
-      workedShare: typeof breakdown.workedShare === 'number' ? Math.round(breakdown.workedShare) : 0,
-      attemptsPenalty: typeof breakdown.attemptsPenalty === 'number' ? Math.round(breakdown.attemptsPenalty) : 0,
-      driftPenalty: typeof breakdown.driftPenalty === 'number' ? Math.round(breakdown.driftPenalty) : 0,
+      createdCoverage:
+        typeof breakdown.createdCoverage === "number" ? Math.round(breakdown.createdCoverage) : 0,
+      feedbackCoverage:
+        typeof breakdown.feedbackCoverage === "number" ? Math.round(breakdown.feedbackCoverage) : 0,
+      workedShare:
+        typeof breakdown.workedShare === "number" ? Math.round(breakdown.workedShare) : 0,
+      attemptsPenalty:
+        typeof breakdown.attemptsPenalty === "number" ? Math.round(breakdown.attemptsPenalty) : 0,
+      driftPenalty:
+        typeof breakdown.driftPenalty === "number" ? Math.round(breakdown.driftPenalty) : 0,
     },
-  }
+  };
 }
 
 function normalizeAdaptiveMode(value: unknown): AdaptiveModeHint | null {
-  if (!value || typeof value !== 'object') return null
-  const candidate = value as Record<string, unknown>
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
   if (
-    candidate.targetMode !== 'minimum' &&
-    candidate.targetMode !== 'base' &&
-    candidate.targetMode !== 'maximum'
+    candidate.targetMode !== "minimum" &&
+    candidate.targetMode !== "base" &&
+    candidate.targetMode !== "maximum"
   ) {
-    return null
+    return null;
   }
-  if (typeof candidate.reason !== 'string' || !candidate.reason.trim()) return null
+  if (typeof candidate.reason !== "string" || !candidate.reason.trim()) return null;
   return {
     targetMode: candidate.targetMode,
     reason: candidate.reason.trim(),
-  }
+  };
 }
 
 function normalizePolicyFunnel(value: unknown) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const funnel = value as Record<string, unknown>
-  if (typeof funnel.correlationId !== 'string') return null
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const funnel = value as Record<string, unknown>;
+  if (typeof funnel.correlationId !== "string") return null;
   return {
     correlationId: funnel.correlationId,
-    suggestedAt: typeof funnel.suggestedAt === 'string' ? funnel.suggestedAt : null,
-    acceptedAt: typeof funnel.acceptedAt === 'string' ? funnel.acceptedAt : null,
-    rejectedAt: typeof funnel.rejectedAt === 'string' ? funnel.rejectedAt : null,
+    suggestedAt: typeof funnel.suggestedAt === "string" ? funnel.suggestedAt : null,
+    acceptedAt: typeof funnel.acceptedAt === "string" ? funnel.acceptedAt : null,
+    rejectedAt: typeof funnel.rejectedAt === "string" ? funnel.rejectedAt : null,
     entityCreatedCount:
-      typeof funnel.entityCreatedCount === 'number' ? Math.round(funnel.entityCreatedCount) : 0,
-    outcomeCount: typeof funnel.outcomeCount === 'number' ? Math.round(funnel.outcomeCount) : 0,
-    outcomeWorked: typeof funnel.outcomeWorked === 'number' ? Math.round(funnel.outcomeWorked) : 0,
-    outcomePartial: typeof funnel.outcomePartial === 'number' ? Math.round(funnel.outcomePartial) : 0,
-    outcomeFailed: typeof funnel.outcomeFailed === 'number' ? Math.round(funnel.outcomeFailed) : 0,
-    lastOutcomeAt: typeof funnel.lastOutcomeAt === 'string' ? funnel.lastOutcomeAt : null,
+      typeof funnel.entityCreatedCount === "number" ? Math.round(funnel.entityCreatedCount) : 0,
+    outcomeCount: typeof funnel.outcomeCount === "number" ? Math.round(funnel.outcomeCount) : 0,
+    outcomeWorked: typeof funnel.outcomeWorked === "number" ? Math.round(funnel.outcomeWorked) : 0,
+    outcomePartial:
+      typeof funnel.outcomePartial === "number" ? Math.round(funnel.outcomePartial) : 0,
+    outcomeFailed: typeof funnel.outcomeFailed === "number" ? Math.round(funnel.outcomeFailed) : 0,
+    lastOutcomeAt: typeof funnel.lastOutcomeAt === "string" ? funnel.lastOutcomeAt : null,
     pendingOutcomeActionIds: Array.isArray(funnel.pendingOutcomeActionIds)
-      ? funnel.pendingOutcomeActionIds.filter((item): item is string => typeof item === 'string')
+      ? funnel.pendingOutcomeActionIds.filter((item): item is string => typeof item === "string")
       : [],
     pendingOutcomeActionTitles: Array.isArray(funnel.pendingOutcomeActionTitles)
-      ? funnel.pendingOutcomeActionTitles.filter((item): item is string => typeof item === 'string')
+      ? funnel.pendingOutcomeActionTitles.filter((item): item is string => typeof item === "string")
       : [],
     nextPendingOutcomeActionId:
-      typeof funnel.nextPendingOutcomeActionId === 'string'
+      typeof funnel.nextPendingOutcomeActionId === "string"
         ? funnel.nextPendingOutcomeActionId
         : null,
     nextPendingOutcomeActionTitle:
-      typeof funnel.nextPendingOutcomeActionTitle === 'string'
+      typeof funnel.nextPendingOutcomeActionTitle === "string"
         ? funnel.nextPendingOutcomeActionTitle
         : null,
     stage:
-      funnel.stage === 'suggested' ||
-      funnel.stage === 'accepted' ||
-      funnel.stage === 'awaiting_feedback' ||
-      funnel.stage === 'learning' ||
-      funnel.stage === 'completed' ||
-      funnel.stage === 'rejected'
+      funnel.stage === "suggested" ||
+      funnel.stage === "accepted" ||
+      funnel.stage === "awaiting_feedback" ||
+      funnel.stage === "learning" ||
+      funnel.stage === "completed" ||
+      funnel.stage === "rejected"
         ? funnel.stage
-        : 'suggested',
+        : "suggested",
     suggestedAgeMinutes:
-      typeof funnel.suggestedAgeMinutes === 'number' ? Math.round(funnel.suggestedAgeMinutes) : null,
+      typeof funnel.suggestedAgeMinutes === "number"
+        ? Math.round(funnel.suggestedAgeMinutes)
+        : null,
     acceptedAgeMinutes:
-      typeof funnel.acceptedAgeMinutes === 'number' ? Math.round(funnel.acceptedAgeMinutes) : null,
+      typeof funnel.acceptedAgeMinutes === "number" ? Math.round(funnel.acceptedAgeMinutes) : null,
     lastOutcomeAgeMinutes:
-      typeof funnel.lastOutcomeAgeMinutes === 'number' ? Math.round(funnel.lastOutcomeAgeMinutes) : null,
+      typeof funnel.lastOutcomeAgeMinutes === "number"
+        ? Math.round(funnel.lastOutcomeAgeMinutes)
+        : null,
     maxPendingOutcomeAgeMinutes:
-      typeof funnel.maxPendingOutcomeAgeMinutes === 'number'
+      typeof funnel.maxPendingOutcomeAgeMinutes === "number"
         ? Math.round(funnel.maxPendingOutcomeAgeMinutes)
         : null,
     oldestPendingOutcomeActionId:
-      typeof funnel.oldestPendingOutcomeActionId === 'string'
+      typeof funnel.oldestPendingOutcomeActionId === "string"
         ? funnel.oldestPendingOutcomeActionId
         : null,
     oldestPendingOutcomeActionTitle:
-      typeof funnel.oldestPendingOutcomeActionTitle === 'string'
+      typeof funnel.oldestPendingOutcomeActionTitle === "string"
         ? funnel.oldestPendingOutcomeActionTitle
         : null,
     oldestPendingOutcomeAgeMinutes:
-      typeof funnel.oldestPendingOutcomeAgeMinutes === 'number'
+      typeof funnel.oldestPendingOutcomeAgeMinutes === "number"
         ? Math.round(funnel.oldestPendingOutcomeAgeMinutes)
         : null,
     stuckSignals:
-      funnel.stuckSignals && typeof funnel.stuckSignals === 'object' && !Array.isArray(funnel.stuckSignals)
+      funnel.stuckSignals &&
+      typeof funnel.stuckSignals === "object" &&
+      !Array.isArray(funnel.stuckSignals)
         ? (() => {
-            const signals = funnel.stuckSignals as Record<string, unknown>
+            const signals = funnel.stuckSignals as Record<string, unknown>;
             return {
               noDecision: signals.noDecision === true,
               noEntityAfterAccept: signals.noEntityAfterAccept === true,
               pendingFeedback: signals.pendingFeedback === true,
               noOutcomeAfterCreate: signals.noOutcomeAfterCreate === true,
-            }
+            };
           })()
         : {
             noDecision: false,
             noEntityAfterAccept: false,
-          pendingFeedback: false,
-          noOutcomeAfterCreate: false,
-        },
+            pendingFeedback: false,
+            noOutcomeAfterCreate: false,
+          },
     primaryStuckSignal:
-      funnel.primaryStuckSignal === 'pending_feedback' ||
-      funnel.primaryStuckSignal === 'no_entity_after_accept' ||
-      funnel.primaryStuckSignal === 'no_decision' ||
-      funnel.primaryStuckSignal === 'none'
+      funnel.primaryStuckSignal === "pending_feedback" ||
+      funnel.primaryStuckSignal === "no_entity_after_accept" ||
+      funnel.primaryStuckSignal === "no_decision" ||
+      funnel.primaryStuckSignal === "none"
         ? funnel.primaryStuckSignal
-        : 'none',
-    stuckScore: typeof funnel.stuckScore === 'number' ? Math.round(funnel.stuckScore) : 0,
+        : "none",
+    stuckScore: typeof funnel.stuckScore === "number" ? Math.round(funnel.stuckScore) : 0,
     urgency:
-      funnel.urgency === 'low' || funnel.urgency === 'medium' || funnel.urgency === 'high'
+      funnel.urgency === "low" || funnel.urgency === "medium" || funnel.urgency === "high"
         ? funnel.urgency
-        : 'low',
-    urgencyReason: typeof funnel.urgencyReason === 'string' ? funnel.urgencyReason : 'Нет данных',
+        : "low",
+    urgencyReason: typeof funnel.urgencyReason === "string" ? funnel.urgencyReason : "Нет данных",
     recommendedNudge:
-      funnel.recommendedNudge === 'accept_or_reject' ||
-      funnel.recommendedNudge === 'create_entity' ||
-      funnel.recommendedNudge === 'collect_feedback' ||
-      funnel.recommendedNudge === 'none'
+      funnel.recommendedNudge === "accept_or_reject" ||
+      funnel.recommendedNudge === "create_entity" ||
+      funnel.recommendedNudge === "collect_feedback" ||
+      funnel.recommendedNudge === "none"
         ? funnel.recommendedNudge
-        : 'none',
+        : "none",
     recommendedNudgeReason:
-      typeof funnel.recommendedNudgeReason === 'string'
+      typeof funnel.recommendedNudgeReason === "string"
         ? funnel.recommendedNudgeReason
-        : 'Нет подсказки',
+        : "Нет подсказки",
     isCurrent: funnel.isCurrent === true,
-  }
+  };
 }
 
 function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
-  if (!value || typeof value !== 'object') return null
-  const candidate = value as Record<string, unknown>
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
   const selectedMode =
-    candidate.selectedMode === 'minimum' ||
-    candidate.selectedMode === 'base' ||
-    candidate.selectedMode === 'maximum'
+    candidate.selectedMode === "minimum" ||
+    candidate.selectedMode === "base" ||
+    candidate.selectedMode === "maximum"
       ? candidate.selectedMode
-      : null
+      : null;
   return {
-    policyVersion: typeof candidate.policyVersion === 'number' ? candidate.policyVersion : undefined,
-    computedAt: typeof candidate.computedAt === 'string' ? candidate.computedAt : undefined,
+    policyVersion:
+      typeof candidate.policyVersion === "number" ? candidate.policyVersion : undefined,
+    computedAt: typeof candidate.computedAt === "string" ? candidate.computedAt : undefined,
     selectedMode,
     nextBestAction: normalizeNextBestAction(candidate.nextBestAction),
     contextDrift: normalizeContextDrift(candidate.contextDrift),
@@ -1961,185 +2092,228 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
     runJournal: Array.isArray(candidate.runJournal)
       ? candidate.runJournal
           .map((item) => {
-            if (!item || typeof item !== 'object') return null
-            const event = item as Record<string, unknown>
-            if (typeof event.type !== 'string' || typeof event.at !== 'string') return null
+            if (!item || typeof item !== "object") return null;
+            const event = item as Record<string, unknown>;
+            if (typeof event.type !== "string" || typeof event.at !== "string") return null;
             return {
               type: event.type,
               at: event.at,
-              actionId: typeof event.actionId === 'string' ? event.actionId : null,
-              actionKind: typeof event.actionKind === 'string' ? event.actionKind : null,
-              note: typeof event.note === 'string' ? event.note : null,
+              actionId: typeof event.actionId === "string" ? event.actionId : null,
+              actionKind: typeof event.actionKind === "string" ? event.actionKind : null,
+              note: typeof event.note === "string" ? event.note : null,
               policyCorrelationId:
-                typeof event.policyCorrelationId === 'string' ? event.policyCorrelationId : null,
+                typeof event.policyCorrelationId === "string" ? event.policyCorrelationId : null,
               policyActionType:
-                typeof event.policyActionType === 'string' ? event.policyActionType : null,
-              actionTitle: typeof event.actionTitle === 'string' ? event.actionTitle : null,
-              result: typeof event.result === 'string' ? event.result : null,
-              actor: typeof event.actor === 'string' ? event.actor : null,
-              decision: typeof event.decision === 'string' ? event.decision : null,
-              attempt: typeof event.attempt === 'number' ? Math.round(event.attempt) : null,
+                typeof event.policyActionType === "string" ? event.policyActionType : null,
+              actionTitle: typeof event.actionTitle === "string" ? event.actionTitle : null,
+              result: typeof event.result === "string" ? event.result : null,
+              actor: typeof event.actor === "string" ? event.actor : null,
+              decision: typeof event.decision === "string" ? event.decision : null,
+              attempt: typeof event.attempt === "number" ? Math.round(event.attempt) : null,
               factors: Array.isArray(event.factors)
                 ? event.factors
                     .map((factor) => {
-                      if (!factor || typeof factor !== 'object') return null
-                      const item = factor as Record<string, unknown>
-                      if (typeof item.key !== 'string' || typeof item.weight !== 'number') return null
+                      if (!factor || typeof factor !== "object") return null;
+                      const item = factor as Record<string, unknown>;
+                      if (typeof item.key !== "string" || typeof item.weight !== "number")
+                        return null;
                       return {
                         key: item.key,
                         weight: item.weight,
-                        detail: typeof item.detail === 'string' ? item.detail : undefined,
-                      }
+                        detail: typeof item.detail === "string" ? item.detail : undefined,
+                      };
                     })
-                    .filter((factor): factor is { key: string; weight: number; detail?: string } => Boolean(factor))
+                    .filter((factor): factor is { key: string; weight: number; detail?: string } =>
+                      Boolean(factor)
+                    )
                 : [],
-            }
+            };
           })
-          .filter((item): item is NonNullable<LeakPolicyHint['runJournal']>[number] => Boolean(item))
+          .filter((item): item is NonNullable<LeakPolicyHint["runJournal"]>[number] =>
+            Boolean(item)
+          )
       : undefined,
     summary:
-      candidate.summary && typeof candidate.summary === 'object' && !Array.isArray(candidate.summary)
+      candidate.summary &&
+      typeof candidate.summary === "object" &&
+      !Array.isArray(candidate.summary)
         ? (() => {
-            const summary = candidate.summary as Record<string, unknown>
+            const summary = candidate.summary as Record<string, unknown>;
             const rejectReasons =
-              summary.rejectReasons && typeof summary.rejectReasons === 'object' && !Array.isArray(summary.rejectReasons)
+              summary.rejectReasons &&
+              typeof summary.rejectReasons === "object" &&
+              !Array.isArray(summary.rejectReasons)
                 ? Object.fromEntries(
                     Object.entries(summary.rejectReasons as Record<string, unknown>).filter(
-                      (entry): entry is [string, number] => typeof entry[0] === 'string' && typeof entry[1] === 'number',
-                    ),
+                      (entry): entry is [string, number] =>
+                        typeof entry[0] === "string" && typeof entry[1] === "number"
+                    )
                   )
-                : {}
+                : {};
             return {
               currentFunnel: normalizePolicyFunnel(summary.currentFunnel),
               recentFunnels: Array.isArray(summary.recentFunnels)
                 ? summary.recentFunnels
                     .map(normalizePolicyFunnel)
-                    .filter((item): item is NonNullable<ReturnType<typeof normalizePolicyFunnel>> => Boolean(item))
+                    .filter((item): item is NonNullable<ReturnType<typeof normalizePolicyFunnel>> =>
+                      Boolean(item)
+                    )
                 : [],
               learningSignals:
                 summary.learningSignals &&
-                typeof summary.learningSignals === 'object' &&
+                typeof summary.learningSignals === "object" &&
                 !Array.isArray(summary.learningSignals)
                   ? (() => {
-                      const signals = summary.learningSignals as Record<string, unknown>
+                      const signals = summary.learningSignals as Record<string, unknown>;
                       return {
                         loopHealth:
-                          typeof signals.loopHealth === 'number' ? Math.round(signals.loopHealth) : 0,
+                          typeof signals.loopHealth === "number"
+                            ? Math.round(signals.loopHealth)
+                            : 0,
                         recentFeedbackCount:
-                          typeof signals.recentFeedbackCount === 'number'
+                          typeof signals.recentFeedbackCount === "number"
                             ? Math.round(signals.recentFeedbackCount)
                             : 0,
                         recentWorkedCount:
-                          typeof signals.recentWorkedCount === 'number'
+                          typeof signals.recentWorkedCount === "number"
                             ? Math.round(signals.recentWorkedCount)
                             : 0,
                         recentPartialCount:
-                          typeof signals.recentPartialCount === 'number'
+                          typeof signals.recentPartialCount === "number"
                             ? Math.round(signals.recentPartialCount)
                             : 0,
                         recentFailedCount:
-                          typeof signals.recentFailedCount === 'number'
+                          typeof signals.recentFailedCount === "number"
                             ? Math.round(signals.recentFailedCount)
                             : 0,
                         topFailureReasons: Array.isArray(signals.topFailureReasons)
                           ? signals.topFailureReasons
                               .map((item) => {
-                                if (!item || typeof item !== 'object') return null
-                                const row = item as Record<string, unknown>
-                                if (typeof row.text !== 'string' || typeof row.count !== 'number') return null
-                                return { text: row.text, count: Math.round(row.count) }
+                                if (!item || typeof item !== "object") return null;
+                                const row = item as Record<string, unknown>;
+                                if (typeof row.text !== "string" || typeof row.count !== "number")
+                                  return null;
+                                return { text: row.text, count: Math.round(row.count) };
                               })
-                              .filter((item): item is { text: string; count: number } => Boolean(item))
+                              .filter((item): item is { text: string; count: number } =>
+                                Boolean(item)
+                              )
                           : [],
                         failureBuckets:
                           signals.failureBuckets &&
-                          typeof signals.failureBuckets === 'object' &&
+                          typeof signals.failureBuckets === "object" &&
                           !Array.isArray(signals.failureBuckets)
                             ? (() => {
-                                const buckets = signals.failureBuckets as Record<string, unknown>
+                                const buckets = signals.failureBuckets as Record<string, unknown>;
                                 return {
-                                  time: typeof buckets.time === 'number' ? Math.round(buckets.time) : 0,
-                                  energy: typeof buckets.energy === 'number' ? Math.round(buckets.energy) : 0,
-                                  context: typeof buckets.context === 'number' ? Math.round(buckets.context) : 0,
+                                  time:
+                                    typeof buckets.time === "number" ? Math.round(buckets.time) : 0,
+                                  energy:
+                                    typeof buckets.energy === "number"
+                                      ? Math.round(buckets.energy)
+                                      : 0,
+                                  context:
+                                    typeof buckets.context === "number"
+                                      ? Math.round(buckets.context)
+                                      : 0,
                                   complexity:
-                                    typeof buckets.complexity === 'number' ? Math.round(buckets.complexity) : 0,
-                                  unknown: typeof buckets.unknown === 'number' ? Math.round(buckets.unknown) : 0,
-                                }
+                                    typeof buckets.complexity === "number"
+                                      ? Math.round(buckets.complexity)
+                                      : 0,
+                                  unknown:
+                                    typeof buckets.unknown === "number"
+                                      ? Math.round(buckets.unknown)
+                                      : 0,
+                                };
                               })()
                             : { time: 0, energy: 0, context: 0, complexity: 0, unknown: 0 },
                         dominantFailureBucket:
-                          signals.dominantFailureBucket === 'time' ||
-                          signals.dominantFailureBucket === 'energy' ||
-                          signals.dominantFailureBucket === 'context' ||
-                          signals.dominantFailureBucket === 'complexity' ||
-                          signals.dominantFailureBucket === 'unknown'
+                          signals.dominantFailureBucket === "time" ||
+                          signals.dominantFailureBucket === "energy" ||
+                          signals.dominantFailureBucket === "context" ||
+                          signals.dominantFailureBucket === "complexity" ||
+                          signals.dominantFailureBucket === "unknown"
                             ? signals.dominantFailureBucket
-                            : 'unknown',
+                            : "unknown",
                         repeatedActions: Array.isArray(signals.repeatedActions)
                           ? signals.repeatedActions
                               .map((item) => {
-                                if (!item || typeof item !== 'object') return null
-                                const row = item as Record<string, unknown>
+                                if (!item || typeof item !== "object") return null;
+                                const row = item as Record<string, unknown>;
                                 if (
-                                  typeof row.actionId !== 'string' ||
-                                  typeof row.actionTitle !== 'string' ||
-                                  typeof row.attempt !== 'number'
+                                  typeof row.actionId !== "string" ||
+                                  typeof row.actionTitle !== "string" ||
+                                  typeof row.attempt !== "number"
                                 ) {
-                                  return null
+                                  return null;
                                 }
                                 return {
                                   actionId: row.actionId,
                                   actionTitle: row.actionTitle,
                                   attempt: Math.round(row.attempt),
-                                }
+                                };
                               })
-                              .filter((item): item is { actionId: string; actionTitle: string; attempt: number } => Boolean(item))
+                              .filter(
+                                (
+                                  item
+                                ): item is {
+                                  actionId: string;
+                                  actionTitle: string;
+                                  attempt: number;
+                                } => Boolean(item)
+                              )
                           : [],
                         unstableActions: Array.isArray(signals.unstableActions)
                           ? signals.unstableActions
                               .map((item) => {
-                                if (!item || typeof item !== 'object') return null
-                                const row = item as Record<string, unknown>
+                                if (!item || typeof item !== "object") return null;
+                                const row = item as Record<string, unknown>;
                                 if (
-                                  typeof row.actionId !== 'string' ||
-                                  typeof row.actionTitle !== 'string' ||
-                                  typeof row.attempts !== 'number'
+                                  typeof row.actionId !== "string" ||
+                                  typeof row.actionTitle !== "string" ||
+                                  typeof row.attempts !== "number"
                                 ) {
-                                  return null
+                                  return null;
                                 }
                                 return {
                                   actionId: row.actionId,
                                   actionTitle: row.actionTitle,
                                   attempts: Math.round(row.attempts),
-                                  failures: typeof row.failures === 'number' ? Math.round(row.failures) : 0,
-                                  partials: typeof row.partials === 'number' ? Math.round(row.partials) : 0,
-                                  worked: typeof row.worked === 'number' ? Math.round(row.worked) : 0,
+                                  failures:
+                                    typeof row.failures === "number" ? Math.round(row.failures) : 0,
+                                  partials:
+                                    typeof row.partials === "number" ? Math.round(row.partials) : 0,
+                                  worked:
+                                    typeof row.worked === "number" ? Math.round(row.worked) : 0,
                                   lastResult:
-                                    row.lastResult === 'worked' ||
-                                    row.lastResult === 'partially' ||
-                                    row.lastResult === 'not_worked' ||
-                                    row.lastResult === 'unknown'
+                                    row.lastResult === "worked" ||
+                                    row.lastResult === "partially" ||
+                                    row.lastResult === "not_worked" ||
+                                    row.lastResult === "unknown"
                                       ? row.lastResult
-                                      : 'unknown',
-                                  lastUpdatedAt: typeof row.lastUpdatedAt === 'string' ? row.lastUpdatedAt : null,
-                                }
+                                      : "unknown",
+                                  lastUpdatedAt:
+                                    typeof row.lastUpdatedAt === "string"
+                                      ? row.lastUpdatedAt
+                                      : null,
+                                };
                               })
                               .filter(
                                 (
-                                  item,
+                                  item
                                 ): item is {
-                                  actionId: string
-                                  actionTitle: string
-                                  attempts: number
-                                  failures: number
-                                  partials: number
-                                  worked: number
-                                  lastResult: 'worked' | 'partially' | 'not_worked' | 'unknown'
-                                  lastUpdatedAt: string | null
-                                } => Boolean(item),
+                                  actionId: string;
+                                  actionTitle: string;
+                                  attempts: number;
+                                  failures: number;
+                                  partials: number;
+                                  worked: number;
+                                  lastResult: "worked" | "partially" | "not_worked" | "unknown";
+                                  lastUpdatedAt: string | null;
+                                } => Boolean(item)
                               )
                           : [],
-                      }
+                      };
                     })()
                   : {
                       loopHealth: 0,
@@ -2149,27 +2323,34 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
                       recentFailedCount: 0,
                       topFailureReasons: [],
                       failureBuckets: { time: 0, energy: 0, context: 0, complexity: 0, unknown: 0 },
-                      dominantFailureBucket: 'unknown',
+                      dominantFailureBucket: "unknown",
                       repeatedActions: [],
                       unstableActions: [],
                     },
               stuckOverview:
                 summary.stuckOverview &&
-                typeof summary.stuckOverview === 'object' &&
+                typeof summary.stuckOverview === "object" &&
                 !Array.isArray(summary.stuckOverview)
                   ? (() => {
-                      const overview = summary.stuckOverview as Record<string, unknown>
+                      const overview = summary.stuckOverview as Record<string, unknown>;
                       return {
                         totalFunnels:
-                          typeof overview.totalFunnels === 'number' ? Math.round(overview.totalFunnels) : 0,
-                        high: typeof overview.high === 'number' ? Math.round(overview.high) : 0,
-                        medium: typeof overview.medium === 'number' ? Math.round(overview.medium) : 0,
-                        low: typeof overview.low === 'number' ? Math.round(overview.low) : 0,
+                          typeof overview.totalFunnels === "number"
+                            ? Math.round(overview.totalFunnels)
+                            : 0,
+                        high: typeof overview.high === "number" ? Math.round(overview.high) : 0,
+                        medium:
+                          typeof overview.medium === "number" ? Math.round(overview.medium) : 0,
+                        low: typeof overview.low === "number" ? Math.round(overview.low) : 0,
                         blockedFunnels:
-                          typeof overview.blockedFunnels === 'number' ? Math.round(overview.blockedFunnels) : 0,
+                          typeof overview.blockedFunnels === "number"
+                            ? Math.round(overview.blockedFunnels)
+                            : 0,
                         maxStuckScore:
-                          typeof overview.maxStuckScore === 'number' ? Math.round(overview.maxStuckScore) : 0,
-                      }
+                          typeof overview.maxStuckScore === "number"
+                            ? Math.round(overview.maxStuckScore)
+                            : 0,
+                      };
                     })()
                   : {
                       totalFunnels: 0,
@@ -2179,189 +2360,192 @@ function normalizeLeakPolicy(value: unknown): LeakPolicyHint | null {
                       blockedFunnels: 0,
                       maxStuckScore: 0,
                     },
-              accepted: typeof summary.accepted === 'number' ? summary.accepted : 0,
-              rejected: typeof summary.rejected === 'number' ? summary.rejected : 0,
-              outcomes: typeof summary.outcomes === 'number' ? summary.outcomes : 0,
-              outcomeWorked: typeof summary.outcomeWorked === 'number' ? summary.outcomeWorked : 0,
-              outcomePartial: typeof summary.outcomePartial === 'number' ? summary.outcomePartial : 0,
-              outcomeFailed: typeof summary.outcomeFailed === 'number' ? summary.outcomeFailed : 0,
+              accepted: typeof summary.accepted === "number" ? summary.accepted : 0,
+              rejected: typeof summary.rejected === "number" ? summary.rejected : 0,
+              outcomes: typeof summary.outcomes === "number" ? summary.outcomes : 0,
+              outcomeWorked: typeof summary.outcomeWorked === "number" ? summary.outcomeWorked : 0,
+              outcomePartial:
+                typeof summary.outcomePartial === "number" ? summary.outcomePartial : 0,
+              outcomeFailed: typeof summary.outcomeFailed === "number" ? summary.outcomeFailed : 0,
               rejectReasons,
-            }
+            };
           })()
         : undefined,
-  }
+  };
 }
 
 export function LeaksScreen() {
-  const { user, setScreen } = useAppStore()
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [leaks, setLeaks] = useState<LeakEntity[]>([])
-  const [signals, setSignals] = useState<LeakHint[]>([])
-  const [patterns, setPatterns] = useState<LeakPattern[]>([])
-  const [activeTab, setActiveTab] = useState('inbox')
-  const [statusFilter, setStatusFilter] = useState<LeakStatusFilter>('all')
-  const [sourceFilter, setSourceFilter] = useState<LeakSourceFilter>('all')
-  const [sortOption, setSortOption] = useState<LeakSortOption>('updated_desc')
-  const [focusFilter, setFocusFilter] = useState<LeakFocusFilter>('all')
-  const [groupBy, setGroupBy] = useState<LeakGroupOption>('none')
-  const [patternFilter, setPatternFilter] = useState<PatternFilter>('all')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [title, setTitle] = useState('')
-  const [details, setDetails] = useState('')
-  const [severity, setSeverity] = useState<'info' | 'warning' | 'critical'>('warning')
-  const [sphere, setSphere] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [selectedDraft, setSelectedDraft] = useState<LeakDraft | null>(null)
-  const [updatingLeakId, setUpdatingLeakId] = useState<string | null>(null)
-  const [editingLeakId, setEditingLeakId] = useState<string | null>(null)
-  const [editingLeakTitle, setEditingLeakTitle] = useState('')
-  const [editingLeakDescription, setEditingLeakDescription] = useState('')
-  const [actionLeakId, setActionLeakId] = useState<string | null>(null)
-  const [savingSignalKey, setSavingSignalKey] = useState<string | null>(null)
-  const [expandedLeakId, setExpandedLeakId] = useState<string | null>(null)
-  const [plansByLeak, setPlansByLeak] = useState<Record<string, LeakSolutionPlan[]>>({})
-  const [loadingPlansLeakId, setLoadingPlansLeakId] = useState<string | null>(null)
-  const [generatingPlansLeakId, setGeneratingPlansLeakId] = useState<string | null>(null)
-  const [selectingPlanLeakId, setSelectingPlanLeakId] = useState<string | null>(null)
-  const [executingPolicyLeakId, setExecutingPolicyLeakId] = useState<string | null>(null)
-  const [applyingPlanLeakId, setApplyingPlanLeakId] = useState<string | null>(null)
-  const [applyingPlanActionId, setApplyingPlanActionId] = useState<string | null>(null)
-  const [savingFeedbackActionId, setSavingFeedbackActionId] = useState<string | null>(null)
-  const [savingFeedbackLeakId, setSavingFeedbackLeakId] = useState<string | null>(null)
-  const [feedbackCommentByAction, setFeedbackCommentByAction] = useState<Record<string, string>>({})
-  const [savingPatternLeakType, setSavingPatternLeakType] = useState<string | null>(null)
-  const [retryingLeakId, setRetryingLeakId] = useState<string | null>(null)
-  const [focusedPlanActionId, setFocusedPlanActionId] = useState<string | null>(null)
-  const [policyByLeak, setPolicyByLeak] = useState<Record<string, LeakPolicyHint | null>>({})
+  const { user, setScreen } = useAppStore();
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [leaks, setLeaks] = useState<LeakEntity[]>([]);
+  const [signals, setSignals] = useState<LeakHint[]>([]);
+  const [patterns, setPatterns] = useState<LeakPattern[]>([]);
+  const [activeTab, setActiveTab] = useState("inbox");
+  const [statusFilter, setStatusFilter] = useState<LeakStatusFilter>("all");
+  const [sourceFilter, setSourceFilter] = useState<LeakSourceFilter>("all");
+  const [sortOption, setSortOption] = useState<LeakSortOption>("updated_desc");
+  const [focusFilter, setFocusFilter] = useState<LeakFocusFilter>("all");
+  const [groupBy, setGroupBy] = useState<LeakGroupOption>("none");
+  const [patternFilter, setPatternFilter] = useState<PatternFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [title, setTitle] = useState("");
+  const [details, setDetails] = useState("");
+  const [severity, setSeverity] = useState<"info" | "warning" | "critical">("warning");
+  const [sphere, setSphere] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [selectedDraft, setSelectedDraft] = useState<LeakDraft | null>(null);
+  const [updatingLeakId, setUpdatingLeakId] = useState<string | null>(null);
+  const [editingLeakId, setEditingLeakId] = useState<string | null>(null);
+  const [editingLeakTitle, setEditingLeakTitle] = useState("");
+  const [editingLeakDescription, setEditingLeakDescription] = useState("");
+  const [actionLeakId, setActionLeakId] = useState<string | null>(null);
+  const [savingSignalKey, setSavingSignalKey] = useState<string | null>(null);
+  const [expandedLeakId, setExpandedLeakId] = useState<string | null>(null);
+  const [plansByLeak, setPlansByLeak] = useState<Record<string, LeakSolutionPlan[]>>({});
+  const [loadingPlansLeakId, setLoadingPlansLeakId] = useState<string | null>(null);
+  const [generatingPlansLeakId, setGeneratingPlansLeakId] = useState<string | null>(null);
+  const [selectingPlanLeakId, setSelectingPlanLeakId] = useState<string | null>(null);
+  const [executingPolicyLeakId, setExecutingPolicyLeakId] = useState<string | null>(null);
+  const [applyingPlanLeakId, setApplyingPlanLeakId] = useState<string | null>(null);
+  const [applyingPlanActionId, setApplyingPlanActionId] = useState<string | null>(null);
+  const [savingFeedbackActionId, setSavingFeedbackActionId] = useState<string | null>(null);
+  const [savingFeedbackLeakId, setSavingFeedbackLeakId] = useState<string | null>(null);
+  const [feedbackCommentByAction, setFeedbackCommentByAction] = useState<Record<string, string>>(
+    {}
+  );
+  const [savingPatternLeakType, setSavingPatternLeakType] = useState<string | null>(null);
+  const [retryingLeakId, setRetryingLeakId] = useState<string | null>(null);
+  const [focusedPlanActionId, setFocusedPlanActionId] = useState<string | null>(null);
+  const [policyByLeak, setPolicyByLeak] = useState<Record<string, LeakPolicyHint | null>>({});
   const [feedbackHistoryFilterByLeak, setFeedbackHistoryFilterByLeak] = useState<
     Record<string, FeedbackHistoryFilter>
-  >({})
+  >({});
 
   useEffect(() => {
-    if (!focusedPlanActionId) return
+    if (!focusedPlanActionId) return;
 
     const timer = window.setTimeout(() => {
-      setFocusedPlanActionId(null)
-    }, 3200)
+      setFocusedPlanActionId(null);
+    }, 3200);
 
-    return () => window.clearTimeout(timer)
-  }, [focusedPlanActionId])
+    return () => window.clearTimeout(timer);
+  }, [focusedPlanActionId]);
 
   useEffect(() => {
-    if (!expandedLeakId) return
-    const leakPlans = plansByLeak[expandedLeakId] || []
-    const expandedLeak = leaks.find((item) => item.id === expandedLeakId)
-    if (!expandedLeak) return
-    const guidance = buildLeakGuidance(expandedLeak, leakPlans)
+    if (!expandedLeakId) return;
+    const leakPlans = plansByLeak[expandedLeakId] || [];
+    const expandedLeak = leaks.find((item) => item.id === expandedLeakId);
+    if (!expandedLeak) return;
+    const guidance = buildLeakGuidance(expandedLeak, leakPlans);
 
-    const currentFilter = feedbackHistoryFilterByLeak[expandedLeakId] || 'all'
-    if (guidance?.failedActions && guidance.failedActions > 0 && currentFilter !== 'problem') {
+    const currentFilter = feedbackHistoryFilterByLeak[expandedLeakId] || "all";
+    if (guidance?.failedActions && guidance.failedActions > 0 && currentFilter !== "problem") {
       setFeedbackHistoryFilterByLeak((current) => ({
         ...current,
-        [expandedLeakId]: 'problem',
-      }))
-      return
+        [expandedLeakId]: "problem",
+      }));
+      return;
     }
 
-    if ((!guidance?.failedActions || guidance.failedActions === 0) && currentFilter === 'problem') {
+    if ((!guidance?.failedActions || guidance.failedActions === 0) && currentFilter === "problem") {
       setFeedbackHistoryFilterByLeak((current) => ({
         ...current,
-        [expandedLeakId]: 'all',
-      }))
+        [expandedLeakId]: "all",
+      }));
     }
-  }, [expandedLeakId, plansByLeak, leaks, feedbackHistoryFilterByLeak])
+  }, [expandedLeakId, plansByLeak, leaks, feedbackHistoryFilterByLeak]);
 
-  const hasDraft = title.trim().length > 0 || details.trim().length > 0
+  const hasDraft = title.trim().length > 0 || details.trim().length > 0;
 
   const loadData = async (showSkeleton = false) => {
-    if (!user?.id) return
+    if (!user?.id) return;
 
-    if (showSkeleton) setLoading(true)
-    else setRefreshing(true)
+    if (showSkeleton) setLoading(true);
+    else setRefreshing(true);
 
     try {
-      const weekStart = getCurrentMonday()
+      const weekStart = getCurrentMonday();
       const [leaksRes, signalsRes, patternsRes] = await Promise.all([
         fetch(`/api/leaks?userId=${user.id}&status=all&limit=100`),
         fetch(`/api/weekly-report?userId=${user.id}&weekStart=${weekStart}`),
         fetch(`/api/ai/patterns?userId=${user.id}`),
-      ])
+      ]);
 
-      const leaksData = await leaksRes.json()
-      const signalsData = await signalsRes.json()
-      const patternsData = await patternsRes.json()
+      const leaksData = await leaksRes.json();
+      const signalsData = await signalsRes.json();
+      const patternsData = await patternsRes.json();
 
-      setLeaks(Array.isArray(leaksData.leaks) ? leaksData.leaks.map(normalizeLeak) : [])
-      setPolicyByLeak({})
-      setSignals(Array.isArray(signalsData.leakHints) ? signalsData.leakHints : [])
+      setLeaks(Array.isArray(leaksData.leaks) ? leaksData.leaks.map(normalizeLeak) : []);
+      setPolicyByLeak({});
+      setSignals(Array.isArray(signalsData.leakHints) ? signalsData.leakHints : []);
       setPatterns(
         Array.isArray(patternsData.patterns)
           ? patternsData.patterns
               .map(normalizePattern)
               .filter((item): item is LeakPattern => Boolean(item))
-          : [],
-      )
+          : []
+      );
     } catch (error) {
-      showErrorToast(error, 'load leaks module')
+      showErrorToast(error, "load leaks module");
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      setLoading(false);
+      setRefreshing(false);
     }
-  }
+  };
 
   useEffect(() => {
-    loadData(true)
-  }, [user?.id])
+    loadData(true);
+  }, [user?.id]);
 
   const filteredLeaks = useMemo(() => {
     const filtered = leaks.filter((leak) => {
-      if (statusFilter !== 'all' && leak.status !== statusFilter) return false
-      if (sourceFilter !== 'all' && leak.source !== sourceFilter) return false
-      if (focusFilter === 'focus' && !isFocusLeak(leak)) return false
+      if (statusFilter !== "all" && leak.status !== statusFilter) return false;
+      if (sourceFilter !== "all" && leak.source !== sourceFilter) return false;
+      if (focusFilter === "focus" && !isFocusLeak(leak)) return false;
 
-      if (!searchQuery.trim()) return true
+      if (!searchQuery.trim()) return true;
 
-      const normalizedQuery = searchQuery.trim().toLowerCase()
+      const normalizedQuery = searchQuery.trim().toLowerCase();
       return (
         normalizeLookupValue(leak.title).includes(normalizedQuery) ||
         normalizeLookupValue(leak.description).includes(normalizedQuery) ||
         normalizeLookupValue(leak.sphere).includes(normalizedQuery) ||
         normalizeLookupValue(getSphereLabel(leak.sphere)).includes(normalizedQuery)
-      )
-    })
+      );
+    });
 
-    const severityRank: Record<LeakEntity['severity'], number> = {
+    const severityRank: Record<LeakEntity["severity"], number> = {
       critical: 3,
       warning: 2,
       info: 1,
-    }
+    };
 
     return filtered.sort((a, b) => {
-      if (sortOption === 'created_desc') {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      if (sortOption === "created_desc") {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       }
 
-      if (sortOption === 'severity_desc') {
-        const byFocus = Number(isFocusLeak(b)) - Number(isFocusLeak(a))
-        if (byFocus !== 0) return byFocus
-        const bySeverity = severityRank[b.severity] - severityRank[a.severity]
-        if (bySeverity !== 0) return bySeverity
+      if (sortOption === "severity_desc") {
+        const byFocus = Number(isFocusLeak(b)) - Number(isFocusLeak(a));
+        if (byFocus !== 0) return byFocus;
+        const bySeverity = severityRank[b.severity] - severityRank[a.severity];
+        if (bySeverity !== 0) return bySeverity;
       }
 
-      const byFocus = Number(isFocusLeak(b)) - Number(isFocusLeak(a))
-      if (byFocus !== 0) return byFocus
+      const byFocus = Number(isFocusLeak(b)) - Number(isFocusLeak(a));
+      if (byFocus !== 0) return byFocus;
 
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    })
-  }, [leaks, searchQuery, sourceFilter, statusFilter, sortOption, focusFilter])
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+  }, [leaks, searchQuery, sourceFilter, statusFilter, sortOption, focusFilter]);
 
   const leakCounts = useMemo(() => {
     return leaks.reduce(
       (acc, leak) => {
-        acc.all += 1
-        acc[leak.status] += 1
-        return acc
+        acc.all += 1;
+        acc[leak.status] += 1;
+        return acc;
       },
       {
         all: 0,
@@ -2369,210 +2553,208 @@ export function LeaksScreen() {
         in_progress: 0,
         resolved: 0,
         archived: 0,
-      } as Record<LeakStatusFilter, number>,
-    )
-  }, [leaks])
+      } as Record<LeakStatusFilter, number>
+    );
+  }, [leaks]);
 
-  const focusLeakCount = useMemo(() => leaks.filter((leak) => isFocusLeak(leak)).length, [leaks])
+  const focusLeakCount = useMemo(() => leaks.filter((leak) => isFocusLeak(leak)).length, [leaks]);
   const groupCounts = useMemo(() => {
-    if (groupBy === 'none') return {}
+    if (groupBy === "none") return {};
 
     return filteredLeaks.reduce<Record<string, number>>((acc, leak) => {
-      const key = getLeakGroupKey(leak, groupBy)
-      acc[key] = (acc[key] || 0) + 1
-      return acc
-    }, {})
-  }, [filteredLeaks, groupBy])
+      const key = getLeakGroupKey(leak, groupBy);
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+  }, [filteredLeaks, groupBy]);
 
   const visiblePatterns = useMemo(() => {
     const sorted = [...patterns].sort((a, b) => {
-      const activeA = typeof a.activeLeakCount === 'number' ? a.activeLeakCount : 0
-      const activeB = typeof b.activeLeakCount === 'number' ? b.activeLeakCount : 0
-      if (activeB !== activeA) return activeB - activeA
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    })
+      const activeA = typeof a.activeLeakCount === "number" ? a.activeLeakCount : 0;
+      const activeB = typeof b.activeLeakCount === "number" ? b.activeLeakCount : 0;
+      if (activeB !== activeA) return activeB - activeA;
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
 
-    if (patternFilter === 'linked') {
-      return sorted.filter((pattern) => (pattern.activeLeakCount || 0) > 0)
+    if (patternFilter === "linked") {
+      return sorted.filter((pattern) => (pattern.activeLeakCount || 0) > 0);
     }
 
-    return sorted
-  }, [patterns, patternFilter])
+    return sorted;
+  }, [patterns, patternFilter]);
 
   const priorityLeaks = useMemo(() => {
-    const severityRank: Record<LeakEntity['severity'], number> = {
+    const severityRank: Record<LeakEntity["severity"], number> = {
       critical: 3,
       warning: 2,
       info: 1,
-    }
+    };
 
     const scoreLeak = (leak: LeakEntity) => {
-      let score = severityRank[leak.severity] * 10
-      if (leak.status === 'new') score += 7
-      if (leak.status === 'in_progress') score += 5
-      if (isFocusLeak(leak)) score += 4
-      if (leak.actions.length === 0) score += 2
-      return score
-    }
+      let score = severityRank[leak.severity] * 10;
+      if (leak.status === "new") score += 7;
+      if (leak.status === "in_progress") score += 5;
+      if (isFocusLeak(leak)) score += 4;
+      if (leak.actions.length === 0) score += 2;
+      return score;
+    };
 
     return leaks
-      .filter((leak) => leak.status === 'new' || leak.status === 'in_progress')
+      .filter((leak) => leak.status === "new" || leak.status === "in_progress")
       .sort((a, b) => {
-        const byScore = scoreLeak(b) - scoreLeak(a)
-        if (byScore !== 0) return byScore
-        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        const byScore = scoreLeak(b) - scoreLeak(a);
+        if (byScore !== 0) return byScore;
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
       })
-      .slice(0, 3)
-  }, [leaks])
+      .slice(0, 3);
+  }, [leaks]);
 
   const createLeak = async () => {
-    if (!user?.id || !hasDraft) return
+    if (!user?.id || !hasDraft) return;
 
-    const nextTitle = title.trim() || details.trim().slice(0, 80) || 'Новый лик'
-    const nextDescription = details.trim() || null
-    const duplicateLeak = findOpenLeak(nextTitle, nextDescription)
+    const nextTitle = title.trim() || details.trim().slice(0, 80) || "Новый лик";
+    const nextDescription = details.trim() || null;
+    const duplicateLeak = findOpenLeak(nextTitle, nextDescription);
     if (duplicateLeak) {
-      setActiveTab('inbox')
-      setStatusFilter('all')
-      setExpandedLeakId(duplicateLeak.id)
-      showSuccessToast('Похожий активный leak уже есть в inbox, открыл его для продолжения')
-      return
+      setActiveTab("inbox");
+      setStatusFilter("all");
+      setExpandedLeakId(duplicateLeak.id);
+      showSuccessToast("Похожий активный leak уже есть в inbox, открыл его для продолжения");
+      return;
     }
 
-    setSubmitting(true)
+    setSubmitting(true);
     try {
-      const response = await fetch('/api/leaks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/leaks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           title: nextTitle,
           description: nextDescription,
           severity,
-          source: 'manual',
+          source: "manual",
           sphere,
         }),
-      })
+      });
 
       if (!response.ok) {
-        throw response
+        throw response;
       }
 
-      const data = await response.json()
-      const createdLeak = normalizeLeak(data.leak as LeakEntity)
+      const data = await response.json();
+      const createdLeak = normalizeLeak(data.leak as LeakEntity);
       if (data.deduped) {
-        setActiveTab('inbox')
-        setStatusFilter('all')
-        setExpandedLeakId(createdLeak.id)
-        showSuccessToast('Похожий активный leak уже есть, открыл его вместо дубля')
-        return
+        setActiveTab("inbox");
+        setStatusFilter("all");
+        setExpandedLeakId(createdLeak.id);
+        showSuccessToast("Похожий активный leak уже есть, открыл его вместо дубля");
+        return;
       }
 
-      setLeaks((current) => [createdLeak, ...current])
-      setExpandedLeakId(createdLeak.id)
-      setTitle('')
-      setDetails('')
-      setSeverity('warning')
-      setSphere(null)
-      setActiveTab('inbox')
-      setStatusFilter('all')
+      setLeaks((current) => [createdLeak, ...current]);
+      setExpandedLeakId(createdLeak.id);
+      setTitle("");
+      setDetails("");
+      setSeverity("warning");
+      setSphere(null);
+      setActiveTab("inbox");
+      setStatusFilter("all");
 
-      setSelectedDraft(null)
+      setSelectedDraft(null);
 
-      showSuccessToast('Лик сохранён')
+      showSuccessToast("Лик сохранён");
     } catch (error) {
-      showErrorToast(error, 'create leak')
+      showErrorToast(error, "create leak");
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
-  }
+  };
 
   const updateLeakStatus = async (
     leakId: string,
-    status: Exclude<LeakStatusFilter, 'all'>,
-    options?: { silent?: boolean },
+    status: Exclude<LeakStatusFilter, "all">,
+    options?: { silent?: boolean }
   ) => {
-    if (!user?.id || updatingLeakId) return
+    if (!user?.id || updatingLeakId) return;
 
-    setUpdatingLeakId(leakId)
+    setUpdatingLeakId(leakId);
     try {
-      const response = await fetch('/api/leaks', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/leaks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           id: leakId,
           status,
         }),
-      })
+      });
 
       if (!response.ok) {
-        throw response
+        throw response;
       }
 
-      const data = await response.json()
-      const updatedLeak = normalizeLeak(data.leak as LeakEntity)
+      const data = await response.json();
+      const updatedLeak = normalizeLeak(data.leak as LeakEntity);
 
-      setLeaks((current) =>
-        current.map((leak) => (leak.id === leakId ? updatedLeak : leak)),
-      )
+      setLeaks((current) => current.map((leak) => (leak.id === leakId ? updatedLeak : leak)));
       if (!options?.silent) {
-        showSuccessToast('Статус лика обновлён')
+        showSuccessToast("Статус лика обновлён");
       }
-      return true
+      return true;
     } catch (error) {
-      showErrorToast(error, 'update leak status')
-      return false
+      showErrorToast(error, "update leak status");
+      return false;
     } finally {
-      setUpdatingLeakId(null)
+      setUpdatingLeakId(null);
     }
-  }
+  };
 
   const updateLeakSphere = async (leakId: string, nextSphere: string | null) => {
-    if (!user?.id || updatingLeakId) return
+    if (!user?.id || updatingLeakId) return;
 
-    setUpdatingLeakId(leakId)
+    setUpdatingLeakId(leakId);
     try {
-      const response = await fetch('/api/leaks', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/leaks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           id: leakId,
           sphere: nextSphere,
         }),
-      })
+      });
 
-      if (!response.ok) throw response
+      if (!response.ok) throw response;
 
-      const data = await response.json()
-      const updatedLeak = normalizeLeak(data.leak as LeakEntity)
+      const data = await response.json();
+      const updatedLeak = normalizeLeak(data.leak as LeakEntity);
 
-      setLeaks((current) =>
-        current.map((leak) => (leak.id === leakId ? updatedLeak : leak)),
-      )
-      showSuccessToast('Сфера лика обновлена')
+      setLeaks((current) => current.map((leak) => (leak.id === leakId ? updatedLeak : leak)));
+      showSuccessToast("Сфера лика обновлена");
     } catch (error) {
-      showErrorToast(error, 'update leak sphere')
+      showErrorToast(error, "update leak sphere");
     } finally {
-      setUpdatingLeakId(null)
+      setUpdatingLeakId(null);
     }
-  }
+  };
 
   const toggleLeakFocus = async (leak: LeakEntity) => {
-    if (!user?.id || updatingLeakId) return
+    if (!user?.id || updatingLeakId) return;
 
     const currentSnapshot =
-      leak.contextSnapshot && typeof leak.contextSnapshot === 'object' && !Array.isArray(leak.contextSnapshot)
+      leak.contextSnapshot &&
+      typeof leak.contextSnapshot === "object" &&
+      !Array.isArray(leak.contextSnapshot)
         ? (leak.contextSnapshot as Record<string, unknown>)
-        : {}
-    const nextFocusValue = !isFocusLeak(leak)
+        : {};
+    const nextFocusValue = !isFocusLeak(leak);
 
-    setUpdatingLeakId(leak.id)
+    setUpdatingLeakId(leak.id);
     try {
-      const response = await fetch('/api/leaks', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/leaks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           id: leak.id,
@@ -2582,162 +2764,160 @@ export function LeaksScreen() {
             focusUpdatedAt: new Date().toISOString(),
           },
         }),
-      })
+      });
 
-      if (!response.ok) throw response
+      if (!response.ok) throw response;
 
-      const data = await response.json()
-      const updatedLeak = normalizeLeak(data.leak as LeakEntity)
-      setLeaks((current) => current.map((item) => (item.id === leak.id ? updatedLeak : item)))
-      showSuccessToast(nextFocusValue ? 'Leak добавлен в фокус' : 'Leak убран из фокуса')
+      const data = await response.json();
+      const updatedLeak = normalizeLeak(data.leak as LeakEntity);
+      setLeaks((current) => current.map((item) => (item.id === leak.id ? updatedLeak : item)));
+      showSuccessToast(nextFocusValue ? "Leak добавлен в фокус" : "Leak убран из фокуса");
     } catch (error) {
-      showErrorToast(error, 'toggle leak focus')
+      showErrorToast(error, "toggle leak focus");
     } finally {
-      setUpdatingLeakId(null)
+      setUpdatingLeakId(null);
     }
-  }
+  };
 
   const startEditingLeak = (leak: LeakEntity) => {
-    setEditingLeakId(leak.id)
-    setEditingLeakTitle(leak.title)
-    setEditingLeakDescription(leak.description || '')
-    setExpandedLeakId(leak.id)
-  }
+    setEditingLeakId(leak.id);
+    setEditingLeakTitle(leak.title);
+    setEditingLeakDescription(leak.description || "");
+    setExpandedLeakId(leak.id);
+  };
 
   const cancelEditingLeak = () => {
-    setEditingLeakId(null)
-    setEditingLeakTitle('')
-    setEditingLeakDescription('')
-  }
+    setEditingLeakId(null);
+    setEditingLeakTitle("");
+    setEditingLeakDescription("");
+  };
 
   const saveLeakEdits = async (leakId: string) => {
-    if (!user?.id || updatingLeakId || !editingLeakTitle.trim()) return
+    if (!user?.id || updatingLeakId || !editingLeakTitle.trim()) return;
 
-    setUpdatingLeakId(leakId)
+    setUpdatingLeakId(leakId);
     try {
-      const response = await fetch('/api/leaks', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/leaks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           id: leakId,
           title: editingLeakTitle.trim(),
           description: editingLeakDescription.trim() || null,
         }),
-      })
+      });
 
-      if (!response.ok) throw response
+      if (!response.ok) throw response;
 
-      const data = await response.json()
-      const updatedLeak = normalizeLeak(data.leak as LeakEntity)
+      const data = await response.json();
+      const updatedLeak = normalizeLeak(data.leak as LeakEntity);
 
-      setLeaks((current) =>
-        current.map((leak) => (leak.id === leakId ? updatedLeak : leak)),
-      )
-      cancelEditingLeak()
-      showSuccessToast('Лик обновлён')
+      setLeaks((current) => current.map((leak) => (leak.id === leakId ? updatedLeak : leak)));
+      cancelEditingLeak();
+      showSuccessToast("Лик обновлён");
     } catch (error) {
-      showErrorToast(error, 'save leak edits')
+      showErrorToast(error, "save leak edits");
     } finally {
-      setUpdatingLeakId(null)
+      setUpdatingLeakId(null);
     }
-  }
+  };
 
   const saveLeakAction = async (
     leak: LeakEntity,
     action: {
-      entityType: LeakActionLink['entityType']
-      entityId: string
-      label: string
-      metadata?: Record<string, unknown> | null
-    },
+      entityType: LeakActionLink["entityType"];
+      entityId: string;
+      label: string;
+      metadata?: Record<string, unknown> | null;
+    }
   ) => {
-    if (!user?.id) return
+    if (!user?.id) return;
 
-    const response = await fetch('/api/leaks', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+    const response = await fetch("/api/leaks", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         userId: user.id,
         id: leak.id,
-        status: leak.status === 'new' ? 'in_progress' : undefined,
+        status: leak.status === "new" ? "in_progress" : undefined,
         appendAction: action,
       }),
-    })
+    });
 
     if (!response.ok) {
-      throw response
+      throw response;
     }
 
-    const data = await response.json()
-    const updatedLeak = normalizeLeak(data.leak as LeakEntity)
-    setLeaks((current) => current.map((item) => (item.id === leak.id ? updatedLeak : item)))
-    setExpandedLeakId(leak.id)
-  }
+    const data = await response.json();
+    const updatedLeak = normalizeLeak(data.leak as LeakEntity);
+    setLeaks((current) => current.map((item) => (item.id === leak.id ? updatedLeak : item)));
+    setExpandedLeakId(leak.id);
+  };
 
-  const hasActionType = (leak: LeakEntity, entityType: LeakActionLink['entityType']) =>
-    leak.actions?.some((action) => action.entityType === entityType)
+  const hasActionType = (leak: LeakEntity, entityType: LeakActionLink["entityType"]) =>
+    leak.actions?.some((action) => action.entityType === entityType);
 
   const findOpenLeak = (title: string, description?: string | null) =>
     leaks.find((leak) => {
-      if (leak.status === 'resolved' || leak.status === 'archived') return false
+      if (leak.status === "resolved" || leak.status === "archived") return false;
 
-      const sameTitle = normalizeLookupValue(leak.title) === normalizeLookupValue(title)
-      if (!sameTitle) return false
+      const sameTitle = normalizeLookupValue(leak.title) === normalizeLookupValue(title);
+      if (!sameTitle) return false;
 
-      if (!description) return true
-      return normalizeLookupValue(leak.description) === normalizeLookupValue(description)
-    })
+      if (!description) return true;
+      return normalizeLookupValue(leak.description) === normalizeLookupValue(description);
+    });
 
   const loadPlansForLeak = async (leakId: string) => {
-    if (!user?.id) return
+    if (!user?.id) return;
 
-    setLoadingPlansLeakId(leakId)
+    setLoadingPlansLeakId(leakId);
     try {
       const response = await fetch(`/api/leaks/${leakId}/plans?userId=${user.id}`, {
-        cache: 'no-store',
-      })
+        cache: "no-store",
+      });
 
-      if (!response.ok) throw response
+      if (!response.ok) throw response;
 
-      const data = await response.json()
+      const data = await response.json();
       setPlansByLeak((current) => ({
         ...current,
         [leakId]: normalizePlans(data.plans || []),
-      }))
+      }));
       if (data.policy) {
         setPolicyByLeak((current) => ({
           ...current,
           [leakId]: normalizeLeakPolicy(data.policy),
-        }))
+        }));
       }
     } catch (error) {
-      showErrorToast(error, 'load leak plans')
+      showErrorToast(error, "load leak plans");
     } finally {
-      setLoadingPlansLeakId(null)
+      setLoadingPlansLeakId(null);
     }
-  }
+  };
 
   const generatePlansForLeak = async (
     leakId: string,
     regenerate = false,
     options?: {
-      silent?: boolean
+      silent?: boolean;
       retryFocus?: {
-        actionId?: string | null
-        actionTitle: string
-        actionKind?: LeakPlanAction['kind'] | null
-        failureReason?: string | null
-      } | null
-    },
+        actionId?: string | null;
+        actionTitle: string;
+        actionKind?: LeakPlanAction["kind"] | null;
+        failureReason?: string | null;
+      } | null;
+    }
   ) => {
-    if (!user?.id) return
+    if (!user?.id) return;
 
-    setGeneratingPlansLeakId(leakId)
+    setGeneratingPlansLeakId(leakId);
     try {
       const response = await fetch(`/api/leaks/${leakId}/plans`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           regenerate,
@@ -2746,101 +2926,103 @@ export function LeaksScreen() {
           retryActionKind: options?.retryFocus?.actionKind || undefined,
           retryFailureReason: options?.retryFocus?.failureReason || undefined,
         }),
-      })
+      });
 
-      if (!response.ok) throw response
+      if (!response.ok) throw response;
 
-      const data = await response.json()
+      const data = await response.json();
       setPlansByLeak((current) => ({
         ...current,
         [leakId]: normalizePlans(data.plans || []),
-      }))
+      }));
       if (data.policy) {
         setPolicyByLeak((current) => ({
           ...current,
           [leakId]: normalizeLeakPolicy(data.policy),
-        }))
+        }));
       }
       if (!options?.silent) {
-        showSuccessToast(regenerate ? 'Планы пересобраны' : 'Планы для лика готовы')
+        showSuccessToast(regenerate ? "Планы пересобраны" : "Планы для лика готовы");
       }
-      return true
+      return true;
     } catch (error) {
-      showErrorToast(error, 'generate leak plans')
-      return false
+      showErrorToast(error, "generate leak plans");
+      return false;
     } finally {
-      setGeneratingPlansLeakId(null)
+      setGeneratingPlansLeakId(null);
     }
-  }
+  };
 
-  const selectPlanMode = async (leakId: string, mode: LeakSolutionPlan['mode']) => {
-    if (!user?.id) return
+  const selectPlanMode = async (leakId: string, mode: LeakSolutionPlan["mode"]) => {
+    if (!user?.id) return;
 
-    setSelectingPlanLeakId(leakId)
+    setSelectingPlanLeakId(leakId);
     try {
       const response = await fetch(`/api/leaks/${leakId}/plans`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           mode,
         }),
-      })
+      });
 
-      if (!response.ok) throw response
+      if (!response.ok) throw response;
 
-      const data = await response.json()
+      const data = await response.json();
       setPlansByLeak((current) => ({
         ...current,
         [leakId]: normalizePlans(data.plans || []),
-      }))
+      }));
       if (data.policy) {
         setPolicyByLeak((current) => ({
           ...current,
           [leakId]: normalizeLeakPolicy(data.policy),
-        }))
+        }));
       }
       setLeaks((current) =>
         current.map((leak) => {
-          if (leak.id !== leakId) return leak
+          if (leak.id !== leakId) return leak;
           const snapshot =
-            leak.contextSnapshot && typeof leak.contextSnapshot === 'object' && !Array.isArray(leak.contextSnapshot)
+            leak.contextSnapshot &&
+            typeof leak.contextSnapshot === "object" &&
+            !Array.isArray(leak.contextSnapshot)
               ? ({ ...leak.contextSnapshot } as Record<string, unknown>)
-              : {}
-          snapshot.selectedPlanMode = mode
-          snapshot.contextUpdatedAt = new Date().toISOString()
+              : {};
+          snapshot.selectedPlanMode = mode;
+          snapshot.contextUpdatedAt = new Date().toISOString();
           return {
             ...leak,
             contextSnapshot: snapshot,
-          }
-        }),
-      )
-      showSuccessToast(`Выбран режим: ${PLAN_MODE_LABELS[mode]}`)
+          };
+        })
+      );
+      showSuccessToast(`Выбран режим: ${PLAN_MODE_LABELS[mode]}`);
     } catch (error) {
-      showErrorToast(error, 'select leak plan')
+      showErrorToast(error, "select leak plan");
     } finally {
-      setSelectingPlanLeakId(null)
+      setSelectingPlanLeakId(null);
     }
-  }
+  };
 
   const toggleLeakDetails = async (leakId: string) => {
-    const willOpen = expandedLeakId !== leakId
-    setExpandedLeakId(willOpen ? leakId : null)
+    const willOpen = expandedLeakId !== leakId;
+    setExpandedLeakId(willOpen ? leakId : null);
 
     if (willOpen && !plansByLeak[leakId] && loadingPlansLeakId !== leakId) {
-      await loadPlansForLeak(leakId)
-      await loadPolicyForLeak(leakId)
+      await loadPlansForLeak(leakId);
+      await loadPolicyForLeak(leakId);
     }
-  }
+  };
 
   const loadPolicyForLeak = async (leakId: string) => {
-    if (!user?.id) return
+    if (!user?.id) return;
     try {
       const response = await fetch(`/api/leaks/${leakId}/policy?userId=${user.id}`, {
-        cache: 'no-store',
-      })
-      if (!response.ok) throw response
-      const data = await response.json()
+        cache: "no-store",
+      });
+      if (!response.ok) throw response;
+      const data = await response.json();
       setPolicyByLeak((current) => ({
         ...current,
         [leakId]: normalizeLeakPolicy({
@@ -2848,37 +3030,37 @@ export function LeaksScreen() {
           summary: data.summary || undefined,
           runJournal: data.runJournal || undefined,
         }),
-      }))
+      }));
     } catch (error) {
-      showErrorToast(error, 'load leak policy')
+      showErrorToast(error, "load leak policy");
     }
-  }
+  };
 
   const executePolicyAction = async (
     leak: LeakEntity,
     payload: {
-      actionType: 'switch_mode' | 'retry' | 'regenerate_context' | 'focus_action'
-      decision?: 'accepted' | 'rejected'
-      reason?: string | null
-      correlationId?: string | null
-      targetMode?: LeakSolutionPlan['mode']
-      actionId?: string | null
-      actionTitle?: string | null
-      actionKind?: string | null
-      factors?: Array<{ key: string; weight: number; detail?: string }>
-    },
+      actionType: "switch_mode" | "retry" | "regenerate_context" | "focus_action";
+      decision?: "accepted" | "rejected";
+      reason?: string | null;
+      correlationId?: string | null;
+      targetMode?: LeakSolutionPlan["mode"];
+      actionId?: string | null;
+      actionTitle?: string | null;
+      actionKind?: string | null;
+      factors?: Array<{ key: string; weight: number; detail?: string }>;
+    }
   ) => {
-    if (!user?.id) return false
-    if (executingPolicyLeakId === leak.id) return false
-    setExecutingPolicyLeakId(leak.id)
+    if (!user?.id) return false;
+    if (executingPolicyLeakId === leak.id) return false;
+    setExecutingPolicyLeakId(leak.id);
     try {
       const response = await fetch(`/api/leaks/${leak.id}/policy/act`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           actionType: payload.actionType,
-          decision: payload.decision || 'accepted',
+          decision: payload.decision || "accepted",
           reason: payload.reason || null,
           correlationId: payload.correlationId || undefined,
           targetMode: payload.targetMode || undefined,
@@ -2887,192 +3069,196 @@ export function LeaksScreen() {
           actionKind: payload.actionKind || undefined,
           factors: payload.factors || undefined,
         }),
-      })
-      if (!response.ok) throw response
-      const data = await response.json()
+      });
+      if (!response.ok) throw response;
+      const data = await response.json();
       if (data.requiresRegenerate) {
-        await generatePlansForLeak(leak.id, true, { silent: true })
+        await generatePlansForLeak(leak.id, true, { silent: true });
       }
-      await loadPlansForLeak(leak.id)
-      await loadPolicyForLeak(leak.id)
-      return true
+      await loadPlansForLeak(leak.id);
+      await loadPolicyForLeak(leak.id);
+      return true;
     } catch (error) {
-      showErrorToast(error, 'execute leak policy action')
-      return false
+      showErrorToast(error, "execute leak policy action");
+      return false;
     } finally {
-      setExecutingPolicyLeakId(null)
+      setExecutingPolicyLeakId(null);
     }
-  }
+  };
 
   const executeSuggestedPolicyAction = async (
     leak: LeakEntity,
     nextBestActionHint: NextBestActionHint,
     selectedPlan: LeakSolutionPlan | null,
-    planActionsById: Map<string, LeakPlanAction>,
+    planActionsById: Map<string, LeakPlanAction>
   ) => {
-    if (nextBestActionHint.type === 'switch_mode' && nextBestActionHint.targetMode) {
+    if (nextBestActionHint.type === "switch_mode" && nextBestActionHint.targetMode) {
       await executePolicyAction(leak, {
-        actionType: 'switch_mode',
+        actionType: "switch_mode",
         correlationId: nextBestActionHint.correlationId || null,
         targetMode: nextBestActionHint.targetMode,
         factors: nextBestActionHint.factors || [],
-      })
-      return
+      });
+      return;
     }
 
-    if (nextBestActionHint.type === 'create_entity' && nextBestActionHint.actionId && selectedPlan) {
-      const action = selectedPlan.actions.find((item) => item.id === nextBestActionHint.actionId)
-      if (!action) return
+    if (
+      nextBestActionHint.type === "create_entity" &&
+      nextBestActionHint.actionId &&
+      selectedPlan
+    ) {
+      const action = selectedPlan.actions.find((item) => item.id === nextBestActionHint.actionId);
+      if (!action) return;
       await executePolicyAction(leak, {
-        actionType: 'focus_action',
+        actionType: "focus_action",
         correlationId: nextBestActionHint.correlationId || null,
         actionId: action.id,
         actionTitle: action.title,
         actionKind: action.kind,
         factors: nextBestActionHint.factors || [],
-      })
-      await applySinglePlanAction(leak, selectedPlan.mode, action)
-      return
+      });
+      await applySinglePlanAction(leak, selectedPlan.mode, action);
+      return;
     }
 
-    if (nextBestActionHint.type === 'give_feedback' && nextBestActionHint.actionId) {
-      const action = planActionsById.get(nextBestActionHint.actionId || '')
+    if (nextBestActionHint.type === "give_feedback" && nextBestActionHint.actionId) {
+      const action = planActionsById.get(nextBestActionHint.actionId || "");
       await executePolicyAction(leak, {
-        actionType: 'focus_action',
+        actionType: "focus_action",
         correlationId: nextBestActionHint.correlationId || null,
         actionId: nextBestActionHint.actionId || null,
         actionTitle: action?.title || null,
         actionKind: action?.kind || null,
         factors: nextBestActionHint.factors || [],
-      })
-      focusPlanAction(leak.id, nextBestActionHint.actionId || '')
-      return
+      });
+      focusPlanAction(leak.id, nextBestActionHint.actionId || "");
+      return;
     }
 
-    if (nextBestActionHint.type === 'retry' && nextBestActionHint.actionId) {
-      const action = planActionsById.get(nextBestActionHint.actionId || '') || null
+    if (nextBestActionHint.type === "retry" && nextBestActionHint.actionId) {
+      const action = planActionsById.get(nextBestActionHint.actionId || "") || null;
       await executePolicyAction(leak, {
-        actionType: 'retry',
+        actionType: "retry",
         correlationId: nextBestActionHint.correlationId || null,
         actionId: action?.id || nextBestActionHint.actionId || null,
         actionTitle: action?.title || null,
         actionKind: action?.kind || null,
         factors: nextBestActionHint.factors || [],
-      })
+      });
       await retryLeakPlanning(leak, {
         action,
         failureReason: null,
-      })
-      return
+      });
+      return;
     }
 
-    if (nextBestActionHint.type === 'regenerate_context') {
+    if (nextBestActionHint.type === "regenerate_context") {
       await executePolicyAction(leak, {
-        actionType: 'regenerate_context',
+        actionType: "regenerate_context",
         correlationId: nextBestActionHint.correlationId || null,
         factors: nextBestActionHint.factors || [],
-      })
-      return
+      });
+      return;
     }
 
-    if (nextBestActionHint.type === 'generate') {
-      await generatePlansForLeak(leak.id, true)
+    if (nextBestActionHint.type === "generate") {
+      await generatePlansForLeak(leak.id, true);
     }
-  }
+  };
 
   const syncLeakTitleWithPattern = async (leak: LeakEntity, pattern: LeakPattern) => {
-    if (!user?.id || updatingLeakId) return
-    const nextTitle = pattern.leakType.trim()
-    if (!nextTitle || normalizeLookupValue(nextTitle) === normalizeLookupValue(leak.title)) return
+    if (!user?.id || updatingLeakId) return;
+    const nextTitle = pattern.leakType.trim();
+    if (!nextTitle || normalizeLookupValue(nextTitle) === normalizeLookupValue(leak.title)) return;
 
-    setUpdatingLeakId(leak.id)
+    setUpdatingLeakId(leak.id);
     try {
-      const response = await fetch('/api/leaks', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/leaks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           id: leak.id,
           title: nextTitle,
           description: leak.description || null,
         }),
-      })
+      });
 
-      if (!response.ok) throw response
+      if (!response.ok) throw response;
 
-      const data = await response.json()
-      const updatedLeak = normalizeLeak(data.leak as LeakEntity)
-      setLeaks((current) => current.map((item) => (item.id === leak.id ? updatedLeak : item)))
-      showSuccessToast('Название leak синхронизировано с паттерном')
+      const data = await response.json();
+      const updatedLeak = normalizeLeak(data.leak as LeakEntity);
+      setLeaks((current) => current.map((item) => (item.id === leak.id ? updatedLeak : item)));
+      showSuccessToast("Название leak синхронизировано с паттерном");
     } catch (error) {
-      showErrorToast(error, 'sync leak title with pattern')
+      showErrorToast(error, "sync leak title with pattern");
     } finally {
-      setUpdatingLeakId(null)
+      setUpdatingLeakId(null);
     }
-  }
+  };
 
   const focusPlanAction = (leakId: string, actionId: string) => {
-    setExpandedLeakId(leakId)
-    setFocusedPlanActionId(actionId)
+    setExpandedLeakId(leakId);
+    setFocusedPlanActionId(actionId);
 
     setTimeout(() => {
-      const node = document.getElementById(getPlanActionAnchorId(leakId, actionId))
+      const node = document.getElementById(getPlanActionAnchorId(leakId, actionId));
       if (node) {
-        node.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        node.scrollIntoView({ behavior: "smooth", block: "center" });
       }
-    }, 0)
-  }
+    }, 0);
+  };
 
-  const isPlanActionConverted = (action: LeakPlanAction) => isConvertedPlanAction(action)
+  const isPlanActionConverted = (action: LeakPlanAction) => isConvertedPlanAction(action);
 
-  const getActionFeedback = (action: LeakPlanAction) => getLatestPlanFeedback(action)
+  const getActionFeedback = (action: LeakPlanAction) => getLatestPlanFeedback(action);
 
   const getFeedbackCommentDraft = (action: LeakPlanAction) => {
     if (feedbackCommentByAction[action.id] !== undefined) {
-      return feedbackCommentByAction[action.id]
+      return feedbackCommentByAction[action.id];
     }
 
-    return action.feedbacks?.[0]?.comment || ''
-  }
+    return action.feedbacks?.[0]?.comment || "";
+  };
 
   const getFeedbackCommentDraftByActionId = (actionId: string) => {
     if (feedbackCommentByAction[actionId] !== undefined) {
-      return feedbackCommentByAction[actionId]
+      return feedbackCommentByAction[actionId];
     }
 
-    return ''
-  }
+    return "";
+  };
 
   const clearLeakFilters = () => {
-    setStatusFilter('all')
-    setSourceFilter('all')
-    setSortOption('updated_desc')
-    setFocusFilter('all')
-    setGroupBy('none')
-    setSearchQuery('')
-  }
+    setStatusFilter("all");
+    setSourceFilter("all");
+    setSortOption("updated_desc");
+    setFocusFilter("all");
+    setGroupBy("none");
+    setSearchQuery("");
+  };
 
   const reopenLeak = async (leak: LeakEntity, options?: { silent?: boolean }) => {
-    return updateLeakStatus(leak.id, 'in_progress', options)
-  }
+    return updateLeakStatus(leak.id, "in_progress", options);
+  };
 
   const retryLeakPlanning = async (
     leak: LeakEntity,
     options?: {
-      action?: LeakPlanAction | null
-      failureReason?: string | null
-    },
+      action?: LeakPlanAction | null;
+      failureReason?: string | null;
+    }
   ) => {
-    if (!user?.id || retryingLeakId) return
+    if (!user?.id || retryingLeakId) return;
 
-    setRetryingLeakId(leak.id)
+    setRetryingLeakId(leak.id);
     try {
-      if (leak.status === 'resolved' || leak.status === 'archived') {
-        const reopened = await reopenLeak(leak, { silent: true })
-        if (!reopened) return
+      if (leak.status === "resolved" || leak.status === "archived") {
+        const reopened = await reopenLeak(leak, { silent: true });
+        if (!reopened) return;
       }
 
-      const hadPlans = Boolean(plansByLeak[leak.id]?.length)
+      const hadPlans = Boolean(plansByLeak[leak.id]?.length);
       const generated = await generatePlansForLeak(leak.id, hadPlans, {
         silent: true,
         retryFocus: options?.action
@@ -3083,188 +3269,200 @@ export function LeaksScreen() {
               failureReason: options.failureReason || null,
             }
           : null,
-      })
-      if (!generated) return
+      });
+      if (!generated) return;
 
-      setExpandedLeakId(leak.id)
+      setExpandedLeakId(leak.id);
       showSuccessToast(
         options?.action
           ? `Пересобрал режимы с фокусом на шаг «${options.action.title}»`
           : hadPlans
-            ? 'Лик возвращён в работу, режимы обновлены'
-            : 'Для лика собраны первые режимы',
-      )
+            ? "Лик возвращён в работу, режимы обновлены"
+            : "Для лика собраны первые режимы"
+      );
     } finally {
-      setRetryingLeakId(null)
+      setRetryingLeakId(null);
     }
-  }
+  };
 
   const runGuidanceAction = async (leak: LeakEntity, action: LeakGuidanceAction) => {
-    if (!action) return
+    if (!action) return;
 
-    if (action === 'generate') {
-      await generatePlansForLeak(leak.id, false)
-      return
+    if (action === "generate") {
+      await generatePlansForLeak(leak.id, false);
+      return;
     }
 
-    if (action === 'retry') {
-      await retryLeakPlanning(leak)
-      return
+    if (action === "retry") {
+      await retryLeakPlanning(leak);
+      return;
     }
 
-    if (action === 'resolve') {
-      await updateLeakStatus(leak.id, 'resolved')
-      return
+    if (action === "resolve") {
+      await updateLeakStatus(leak.id, "resolved");
+      return;
     }
 
-    if (action === 'reopen') {
-      await reopenLeak(leak)
+    if (action === "reopen") {
+      await reopenLeak(leak);
     }
-  }
+  };
 
-  const applySelectedPlan = async (leak: LeakEntity, mode?: LeakSolutionPlan['mode']) => {
-    if (!user?.id) return
-    const policyCorrelationId = policyByLeak[leak.id]?.nextBestAction?.correlationId || null
+  const applySelectedPlan = async (leak: LeakEntity, mode?: LeakSolutionPlan["mode"]) => {
+    if (!user?.id) return;
+    const policyCorrelationId = policyByLeak[leak.id]?.nextBestAction?.correlationId || null;
 
-    setApplyingPlanLeakId(leak.id)
+    setApplyingPlanLeakId(leak.id);
     try {
       const response = await fetch(`/api/leaks/${leak.id}/convert`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           mode,
           policyCorrelationId: policyCorrelationId || undefined,
         }),
-      })
+      });
 
-      if (!response.ok) throw response
+      if (!response.ok) throw response;
 
-      const data = await response.json()
+      const data = await response.json();
       if (data.leak) {
         setLeaks((current) =>
-          current.map((item) => (item.id === leak.id ? normalizeLeak(data.leak as LeakEntity) : item)),
-        )
+          current.map((item) =>
+            item.id === leak.id ? normalizeLeak(data.leak as LeakEntity) : item
+          )
+        );
       }
       setPlansByLeak((current) => ({
         ...current,
         [leak.id]: normalizePlans(data.plans || []),
-      }))
+      }));
 
-      const createdCount = typeof data.createdCount === 'number' ? data.createdCount : 0
-      const skippedCount = typeof data.skippedActions === 'number' ? data.skippedActions : 0
-      const reusedCount = typeof data.reusedActions === 'number' ? data.reusedActions : 0
+      const createdCount = typeof data.createdCount === "number" ? data.createdCount : 0;
+      const skippedCount = typeof data.skippedActions === "number" ? data.skippedActions : 0;
+      const reusedCount = typeof data.reusedActions === "number" ? data.reusedActions : 0;
       if (createdCount > 0) {
         showSuccessToast(
           skippedCount > 0 || reusedCount > 0
             ? `Применил режим: создано ${createdCount}, повторно привязано ${reusedCount}, пропущено ${skippedCount}`
-            : `Применил режим: создано ${createdCount}`,
-        )
+            : `Применил режим: создано ${createdCount}`
+        );
       } else {
         showSuccessToast(
           reusedCount > 0
             ? `Новых сущностей нет, повторно связал ${reusedCount} шагов с уже созданным`
-            : 'Новых сущностей не создано, всё уже было применено',
-        )
+            : "Новых сущностей не создано, всё уже было применено"
+        );
       }
-      void loadPlansForLeak(leak.id)
+      void loadPlansForLeak(leak.id);
     } catch (error) {
-      showErrorToast(error, 'apply leak plan')
+      showErrorToast(error, "apply leak plan");
     } finally {
-      setApplyingPlanLeakId(null)
+      setApplyingPlanLeakId(null);
     }
-  }
+  };
 
   const applySinglePlanAction = async (
     leak: LeakEntity,
-    mode: LeakSolutionPlan['mode'],
-    action: LeakPlanAction,
+    mode: LeakSolutionPlan["mode"],
+    action: LeakPlanAction
   ) => {
-    if (!user?.id || isPlanActionConverted(action)) return
-    const policyCorrelationId = policyByLeak[leak.id]?.nextBestAction?.correlationId || null
+    if (!user?.id || isPlanActionConverted(action)) return;
+    const policyCorrelationId = policyByLeak[leak.id]?.nextBestAction?.correlationId || null;
 
-    setApplyingPlanActionId(action.id)
+    setApplyingPlanActionId(action.id);
     try {
       const response = await fetch(`/api/leaks/${leak.id}/convert`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           mode,
           actionId: action.id,
           policyCorrelationId: policyCorrelationId || undefined,
         }),
-      })
+      });
 
-      if (!response.ok) throw response
+      if (!response.ok) throw response;
 
-      const data = await response.json()
+      const data = await response.json();
       if (data.leak) {
         setLeaks((current) =>
-          current.map((item) => (item.id === leak.id ? normalizeLeak(data.leak as LeakEntity) : item)),
-        )
+          current.map((item) =>
+            item.id === leak.id ? normalizeLeak(data.leak as LeakEntity) : item
+          )
+        );
       }
       setPlansByLeak((current) => ({
         ...current,
         [leak.id]: normalizePlans(data.plans || []),
-      }))
+      }));
 
-      const createdEntity = Array.isArray(data.createdEntities) ? data.createdEntities[0] : null
+      const createdEntity = Array.isArray(data.createdEntities) ? data.createdEntities[0] : null;
       showSuccessToast(
-        createdEntity?.label
-          ? `Создано: ${createdEntity.label}`
-          : 'Действие из плана применено',
-      )
-      void loadPlansForLeak(leak.id)
+        createdEntity?.label ? `Создано: ${createdEntity.label}` : "Действие из плана применено"
+      );
+      void loadPlansForLeak(leak.id);
     } catch (error) {
-      showErrorToast(error, 'apply single leak action')
+      showErrorToast(error, "apply single leak action");
     } finally {
-      setApplyingPlanActionId(null)
+      setApplyingPlanActionId(null);
     }
-  }
+  };
 
   const sendPlanActionFeedback = async (
     leakId: string,
     actionId: string,
-    result: LeakPlanFeedback['result'],
+    result: LeakPlanFeedback["result"],
     comment?: string,
     options?: {
-      additionalActionIds?: string[]
-      silent?: boolean
-    },
+      additionalActionIds?: string[];
+      silent?: boolean;
+    }
   ) => {
-    if (!user?.id) return
-    const normalizedComment = comment?.trim() || ''
-    const leakEntity = leaks.find((item) => item.id === leakId) || null
+    if (!user?.id) return;
+    const normalizedComment = comment?.trim() || "";
+    const leakEntity = leaks.find((item) => item.id === leakId) || null;
     const linkedCorrelationMeta = leakEntity?.actions
       .map((item) => getLeakActionMetadata(item))
-      .find((metadata) => metadata?.sourceActionId === actionId && typeof metadata.policyCorrelationId === 'string')
+      .find(
+        (metadata) =>
+          metadata?.sourceActionId === actionId && typeof metadata.policyCorrelationId === "string"
+      );
     const linkedCorrelationId =
-      linkedCorrelationMeta && typeof linkedCorrelationMeta.policyCorrelationId === 'string'
+      linkedCorrelationMeta && typeof linkedCorrelationMeta.policyCorrelationId === "string"
         ? linkedCorrelationMeta.policyCorrelationId
-        : null
-    const policyCorrelationId = linkedCorrelationId || policyByLeak[leakId]?.nextBestAction?.correlationId || null
+        : null;
+    const policyCorrelationId =
+      linkedCorrelationId || policyByLeak[leakId]?.nextBestAction?.correlationId || null;
     const actionIds = Array.from(
-      new Set([actionId, ...(options?.additionalActionIds || [])].map((item) => item.trim()).filter(Boolean)),
-    )
-
-    if (result === 'not_worked' && normalizedComment.length < 5) {
-      showErrorToast(
-        new Error('Добавь короткий комментарий (минимум 5 символов), чтобы система поняла, почему не помогло'),
-        'save plan feedback',
+      new Set(
+        [actionId, ...(options?.additionalActionIds || [])]
+          .map((item) => item.trim())
+          .filter(Boolean)
       )
-      return
+    );
+
+    if (result === "not_worked" && normalizedComment.length < 5) {
+      showErrorToast(
+        new Error(
+          "Добавь короткий комментарий (минимум 5 символов), чтобы система поняла, почему не помогло"
+        ),
+        "save plan feedback"
+      );
+      return;
     }
 
-    setSavingFeedbackActionId(actionId)
+    setSavingFeedbackActionId(actionId);
     if (actionIds.length > 1) {
-      const leakKey = leaks.find((item) => item.id === leakId)?.id || leakId
-      setSavingFeedbackLeakId(leakKey)
+      const leakKey = leaks.find((item) => item.id === leakId)?.id || leakId;
+      setSavingFeedbackLeakId(leakKey);
     }
     try {
       const response = await fetch(`/api/leaks/${leakId}/feedback`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           solutionActionId: actionId,
@@ -3273,332 +3471,328 @@ export function LeaksScreen() {
           result,
           comment: normalizedComment || null,
         }),
-      })
+      });
 
-      if (!response.ok) throw response
+      if (!response.ok) throw response;
 
-      const data = await response.json()
+      const data = await response.json();
       const nextPattern =
-        data.pattern && typeof data.pattern === 'object'
-          ? normalizePattern(data.pattern)
-          : null
-      const nextPlans = normalizePlans(data.plans || [])
+        data.pattern && typeof data.pattern === "object" ? normalizePattern(data.pattern) : null;
+      const nextPlans = normalizePlans(data.plans || []);
       setPlansByLeak((current) => ({
         ...current,
         [leakId]: nextPlans,
-      }))
+      }));
       const affectedActionIds = Array.isArray(data.affectedActionIds)
-        ? data.affectedActionIds.filter((item): item is string => typeof item === 'string')
-        : actionIds
-      const modeByActionId = new Map<string, LeakSolutionPlan['mode']>()
+        ? data.affectedActionIds.filter((item): item is string => typeof item === "string")
+        : actionIds;
+      const modeByActionId = new Map<string, LeakSolutionPlan["mode"]>();
       nextPlans.forEach((plan) => {
         plan.actions.forEach((action) => {
-          modeByActionId.set(action.id, plan.mode)
-        })
-      })
-      const firstAffectedMode = affectedActionIds.map((id) => modeByActionId.get(id)).find(Boolean) || null
-      const nextStatus = data.leak && typeof data.leak.status === 'string' ? data.leak.status : null
+          modeByActionId.set(action.id, plan.mode);
+        });
+      });
+      const firstAffectedMode =
+        affectedActionIds.map((id) => modeByActionId.get(id)).find(Boolean) || null;
+      const nextStatus =
+        data.leak && typeof data.leak.status === "string" ? data.leak.status : null;
       const nextResolvedAt =
-        data.leak && typeof data.leak.resolvedAt === 'string' ? data.leak.resolvedAt : null
+        data.leak && typeof data.leak.resolvedAt === "string" ? data.leak.resolvedAt : null;
       setLeaks((current) =>
         current.map((leak) => {
-          if (leak.id !== leakId) return leak
+          if (leak.id !== leakId) return leak;
           const snapshot =
-            leak.contextSnapshot && typeof leak.contextSnapshot === 'object' && !Array.isArray(leak.contextSnapshot)
+            leak.contextSnapshot &&
+            typeof leak.contextSnapshot === "object" &&
+            !Array.isArray(leak.contextSnapshot)
               ? ({ ...leak.contextSnapshot } as Record<string, unknown>)
-              : {}
-          if (result === 'worked' && firstAffectedMode) {
-            snapshot.lastStableMode = firstAffectedMode
-            snapshot.lastStableAt = new Date().toISOString()
+              : {};
+          if (result === "worked" && firstAffectedMode) {
+            snapshot.lastStableMode = firstAffectedMode;
+            snapshot.lastStableAt = new Date().toISOString();
           }
-          snapshot.contextUpdatedAt = new Date().toISOString()
+          snapshot.contextUpdatedAt = new Date().toISOString();
           return {
             ...leak,
-            status: nextStatus ? (nextStatus as LeakEntity['status']) : leak.status,
+            status: nextStatus ? (nextStatus as LeakEntity["status"]) : leak.status,
             resolvedAt: nextStatus ? nextResolvedAt : leak.resolvedAt,
             updatedAt: new Date().toISOString(),
             contextSnapshot: snapshot,
-          }
-        }),
-      )
+          };
+        })
+      );
       if (nextPattern) {
         setPatterns((current) => {
-          const filtered = current.filter((pattern) => pattern.leakType !== nextPattern.leakType)
-          return [nextPattern, ...filtered]
-        })
+          const filtered = current.filter((pattern) => pattern.leakType !== nextPattern.leakType);
+          return [nextPattern, ...filtered];
+        });
       }
       if (!options?.silent) {
         if (data.reopened) {
-          showSuccessToast('Фидбек сохранён, leak автоматически возвращён в работу')
+          showSuccessToast("Фидбек сохранён, leak автоматически возвращён в работу");
         } else if (affectedActionIds.length > 1) {
-          showSuccessToast(`Фидбек применён к ${affectedActionIds.length} шагам`)
+          showSuccessToast(`Фидбек применён к ${affectedActionIds.length} шагам`);
         } else {
-          showSuccessToast('Фидбек по действию сохранён')
+          showSuccessToast("Фидбек по действию сохранён");
         }
       }
       setFeedbackCommentByAction((current) => {
-        const next = { ...current }
+        const next = { ...current };
         affectedActionIds.forEach((id) => {
-          next[id] = normalizedComment
-        })
-        return next
-      })
-      void loadPlansForLeak(leakId)
-      void loadPolicyForLeak(leakId)
+          next[id] = normalizedComment;
+        });
+        return next;
+      });
+      void loadPlansForLeak(leakId);
+      void loadPolicyForLeak(leakId);
     } catch (error) {
-      showErrorToast(error, 'save plan feedback')
+      showErrorToast(error, "save plan feedback");
     } finally {
-      setSavingFeedbackActionId(null)
-      setSavingFeedbackLeakId(null)
+      setSavingFeedbackActionId(null);
+      setSavingFeedbackLeakId(null);
     }
-  }
+  };
 
   const applyBulkFeedbackForPendingCreated = async (
     leak: LeakEntity,
     plan: LeakSolutionPlan,
-    result: LeakPlanFeedback['result'],
+    result: LeakPlanFeedback["result"]
   ) => {
     const pendingActions = plan.actions.filter(
-      (action) => isPlanActionConverted(action) && !getLatestPlanFeedback(action),
-    )
+      (action) => isPlanActionConverted(action) && !getLatestPlanFeedback(action)
+    );
     if (pendingActions.length === 0) {
-      showSuccessToast('По созданным шагам без feedback ничего не осталось')
-      return
+      showSuccessToast("По созданным шагам без feedback ничего не осталось");
+      return;
     }
 
-    const primaryAction = pendingActions[0]
-    const bulkComment = getFeedbackCommentDraft(primaryAction)
-    await sendPlanActionFeedback(
-      leak.id,
-      primaryAction.id,
-      result,
-      bulkComment,
-      {
-        additionalActionIds: pendingActions.slice(1).map((item) => item.id),
-      },
-    )
-  }
+    const primaryAction = pendingActions[0];
+    const bulkComment = getFeedbackCommentDraft(primaryAction);
+    await sendPlanActionFeedback(leak.id, primaryAction.id, result, bulkComment, {
+      additionalActionIds: pendingActions.slice(1).map((item) => item.id),
+    });
+  };
 
   const convertLeakToTask = async (leak: LeakEntity) => {
-    if (!user?.id || actionLeakId) return
+    if (!user?.id || actionLeakId) return;
 
-    setActionLeakId(leak.id)
+    setActionLeakId(leak.id);
     try {
-      const response = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           text: leak.title,
-          zone: 'LeakFixer',
+          zone: "LeakFixer",
           notes: buildLeakMessage(leak),
         }),
-      })
+      });
 
-      if (!response.ok) throw response
-      const data = await response.json()
+      if (!response.ok) throw response;
+      const data = await response.json();
       await saveLeakAction(leak, {
-        entityType: 'task',
+        entityType: "task",
         entityId: data.task.id,
         label: data.task.text,
         metadata: { zone: data.task.zone || null },
-      })
-      showSuccessToast('Задача создана из лика')
-      setScreen('tasks')
+      });
+      showSuccessToast("Задача создана из лика");
+      setScreen("tasks");
     } catch (error) {
-      showErrorToast(error, 'create task from leak')
+      showErrorToast(error, "create task from leak");
     } finally {
-      setActionLeakId(null)
+      setActionLeakId(null);
     }
-  }
+  };
 
   const convertLeakToRitual = async (leak: LeakEntity) => {
-    if (!user?.id || actionLeakId) return
+    if (!user?.id || actionLeakId) return;
 
-    setActionLeakId(leak.id)
+    setActionLeakId(leak.id);
     try {
-      const response = await fetch('/api/rituals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/rituals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           title: leak.title,
-          category: 'mind',
-          type: 'regular',
+          category: "mind",
+          type: "regular",
           days: [1, 2, 3, 4, 5, 6, 7],
-          timeWindow: 'any',
+          timeWindow: "any",
           description: buildLeakMessage(leak),
-          goalShort: 'Исправить лик',
-          attributes: ['mind', 'will'],
+          goalShort: "Исправить лик",
+          attributes: ["mind", "will"],
         }),
-      })
+      });
 
-      if (!response.ok) throw response
-      const data = await response.json()
+      if (!response.ok) throw response;
+      const data = await response.json();
       await saveLeakAction(leak, {
-        entityType: 'ritual',
+        entityType: "ritual",
         entityId: data.ritual.id,
         label: data.ritual.title,
         metadata: { category: data.ritual.category || null },
-      })
-      showSuccessToast('Ритуал создан из лика')
-      setScreen('rituals')
+      });
+      showSuccessToast("Ритуал создан из лика");
+      setScreen("rituals");
     } catch (error) {
-      showErrorToast(error, 'create ritual from leak')
+      showErrorToast(error, "create ritual from leak");
     } finally {
-      setActionLeakId(null)
+      setActionLeakId(null);
     }
-  }
+  };
 
   const convertLeakToChallenge = async (leak: LeakEntity) => {
-    if (!user?.id || actionLeakId) return
+    if (!user?.id || actionLeakId) return;
 
-    setActionLeakId(leak.id)
+    setActionLeakId(leak.id);
     try {
-      const response = await fetch('/api/challenges/ai-generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/challenges/ai-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           leakType: leak.title,
           leakMessage: buildLeakMessage(leak),
         }),
-      })
+      });
 
-      if (!response.ok) throw response
-      const data = await response.json()
+      if (!response.ok) throw response;
+      const data = await response.json();
       await saveLeakAction(leak, {
-        entityType: 'challenge',
+        entityType: "challenge",
         entityId: data.challenge.id,
         label: data.challenge.title || data.challenge.name,
         metadata: { duration: data.challenge.duration || null },
-      })
-      showSuccessToast('AI-челлендж создан из лика')
-      setScreen('challenges')
+      });
+      showSuccessToast("AI-челлендж создан из лика");
+      setScreen("challenges");
     } catch (error) {
-      showErrorToast(error, 'create challenge from leak')
+      showErrorToast(error, "create challenge from leak");
     } finally {
-      setActionLeakId(null)
+      setActionLeakId(null);
     }
-  }
+  };
 
   const createLeakFromSignal = async (signal: LeakHint) => {
-    if (!user?.id || savingSignalKey) return
+    if (!user?.id || savingSignalKey) return;
 
-    const existingLeak = findOpenLeak(signal.type, signal.message)
+    const existingLeak = findOpenLeak(signal.type, signal.message);
     if (existingLeak) {
-      setActiveTab('inbox')
-      setStatusFilter('all')
-      setExpandedLeakId(existingLeak.id)
-      showSuccessToast('Этот сигнал уже сохранён в inbox')
-      return
+      setActiveTab("inbox");
+      setStatusFilter("all");
+      setExpandedLeakId(existingLeak.id);
+      showSuccessToast("Этот сигнал уже сохранён в inbox");
+      return;
     }
 
-    const signalKey = `${signal.type}:${signal.message}`
-    setSavingSignalKey(signalKey)
+    const signalKey = `${signal.type}:${signal.message}`;
+    setSavingSignalKey(signalKey);
     try {
-      const response = await fetch('/api/leaks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/leaks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           title: signal.type,
           description: signal.message,
-          source: 'signal',
+          source: "signal",
           severity: signal.severity,
           contextSnapshot: signal.days?.length ? { days: signal.days } : null,
         }),
-      })
+      });
 
-      if (!response.ok) throw response
+      if (!response.ok) throw response;
 
-      const data = await response.json()
-      const createdLeak = normalizeLeak(data.leak as LeakEntity)
+      const data = await response.json();
+      const createdLeak = normalizeLeak(data.leak as LeakEntity);
       if (data.deduped) {
-        setActiveTab('inbox')
-        setStatusFilter('all')
-        setExpandedLeakId(createdLeak.id)
-        showSuccessToast('Такой сигнал уже есть в активном leak')
-        return
+        setActiveTab("inbox");
+        setStatusFilter("all");
+        setExpandedLeakId(createdLeak.id);
+        showSuccessToast("Такой сигнал уже есть в активном leak");
+        return;
       }
-      setLeaks((current) => [createdLeak, ...current])
-      setExpandedLeakId(createdLeak.id)
-      showSuccessToast('Сигнал сохранён как leak')
-      setActiveTab('inbox')
+      setLeaks((current) => [createdLeak, ...current]);
+      setExpandedLeakId(createdLeak.id);
+      showSuccessToast("Сигнал сохранён как leak");
+      setActiveTab("inbox");
     } catch (error) {
-      showErrorToast(error, 'save signal as leak')
+      showErrorToast(error, "save signal as leak");
     } finally {
-      setSavingSignalKey(null)
+      setSavingSignalKey(null);
     }
-  }
+  };
 
   const createLeakFromPattern = async (pattern: LeakPattern) => {
-    if (!user?.id || savingPatternLeakType) return
+    if (!user?.id || savingPatternLeakType) return;
 
-    const existingLeak = findOpenLeak(pattern.leakType)
+    const existingLeak = findOpenLeak(pattern.leakType);
 
     if (existingLeak) {
-      setActiveTab('inbox')
-      setStatusFilter('all')
-      setExpandedLeakId(existingLeak.id)
-      showSuccessToast('Для этого паттерна уже есть активный leak')
-      return
+      setActiveTab("inbox");
+      setStatusFilter("all");
+      setExpandedLeakId(existingLeak.id);
+      showSuccessToast("Для этого паттерна уже есть активный leak");
+      return;
     }
 
-    setSavingPatternLeakType(pattern.leakType)
+    setSavingPatternLeakType(pattern.leakType);
     try {
-      const response = await fetch('/api/leaks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/leaks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           title: pattern.leakType,
-          source: 'ai_suggested',
-          severity: 'warning',
+          source: "ai_suggested",
+          severity: "warning",
           contextSnapshot: {
             analysisCount: pattern.analysisCount,
             whatWorked: pattern.whatWorked,
           },
         }),
-      })
+      });
 
-      if (!response.ok) throw response
+      if (!response.ok) throw response;
 
-      const data = await response.json()
-      const createdLeak = normalizeLeak(data.leak as LeakEntity)
+      const data = await response.json();
+      const createdLeak = normalizeLeak(data.leak as LeakEntity);
       if (data.deduped) {
-        setActiveTab('inbox')
-        setStatusFilter('all')
-        setExpandedLeakId(createdLeak.id)
-        showSuccessToast('Паттерн уже связан с активным leak')
-        return
+        setActiveTab("inbox");
+        setStatusFilter("all");
+        setExpandedLeakId(createdLeak.id);
+        showSuccessToast("Паттерн уже связан с активным leak");
+        return;
       }
-      setLeaks((current) => [createdLeak, ...current])
-      setActiveTab('inbox')
-      setStatusFilter('all')
-      setExpandedLeakId(createdLeak.id)
-      showSuccessToast('Паттерн сохранён как leak')
+      setLeaks((current) => [createdLeak, ...current]);
+      setActiveTab("inbox");
+      setStatusFilter("all");
+      setExpandedLeakId(createdLeak.id);
+      showSuccessToast("Паттерн сохранён как leak");
     } catch (error) {
-      showErrorToast(error, 'save pattern as leak')
+      showErrorToast(error, "save pattern as leak");
     } finally {
-      setSavingPatternLeakType(null)
+      setSavingPatternLeakType(null);
     }
-  }
+  };
 
-  const selectedDraftLabel = useMemo(() => selectedDraft?.leakType ?? null, [selectedDraft])
+  const selectedDraftLabel = useMemo(() => selectedDraft?.leakType ?? null, [selectedDraft]);
 
   if (!user?.id) {
     return (
       <div className="pb-20">
-        <Card style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <Card
+          style={{ background: "rgba(15,23,42,0.82)", border: "1px solid rgba(255,255,255,0.1)" }}
+        >
           <CardContent className="pt-6">
-            <p className="text-white/70 text-sm">
-              Модуль ликов станет доступен после авторизации.
-            </p>
+            <p className="text-sm text-white/70">Модуль ликов станет доступен после авторизации.</p>
           </CardContent>
         </Card>
       </div>
-    )
+    );
   }
 
   if (loading) {
@@ -3608,25 +3802,25 @@ export function LeaksScreen() {
         <Skeleton className="h-56 w-full rounded-2xl" />
         <Skeleton className="h-40 w-full rounded-2xl" />
       </div>
-    )
+    );
   }
 
   return (
     <div className="flex flex-col gap-4 pb-20">
       <Card
         style={{
-          background: 'linear-gradient(135deg, rgba(30,41,59,0.95) 0%, rgba(15,23,42,0.92) 100%)',
-          border: '1px solid rgba(99,102,241,0.25)',
+          background: "linear-gradient(135deg, rgba(30,41,59,0.95) 0%, rgba(15,23,42,0.92) 100%)",
+          border: "1px solid rgba(99,102,241,0.25)",
         }}
       >
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <CardTitle className="text-white flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-indigo-300" />
+              <CardTitle className="flex items-center gap-2 text-white">
+                <Sparkles className="h-5 w-5 text-indigo-300" />
                 Leaks
               </CardTitle>
-              <CardDescription className="text-white/60 mt-1">
+              <CardDescription className="mt-1 text-white/60">
                 Отдельный контур для захвата ликов, сигналов и AI-паттернов.
               </CardDescription>
             </div>
@@ -3635,25 +3829,33 @@ export function LeaksScreen() {
               size="sm"
               onClick={() => loadData(false)}
               disabled={refreshing}
-              className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+              className="border-white/15 bg-white/5 text-white hover:bg-white/10"
             >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
             </Button>
           </div>
         </CardHeader>
         <CardContent className="pt-0">
           <div className="flex flex-wrap gap-2">
-            <Badge className="bg-white/10 text-white/80 border-white/10">Inbox: {leakCounts.all}</Badge>
-            <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">Signals: {signals.length}</Badge>
-            <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">Patterns: {patterns.length}</Badge>
+            <Badge className="border-white/10 bg-white/10 text-white/80">
+              Inbox: {leakCounts.all}
+            </Badge>
+            <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
+              Signals: {signals.length}
+            </Badge>
+            <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200">
+              Patterns: {patterns.length}
+            </Badge>
           </div>
         </CardContent>
       </Card>
 
-      <Card style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
+      <Card
+        style={{ background: "rgba(15,23,42,0.82)", border: "1px solid rgba(255,255,255,0.08)" }}
+      >
         <CardHeader className="pb-3">
-          <CardTitle className="text-white flex items-center gap-2">
-            <NotebookPen className="w-5 h-5 text-white/70" />
+          <CardTitle className="flex items-center gap-2 text-white">
+            <NotebookPen className="h-5 w-5 text-white/70" />
             Быстрый capture
           </CardTitle>
           <CardDescription className="text-white/55">
@@ -3665,18 +3867,18 @@ export function LeaksScreen() {
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             placeholder="Коротко назови лик или паттерн"
-            className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
+            className="border-white/10 bg-white/5 text-white placeholder:text-white/30"
           />
           <Textarea
             value={details}
             onChange={(event) => setDetails(event.target.value)}
             placeholder="Что произошло, где это проявляется, что могло повлиять, что хочешь исправить..."
-            className="min-h-28 bg-white/5 border-white/10 text-white placeholder:text-white/30"
+            className="min-h-28 border-white/10 bg-white/5 text-white placeholder:text-white/30"
           />
 
           <div className="flex flex-wrap gap-2">
             {SEVERITY_OPTIONS.map((option) => {
-              const isActive = severity === option.id
+              const isActive = severity === option.id;
               return (
                 <button
                   key={option.id}
@@ -3685,28 +3887,26 @@ export function LeaksScreen() {
                   className={`rounded-xl border px-3 py-2 text-left transition-colors ${
                     isActive
                       ? SEVERITY_STYLES[option.id]
-                      : 'border-white/10 bg-white/5 text-white/60 hover:bg-white/10'
+                      : "border-white/10 bg-white/5 text-white/60 hover:bg-white/10"
                   }`}
                 >
                   <div className="text-sm font-medium">{option.label}</div>
                   <div className="text-[11px] opacity-80">{option.description}</div>
                 </button>
-              )
+              );
             })}
           </div>
 
           <div className="space-y-2">
-            <div className="text-xs uppercase tracking-wide text-white/40">
-              Сфера
-            </div>
+            <div className="text-xs tracking-wide text-white/40 uppercase">Сфера</div>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => setSphere(null)}
                 className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
                   sphere === null
-                    ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
-                    : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                    ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                    : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
                 }`}
               >
                 Без сферы
@@ -3718,8 +3918,8 @@ export function LeaksScreen() {
                   onClick={() => setSphere(option.id)}
                   className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
                     sphere === option.id
-                      ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
-                      : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                      ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                      : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
                   }`}
                 >
                   {option.label}
@@ -3732,7 +3932,7 @@ export function LeaksScreen() {
             <Button
               onClick={() => createLeak()}
               disabled={!hasDraft || submitting}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white"
+              className="bg-indigo-600 text-white hover:bg-indigo-500"
             >
               Сохранить
             </Button>
@@ -3752,18 +3952,21 @@ export function LeaksScreen() {
 
         <TabsContent value="inbox" className="space-y-4">
           {selectedDraft && (
-            <Card style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
+            <Card
+              style={{
+                background: "rgba(99,102,241,0.08)",
+                border: "1px solid rgba(99,102,241,0.2)",
+              }}
+            >
               <CardHeader className="pb-2">
-                <CardTitle className="text-white text-base flex items-center gap-2">
-                  <Brain className="w-4 h-4 text-indigo-300" />
+                <CardTitle className="flex items-center gap-2 text-base text-white">
+                  <Brain className="h-4 w-4 text-indigo-300" />
                   Готово к AI-разбору
                 </CardTitle>
-                <CardDescription className="text-white/60">
-                  {selectedDraftLabel}
-                </CardDescription>
+                <CardDescription className="text-white/60">{selectedDraftLabel}</CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
-                <p className="text-sm text-white/75 mb-2">{selectedDraft.leakMessage}</p>
+                <p className="mb-2 text-sm text-white/75">{selectedDraft.leakMessage}</p>
                 <LeakAiAnalysisCard
                   userId={user.id}
                   leakType={selectedDraft.leakType}
@@ -3775,9 +3978,14 @@ export function LeaksScreen() {
           )}
 
           {priorityLeaks.length > 0 && (
-            <Card style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)' }}>
+            <Card
+              style={{
+                background: "rgba(245,158,11,0.08)",
+                border: "1px solid rgba(245,158,11,0.25)",
+              }}
+            >
               <CardHeader className="pb-2">
-                <CardTitle className="text-white text-base">Приоритетный фокус</CardTitle>
+                <CardTitle className="text-base text-white">Приоритетный фокус</CardTitle>
                 <CardDescription className="text-white/60">
                   Leaks, где сейчас выше риск застрять без следующего шага.
                 </CardDescription>
@@ -3790,10 +3998,10 @@ export function LeaksScreen() {
                       size="sm"
                       variant="outline"
                       onClick={() => {
-                        setExpandedLeakId(leak.id)
-                        setStatusFilter('all')
+                        setExpandedLeakId(leak.id);
+                        setStatusFilter("all");
                       }}
-                      className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-100"
+                      className="border-amber-500/20 bg-amber-500/10 text-amber-100 hover:bg-amber-500/15"
                     >
                       {leak.title}
                     </Button>
@@ -3811,8 +4019,8 @@ export function LeaksScreen() {
                 onClick={() => setStatusFilter(option.id)}
                 className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
                   statusFilter === option.id
-                    ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
-                    : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                    ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                    : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
                 }`}
               >
                 {option.label} ({leakCounts[option.id]})
@@ -3828,8 +4036,8 @@ export function LeaksScreen() {
                 onClick={() => setSourceFilter(option.id)}
                 className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
                   sourceFilter === option.id
-                    ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
-                    : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                    ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                    : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
                 }`}
               >
                 {option.label}
@@ -3840,22 +4048,22 @@ export function LeaksScreen() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setFocusFilter('all')}
+              onClick={() => setFocusFilter("all")}
               className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                focusFilter === 'all'
-                  ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
-                  : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                focusFilter === "all"
+                  ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                  : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
               }`}
             >
               Все leaks
             </button>
             <button
               type="button"
-              onClick={() => setFocusFilter('focus')}
+              onClick={() => setFocusFilter("focus")}
               className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                focusFilter === 'focus'
-                  ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
-                  : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                focusFilter === "focus"
+                  ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                  : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
               }`}
             >
               Фокус ({focusLeakCount})
@@ -3870,8 +4078,8 @@ export function LeaksScreen() {
                 onClick={() => setSortOption(option.id)}
                 className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
                   sortOption === option.id
-                    ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
-                    : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                    ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                    : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
                 }`}
               >
                 {option.label}
@@ -3887,8 +4095,8 @@ export function LeaksScreen() {
                 onClick={() => setGroupBy(option.id)}
                 className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
                   groupBy === option.id
-                    ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
-                    : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                    ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                    : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
                 }`}
               >
                 {option.label}
@@ -3900,34 +4108,40 @@ export function LeaksScreen() {
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="Поиск по ликам, описанию или сфере"
-            className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
+            className="border-white/10 bg-white/5 text-white placeholder:text-white/30"
           />
 
           {filteredLeaks.length === 0 ? (
-            <Card style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <CardContent className="pt-6 space-y-4">
+            <Card
+              style={{
+                background: "rgba(15,23,42,0.82)",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <CardContent className="space-y-4 pt-6">
                 {leaks.length === 0 ? (
                   <>
                     <div className="space-y-2">
-                      <div className="text-white font-medium">Здесь появится твой inbox ликов</div>
+                      <div className="font-medium text-white">Здесь появится твой inbox ликов</div>
                       <p className="text-sm text-white/60">
-                        Начни с одной короткой фразы в блоке выше, либо забери готовый сигнал из weekly data и уже потом разбери его с AI.
+                        Начни с одной короткой фразы в блоке выше, либо забери готовый сигнал из
+                        weekly data и уже потом разбери его с AI.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => setActiveTab('signals')}
-                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                        onClick={() => setActiveTab("signals")}
+                        className="border-white/15 bg-white/5 text-white hover:bg-white/10"
                       >
                         Сигналы ({signals.length})
                       </Button>
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => setActiveTab('patterns')}
-                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                        onClick={() => setActiveTab("patterns")}
+                        className="border-white/15 bg-white/5 text-white hover:bg-white/10"
                       >
                         Patterns ({patterns.length})
                       </Button>
@@ -3936,9 +4150,12 @@ export function LeaksScreen() {
                 ) : (
                   <>
                     <div className="space-y-2">
-                      <div className="text-white font-medium">По текущим фильтрам ничего не найдено</div>
+                      <div className="font-medium text-white">
+                        По текущим фильтрам ничего не найдено
+                      </div>
                       <p className="text-sm text-white/60">
-                        Сбрось фильтры или поиск, чтобы снова увидеть весь inbox и активные leak-сценарии.
+                        Сбрось фильтры или поиск, чтобы снова увидеть весь inbox и активные
+                        leak-сценарии.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -3946,7 +4163,7 @@ export function LeaksScreen() {
                         size="sm"
                         variant="outline"
                         onClick={clearLeakFilters}
-                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                        className="border-white/15 bg-white/5 text-white hover:bg-white/10"
                       >
                         Сбросить фильтры
                       </Button>
@@ -3957,89 +4174,105 @@ export function LeaksScreen() {
             </Card>
           ) : (
             filteredLeaks.map((leak, index) => {
-              const guidance = buildLeakGuidance(leak, plansByLeak[leak.id])
-              const leakPlans = plansByLeak[leak.id] || []
-              const selectedPlan = getSelectedPlan(leakPlans)
+              const guidance = buildLeakGuidance(leak, plansByLeak[leak.id]);
+              const leakPlans = plansByLeak[leak.id] || [];
+              const selectedPlan = getSelectedPlan(leakPlans);
               const bottleneckPlanAction =
                 selectedPlan && guidance.bottleneckActionId
-                  ? selectedPlan.actions.find((action) => action.id === guidance.bottleneckActionId) || null
-                  : null
-              const bottleneckLinkedEntity =
-                bottleneckPlanAction ? getLinkedEntityForPlanAction(leak, bottleneckPlanAction) : null
-              const feedbackByActionId = getFeedbackByActionId(leakPlans)
-              const planActionsById = getPlanActionById(leakPlans)
-              const feedbackByAction = getLeakFeedbackByAction(leak, leakPlans)
-              const feedbackHistoryFilter = feedbackHistoryFilterByLeak[leak.id] || 'all'
-              const visibleFeedbackTimeline =
-                feedbackHistoryFilter === 'problem'
-                  ? feedbackByAction.filter((item) => item.result !== 'worked')
-                  : feedbackByAction
-              const latestWorkedOutcome = getLatestWorkedOutcome(leak, leakPlans)
-              const recentFeedbackTrend = getRecentFeedbackTrend(leak.contextSnapshot)
-              const contextHypotheses = buildContextHypotheses(leak.contextSnapshot)
-              const retryFocus = getRetryFocus(leak.contextSnapshot)
-              const selectedModeFromSnapshot = getSnapshotMode(leak.contextSnapshot, 'selectedPlanMode')
-              const lastStableMode = getSnapshotMode(leak.contextSnapshot, 'lastStableMode')
-              const policy = policyByLeak[leak.id] || null
-              const nextBestActionHint = policy?.nextBestAction || null
-              const policyEvents = (policy?.runJournal || []).filter((event) => event.type.startsWith('policy_'))
-              const policyAcceptedCount =
-                typeof policy?.summary?.accepted === 'number'
-                  ? policy.summary.accepted
-                  : policyEvents.filter((event) => event.type === 'policy_accepted').length
-              const policyRejectedCount =
-                typeof policy?.summary?.rejected === 'number'
-                  ? policy.summary.rejected
-                  : policyEvents.filter((event) => event.type === 'policy_rejected').length
-              const policyOutcomeCount =
-                typeof policy?.summary?.outcomes === 'number'
-                  ? policy.summary.outcomes
-                  : policyEvents.filter((event) => event.type === 'policy_outcome').length
-              const policyOutcomeWorked =
-                typeof policy?.summary?.outcomeWorked === 'number'
-                  ? policy.summary.outcomeWorked
-                  : policyEvents.filter((event) => event.type === 'policy_outcome' && event.result === 'worked').length
-              const policyOutcomePartial =
-                typeof policy?.summary?.outcomePartial === 'number'
-                  ? policy.summary.outcomePartial
-                  : policyEvents.filter((event) => event.type === 'policy_outcome' && event.result === 'partially').length
-              const policyOutcomeFailed =
-                typeof policy?.summary?.outcomeFailed === 'number'
-                  ? policy.summary.outcomeFailed
-                  : policyEvents.filter((event) => event.type === 'policy_outcome' && event.result === 'not_worked').length
-              const policySuggestionCorrelationId = nextBestActionHint?.correlationId || null
-              const latestPolicyDecision =
-                policySuggestionCorrelationId
-                  ? policyEvents.find(
-                      (event) =>
-                        (event.type === 'policy_accepted' || event.type === 'policy_rejected') &&
-                        event.policyCorrelationId === policySuggestionCorrelationId,
+                  ? selectedPlan.actions.find(
+                      (action) => action.id === guidance.bottleneckActionId
                     ) || null
-                  : null
+                  : null;
+              const bottleneckLinkedEntity = bottleneckPlanAction
+                ? getLinkedEntityForPlanAction(leak, bottleneckPlanAction)
+                : null;
+              const feedbackByActionId = getFeedbackByActionId(leakPlans);
+              const planActionsById = getPlanActionById(leakPlans);
+              const feedbackByAction = getLeakFeedbackByAction(leak, leakPlans);
+              const feedbackHistoryFilter = feedbackHistoryFilterByLeak[leak.id] || "all";
+              const visibleFeedbackTimeline =
+                feedbackHistoryFilter === "problem"
+                  ? feedbackByAction.filter((item) => item.result !== "worked")
+                  : feedbackByAction;
+              const latestWorkedOutcome = getLatestWorkedOutcome(leak, leakPlans);
+              const recentFeedbackTrend = getRecentFeedbackTrend(leak.contextSnapshot);
+              const contextHypotheses = buildContextHypotheses(leak.contextSnapshot);
+              const retryFocus = getRetryFocus(leak.contextSnapshot);
+              const selectedModeFromSnapshot = getSnapshotMode(
+                leak.contextSnapshot,
+                "selectedPlanMode"
+              );
+              const lastStableMode = getSnapshotMode(leak.contextSnapshot, "lastStableMode");
+              const policy = policyByLeak[leak.id] || null;
+              const nextBestActionHint = policy?.nextBestAction || null;
+              const policyEvents = (policy?.runJournal || []).filter((event) =>
+                event.type.startsWith("policy_")
+              );
+              const policyAcceptedCount =
+                typeof policy?.summary?.accepted === "number"
+                  ? policy.summary.accepted
+                  : policyEvents.filter((event) => event.type === "policy_accepted").length;
+              const policyRejectedCount =
+                typeof policy?.summary?.rejected === "number"
+                  ? policy.summary.rejected
+                  : policyEvents.filter((event) => event.type === "policy_rejected").length;
+              const policyOutcomeCount =
+                typeof policy?.summary?.outcomes === "number"
+                  ? policy.summary.outcomes
+                  : policyEvents.filter((event) => event.type === "policy_outcome").length;
+              const policyOutcomeWorked =
+                typeof policy?.summary?.outcomeWorked === "number"
+                  ? policy.summary.outcomeWorked
+                  : policyEvents.filter(
+                      (event) => event.type === "policy_outcome" && event.result === "worked"
+                    ).length;
+              const policyOutcomePartial =
+                typeof policy?.summary?.outcomePartial === "number"
+                  ? policy.summary.outcomePartial
+                  : policyEvents.filter(
+                      (event) => event.type === "policy_outcome" && event.result === "partially"
+                    ).length;
+              const policyOutcomeFailed =
+                typeof policy?.summary?.outcomeFailed === "number"
+                  ? policy.summary.outcomeFailed
+                  : policyEvents.filter(
+                      (event) => event.type === "policy_outcome" && event.result === "not_worked"
+                    ).length;
+              const policySuggestionCorrelationId = nextBestActionHint?.correlationId || null;
+              const latestPolicyDecision = policySuggestionCorrelationId
+                ? policyEvents.find(
+                    (event) =>
+                      (event.type === "policy_accepted" || event.type === "policy_rejected") &&
+                      event.policyCorrelationId === policySuggestionCorrelationId
+                  ) || null
+                : null;
               const policyDecisionState = latestPolicyDecision
-                ? latestPolicyDecision.type === 'policy_accepted'
-                  ? 'accepted'
-                  : 'rejected'
-                : 'pending'
-              const policyComputedMinutes = getMinutesSince(policy?.computedAt)
+                ? latestPolicyDecision.type === "policy_accepted"
+                  ? "accepted"
+                  : "rejected"
+                : "pending";
+              const policyComputedMinutes = getMinutesSince(policy?.computedAt);
               const policyAcceptRate =
                 policyAcceptedCount + policyRejectedCount > 0
-                  ? Math.round((policyAcceptedCount / (policyAcceptedCount + policyRejectedCount)) * 100)
-                  : null
+                  ? Math.round(
+                      (policyAcceptedCount / (policyAcceptedCount + policyRejectedCount)) * 100
+                    )
+                  : null;
               const policyWorkedRate =
                 policyOutcomeCount > 0
                   ? Math.round((policyOutcomeWorked / policyOutcomeCount) * 100)
-                  : null
+                  : null;
               const policyRejectReasonCounts =
-                policy?.summary?.rejectReasons && Object.keys(policy.summary.rejectReasons).length > 0
+                policy?.summary?.rejectReasons &&
+                Object.keys(policy.summary.rejectReasons).length > 0
                   ? policy.summary.rejectReasons
                   : policyEvents
-                      .filter((event) => event.type === 'policy_rejected' && event.note)
+                      .filter((event) => event.type === "policy_rejected" && event.note)
                       .reduce<Record<string, number>>((acc, event) => {
-                        const key = event.note || 'unknown'
-                        acc[key] = (acc[key] || 0) + 1
-                        return acc
-                      }, {})
+                        const key = event.note || "unknown";
+                        acc[key] = (acc[key] || 0) + 1;
+                        return acc;
+                      }, {});
               const learningSignals = policy?.summary?.learningSignals || {
                 loopHealth: 0,
                 recentFeedbackCount: 0,
@@ -4048,10 +4281,10 @@ export function LeaksScreen() {
                 recentFailedCount: 0,
                 topFailureReasons: [],
                 failureBuckets: { time: 0, energy: 0, context: 0, complexity: 0, unknown: 0 },
-                dominantFailureBucket: 'unknown' as const,
+                dominantFailureBucket: "unknown" as const,
                 repeatedActions: [],
                 unstableActions: [],
-              }
+              };
               const policyStuckOverview = policy?.summary?.stuckOverview || {
                 totalFunnels: 0,
                 high: 0,
@@ -4059,8 +4292,8 @@ export function LeaksScreen() {
                 low: 0,
                 blockedFunnels: 0,
                 maxStuckScore: 0,
-              }
-              const contextDriftHint = policy?.contextDrift || null
+              };
+              const contextDriftHint = policy?.contextDrift || null;
               const executionScore = policy?.executionScore || {
                 value: 0,
                 breakdown: {
@@ -4070,2901 +4303,3281 @@ export function LeaksScreen() {
                   attemptsPenalty: 0,
                   driftPenalty: 0,
                 },
-              }
-              const adaptiveModeSuggestion = policy?.adaptiveModeSuggestion || null
-              const policyActionBusy = executingPolicyLeakId === leak.id
+              };
+              const adaptiveModeSuggestion = policy?.adaptiveModeSuggestion || null;
+              const policyActionBusy = executingPolicyLeakId === leak.id;
               const selectedModeForChain =
-                policy?.selectedMode || selectedPlan?.mode || selectedModeFromSnapshot || null
-              const createdEntityCountForChain = leak.actions.length
+                policy?.selectedMode || selectedPlan?.mode || selectedModeFromSnapshot || null;
+              const createdEntityCountForChain = leak.actions.length;
               const policyLinkedCreatedCount = leak.actions.filter((item) => {
-                const metadata = getLeakActionMetadata(item)
-                return typeof metadata?.policyCorrelationId === 'string' && metadata.policyCorrelationId.length > 0
-              }).length
-              const feedbackCountForChain = feedbackByAction.length
-              const workedCountForChain = feedbackByAction.filter((item) => item.result === 'worked').length
-              const recentFeedbackWindow = feedbackByAction.slice(0, 6)
-              const recentWorkedCount = recentFeedbackWindow.filter((item) => item.result === 'worked').length
-              const recentPartialCount = recentFeedbackWindow.filter((item) => item.result === 'partially').length
-              const recentFailedCount = recentFeedbackWindow.filter((item) => item.result === 'not_worked').length
+                const metadata = getLeakActionMetadata(item);
+                return (
+                  typeof metadata?.policyCorrelationId === "string" &&
+                  metadata.policyCorrelationId.length > 0
+                );
+              }).length;
+              const feedbackCountForChain = feedbackByAction.length;
+              const workedCountForChain = feedbackByAction.filter(
+                (item) => item.result === "worked"
+              ).length;
+              const recentFeedbackWindow = feedbackByAction.slice(0, 6);
+              const recentWorkedCount = recentFeedbackWindow.filter(
+                (item) => item.result === "worked"
+              ).length;
+              const recentPartialCount = recentFeedbackWindow.filter(
+                (item) => item.result === "partially"
+              ).length;
+              const recentFailedCount = recentFeedbackWindow.filter(
+                (item) => item.result === "not_worked"
+              ).length;
               const policyLinkedCreatedWithoutFeedback = leak.actions.filter((item) => {
-                const metadata = getLeakActionMetadata(item)
-                if (!metadata) return false
+                const metadata = getLeakActionMetadata(item);
+                if (!metadata) return false;
                 const policyCorrelationId =
-                  typeof metadata.policyCorrelationId === 'string' ? metadata.policyCorrelationId : null
-                if (!policyCorrelationId) return false
-                const sourceActionId = typeof metadata.sourceActionId === 'string' ? metadata.sourceActionId : null
-                if (!sourceActionId) return true
-                return !feedbackByActionId.has(sourceActionId)
-              }).length
+                  typeof metadata.policyCorrelationId === "string"
+                    ? metadata.policyCorrelationId
+                    : null;
+                if (!policyCorrelationId) return false;
+                const sourceActionId =
+                  typeof metadata.sourceActionId === "string" ? metadata.sourceActionId : null;
+                if (!sourceActionId) return true;
+                return !feedbackByActionId.has(sourceActionId);
+              }).length;
               const firstPolicyLinkedWithoutFeedbackMetadata = leak.actions
                 .map((item) => getLeakActionMetadata(item))
                 .find((metadata) => {
-                  if (!metadata) return false
+                  if (!metadata) return false;
                   const policyCorrelationId =
-                    typeof metadata.policyCorrelationId === 'string' ? metadata.policyCorrelationId : null
-                  if (!policyCorrelationId) return false
+                    typeof metadata.policyCorrelationId === "string"
+                      ? metadata.policyCorrelationId
+                      : null;
+                  if (!policyCorrelationId) return false;
                   const sourceActionId =
-                    typeof metadata.sourceActionId === 'string' ? metadata.sourceActionId : null
-                  return Boolean(sourceActionId && !feedbackByActionId.has(sourceActionId))
-                })
+                    typeof metadata.sourceActionId === "string" ? metadata.sourceActionId : null;
+                  return Boolean(sourceActionId && !feedbackByActionId.has(sourceActionId));
+                });
               const firstPolicyLinkedWithoutFeedbackActionId =
                 firstPolicyLinkedWithoutFeedbackMetadata &&
-                typeof firstPolicyLinkedWithoutFeedbackMetadata.sourceActionId === 'string'
+                typeof firstPolicyLinkedWithoutFeedbackMetadata.sourceActionId === "string"
                   ? firstPolicyLinkedWithoutFeedbackMetadata.sourceActionId
-                  : null
-              const latestPolicyFailedOutcome = policyEvents.find(
-                (event) => event.type === 'policy_outcome' && event.result === 'not_worked',
-              ) || null
-              const currentFunnel = policy?.summary?.currentFunnel || null
+                  : null;
+              const latestPolicyFailedOutcome =
+                policyEvents.find(
+                  (event) => event.type === "policy_outcome" && event.result === "not_worked"
+                ) || null;
+              const currentFunnel = policy?.summary?.currentFunnel || null;
               const currentFunnelStageLabel =
-                currentFunnel?.stage === 'suggested'
-                  ? 'Совет сформирован'
-                  : currentFunnel?.stage === 'accepted'
-                    ? 'Совет принят'
-                    : currentFunnel?.stage === 'awaiting_feedback'
-                      ? 'Ждёт feedback'
-                      : currentFunnel?.stage === 'learning'
-                        ? 'Обучение на outcome'
-                        : currentFunnel?.stage === 'completed'
-                          ? 'Контур завершён'
-                          : currentFunnel?.stage === 'rejected'
-                            ? 'Совет отклонён'
-                            : 'Нет этапа'
+                currentFunnel?.stage === "suggested"
+                  ? "Совет сформирован"
+                  : currentFunnel?.stage === "accepted"
+                    ? "Совет принят"
+                    : currentFunnel?.stage === "awaiting_feedback"
+                      ? "Ждёт feedback"
+                      : currentFunnel?.stage === "learning"
+                        ? "Обучение на outcome"
+                        : currentFunnel?.stage === "completed"
+                          ? "Контур завершён"
+                          : currentFunnel?.stage === "rejected"
+                            ? "Совет отклонён"
+                            : "Нет этапа";
               const nextPendingFunnelActionId =
                 currentFunnel?.oldestPendingOutcomeActionId ||
                 currentFunnel?.nextPendingOutcomeActionId ||
-                null
+                null;
               const nextPendingFunnelActionTitle =
                 currentFunnel?.oldestPendingOutcomeActionTitle ||
                 currentFunnel?.nextPendingOutcomeActionTitle ||
                 currentFunnel?.pendingOutcomeActionTitles?.[0] ||
-                null
+                null;
               const recentFunnels = (policy?.summary?.recentFunnels || [])
                 .filter((item) => item.correlationId !== currentFunnel?.correlationId)
                 .sort((a, b) => {
-                  const urgencyRank = (value: 'low' | 'medium' | 'high') =>
-                    value === 'high' ? 3 : value === 'medium' ? 2 : 1
-                  const rankDiff = urgencyRank(b.urgency) - urgencyRank(a.urgency)
-                  if (rankDiff !== 0) return rankDiff
-                  return (b.stuckScore || 0) - (a.stuckScore || 0)
+                  const urgencyRank = (value: "low" | "medium" | "high") =>
+                    value === "high" ? 3 : value === "medium" ? 2 : 1;
+                  const rankDiff = urgencyRank(b.urgency) - urgencyRank(a.urgency);
+                  if (rankDiff !== 0) return rankDiff;
+                  return (b.stuckScore || 0) - (a.stuckScore || 0);
                 })
-                .slice(0, 3)
+                .slice(0, 3);
               const priorityPendingQueue = [currentFunnel, ...recentFunnels]
                 .filter((item): item is NonNullable<typeof currentFunnel> => Boolean(item))
                 .filter((item) =>
-                  Boolean(item.oldestPendingOutcomeActionId || item.nextPendingOutcomeActionId),
+                  Boolean(item.oldestPendingOutcomeActionId || item.nextPendingOutcomeActionId)
                 )
                 .sort((a, b) => {
-                  const urgencyRank = (value: 'low' | 'medium' | 'high') =>
-                    value === 'high' ? 3 : value === 'medium' ? 2 : 1
-                  const rankDiff = urgencyRank(b.urgency) - urgencyRank(a.urgency)
-                  if (rankDiff !== 0) return rankDiff
-                  const ageA = a.maxPendingOutcomeAgeMinutes || 0
-                  const ageB = b.maxPendingOutcomeAgeMinutes || 0
-                  if (ageB !== ageA) return ageB - ageA
-                  return b.stuckScore - a.stuckScore
+                  const urgencyRank = (value: "low" | "medium" | "high") =>
+                    value === "high" ? 3 : value === "medium" ? 2 : 1;
+                  const rankDiff = urgencyRank(b.urgency) - urgencyRank(a.urgency);
+                  if (rankDiff !== 0) return rankDiff;
+                  const ageA = a.maxPendingOutcomeAgeMinutes || 0;
+                  const ageB = b.maxPendingOutcomeAgeMinutes || 0;
+                  if (ageB !== ageA) return ageB - ageA;
+                  return b.stuckScore - a.stuckScore;
                 })
-                .slice(0, 5)
+                .slice(0, 5);
               const contextPulse = {
-                energyAvg: getContextMetricNumber(leak.contextSnapshot, 'energyAvg'),
-                stressAvg: getContextMetricNumber(leak.contextSnapshot, 'stressAvg'),
-                sleepHoursAvg: getContextMetricNumber(leak.contextSnapshot, 'sleepHoursAvg'),
-                openTasks: getContextMetricNumber(leak.contextSnapshot, 'openTasks'),
-              }
+                energyAvg: getContextMetricNumber(leak.contextSnapshot, "energyAvg"),
+                stressAvg: getContextMetricNumber(leak.contextSnapshot, "stressAvg"),
+                sleepHoursAvg: getContextMetricNumber(leak.contextSnapshot, "sleepHoursAvg"),
+                openTasks: getContextMetricNumber(leak.contextSnapshot, "openTasks"),
+              };
               const contextPulseRisk =
                 (contextPulse.stressAvg !== null && contextPulse.stressAvg >= 7) ||
                 (contextPulse.energyAvg !== null && contextPulse.energyAvg <= 5) ||
                 (contextPulse.sleepHoursAvg !== null && contextPulse.sleepHoursAvg < 6.5) ||
                 (contextPulse.openTasks !== null && contextPulse.openTasks >= 18)
-                  ? 'high'
-                  : 'normal'
-              const snapshotHistory = getSnapshotHistory(leak.contextSnapshot)
-              const matchedPattern = getBestPatternForLeak(patterns, leak)
-              const matchedPatternLinkType = matchedPattern ? getPatternLinkTypeForLeak(matchedPattern, leak) : 'none'
-              const groupKey = getLeakGroupKey(leak, groupBy)
+                  ? "high"
+                  : "normal";
+              const snapshotHistory = getSnapshotHistory(leak.contextSnapshot);
+              const matchedPattern = getBestPatternForLeak(patterns, leak);
+              const matchedPatternLinkType = matchedPattern
+                ? getPatternLinkTypeForLeak(matchedPattern, leak)
+                : "none";
+              const groupKey = getLeakGroupKey(leak, groupBy);
               const prevGroupKey =
-                index > 0 ? getLeakGroupKey(filteredLeaks[index - 1], groupBy) : null
-              const showGroupHeader = groupBy !== 'none' && groupKey !== prevGroupKey
-              const mainActionBlock = expandedLeakId === leak.id ? (
-                      <div className={`rounded-2xl border p-3 ${LEAK_GUIDANCE_STYLES[guidance.tone]}`}>
-                        <div className="text-xs uppercase tracking-wide text-white/45">
-                          Следующий шаг
+                index > 0 ? getLeakGroupKey(filteredLeaks[index - 1], groupBy) : null;
+              const showGroupHeader = groupBy !== "none" && groupKey !== prevGroupKey;
+              const mainActionBlock =
+                expandedLeakId === leak.id ? (
+                  <div className={`rounded-2xl border p-3 ${LEAK_GUIDANCE_STYLES[guidance.tone]}`}>
+                    <div className="text-xs tracking-wide text-white/45 uppercase">
+                      Следующий шаг
+                    </div>
+                    <div className="mt-1 text-sm font-medium text-white">{guidance.title}</div>
+                    <p className="mt-1 text-sm text-white/70">{guidance.description}</p>
+                    {guidance.bottleneckText && (
+                      <div className="mt-2 rounded-xl border border-white/10 bg-black/10 px-3 py-2 text-xs text-white/75">
+                        Узкое место: {guidance.bottleneckText}
+                      </div>
+                    )}
+                    {retryFocus?.actionTitle && (
+                      <div className="mt-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+                        <div className="text-xs text-amber-200">
+                          Retry-фокус: {retryFocus.actionTitle}
+                          {retryFocus.actionKind
+                            ? ` (${PLAN_KIND_LABELS[retryFocus.actionKind as LeakPlanAction["kind"]] || retryFocus.actionKind})`
+                            : ""}
                         </div>
-                        <div className="mt-1 text-sm font-medium text-white">{guidance.title}</div>
-                        <p className="mt-1 text-sm text-white/70">{guidance.description}</p>
-                        {guidance.bottleneckText && (
-                          <div className="mt-2 rounded-xl border border-white/10 bg-black/10 px-3 py-2 text-xs text-white/75">
-                            Узкое место: {guidance.bottleneckText}
+                        {retryFocus.failureReason && (
+                          <div className="mt-1 text-xs text-amber-100/85">
+                            Причина прошлого сбоя: {retryFocus.failureReason}
                           </div>
                         )}
-                        {retryFocus?.actionTitle && (
-                          <div className="mt-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
-                            <div className="text-xs text-amber-200">
-                              Retry-фокус: {retryFocus.actionTitle}
-                              {retryFocus.actionKind ? ` (${PLAN_KIND_LABELS[retryFocus.actionKind as LeakPlanAction['kind']] || retryFocus.actionKind})` : ''}
-                            </div>
-                            {retryFocus.failureReason && (
-                              <div className="mt-1 text-xs text-amber-100/85">
-                                Причина прошлого сбоя: {retryFocus.failureReason}
-                              </div>
-                            )}
-                            {retryFocus.requestedAt && (
-                              <div className="mt-1 text-[11px] text-amber-100/70">
-                                Последний retry: {formatDate(retryFocus.requestedAt)}
-                              </div>
-                            )}
+                        {retryFocus.requestedAt && (
+                          <div className="mt-1 text-[11px] text-amber-100/70">
+                            Последний retry: {formatDate(retryFocus.requestedAt)}
                           </div>
                         )}
-                        {latestWorkedOutcome && (
-                          <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
-                            <div className="text-xs text-emerald-100">
-                              Последний сработавший шаг: {latestWorkedOutcome.actionTitle}
-                            </div>
-                            <div className="mt-1 flex flex-wrap gap-2">
-                              <Badge className={PLAN_MODE_STYLES[latestWorkedOutcome.mode]}>
-                                {PLAN_MODE_LABELS[latestWorkedOutcome.mode]}
-                              </Badge>
-                              <Badge variant="outline" className="border-emerald-400/30 text-emerald-100">
-                                {PLAN_KIND_LABELS[latestWorkedOutcome.actionKind]}
-                              </Badge>
-                              {latestWorkedOutcome.linkedEntity && (
-                                <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
-                                  Сущность: {getActionLabel(latestWorkedOutcome.linkedEntity.entityType)} • {latestWorkedOutcome.linkedEntity.label}
-                                </Badge>
-                              )}
-                              <Badge className="bg-white/10 text-white/70 border-white/10">
-                                Feedback: {formatDate(latestWorkedOutcome.updatedAt)}
-                              </Badge>
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {latestWorkedOutcome.linkedEntity ? (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setScreen(getActionScreen(latestWorkedOutcome.linkedEntity!.entityType))}
-                                  className="border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-100"
-                                >
-                                  Открыть последний сработавший
-                                </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    const matchedAction = selectedPlan?.actions.find(
-                                      (action) => action.title === latestWorkedOutcome.actionTitle,
-                                    )
-                                    if (matchedAction) {
-                                      focusPlanAction(leak.id, matchedAction.id)
-                                    }
-                                  }}
-                                  className="border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-100"
-                                >
-                                  Перейти к шагу
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                        {guidance.selectedPlan && (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <Badge className={PLAN_MODE_STYLES[guidance.selectedPlan.mode]}>
-                              {PLAN_MODE_LABELS[guidance.selectedPlan.mode]}
+                      </div>
+                    )}
+                    {latestWorkedOutcome && (
+                      <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                        <div className="text-xs text-emerald-100">
+                          Последний сработавший шаг: {latestWorkedOutcome.actionTitle}
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-2">
+                          <Badge className={PLAN_MODE_STYLES[latestWorkedOutcome.mode]}>
+                            {PLAN_MODE_LABELS[latestWorkedOutcome.mode]}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className="border-emerald-400/30 text-emerald-100"
+                          >
+                            {PLAN_KIND_LABELS[latestWorkedOutcome.actionKind]}
+                          </Badge>
+                          {latestWorkedOutcome.linkedEntity && (
+                            <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
+                              Сущность:{" "}
+                              {getActionLabel(latestWorkedOutcome.linkedEntity.entityType)} •{" "}
+                              {latestWorkedOutcome.linkedEntity.label}
                             </Badge>
-                            <Badge
-                              className={
-                                executionScore.value >= 70
-                                  ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
-                                  : executionScore.value >= 40
-                                    ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
-                                    : 'bg-rose-500/10 text-rose-200 border-rose-500/20'
+                          )}
+                          <Badge className="border-white/10 bg-white/10 text-white/70">
+                            Feedback: {formatDate(latestWorkedOutcome.updatedAt)}
+                          </Badge>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {latestWorkedOutcome.linkedEntity ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                setScreen(
+                                  getActionScreen(latestWorkedOutcome.linkedEntity!.entityType)
+                                )
                               }
+                              className="border-emerald-500/20 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/15"
                             >
-                              Execution score: {executionScore.value}
-                            </Badge>
-                            <Badge className="bg-white/10 text-white/75 border-white/10">
-                              Создано {guidance.createdActions}/{guidance.totalActions}
-                            </Badge>
-                            {guidance.workedActions > 0 && (
-                              <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
-                                Сработало {guidance.workedActions}
-                              </Badge>
-                            )}
-                            {guidance.partialActions > 0 && (
-                              <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
-                                Частично {guidance.partialActions}
-                              </Badge>
-                            )}
-                            {guidance.failedActions > 0 && (
-                              <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
-                                Не помогло {guidance.failedActions}
-                              </Badge>
-                            )}
-                          </div>
+                              Открыть последний сработавший
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                const matchedAction = selectedPlan?.actions.find(
+                                  (action) => action.title === latestWorkedOutcome.actionTitle
+                                );
+                                if (matchedAction) {
+                                  focusPlanAction(leak.id, matchedAction.id);
+                                }
+                              }}
+                              className="border-emerald-500/20 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/15"
+                            >
+                              Перейти к шагу
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {guidance.selectedPlan && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Badge className={PLAN_MODE_STYLES[guidance.selectedPlan.mode]}>
+                          {PLAN_MODE_LABELS[guidance.selectedPlan.mode]}
+                        </Badge>
+                        <Badge
+                          className={
+                            executionScore.value >= 70
+                              ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
+                              : executionScore.value >= 40
+                                ? "border-amber-500/20 bg-amber-500/10 text-amber-200"
+                                : "border-rose-500/20 bg-rose-500/10 text-rose-200"
+                          }
+                        >
+                          Execution score: {executionScore.value}
+                        </Badge>
+                        <Badge className="border-white/10 bg-white/10 text-white/75">
+                          Создано {guidance.createdActions}/{guidance.totalActions}
+                        </Badge>
+                        {guidance.workedActions > 0 && (
+                          <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200">
+                            Сработало {guidance.workedActions}
+                          </Badge>
                         )}
-                        {guidance.selectedPlan && (
-                          <div className="mt-2 text-[11px] text-white/55">
-                            Score breakdown: создание {executionScore.breakdown.createdCoverage}% • feedback {executionScore.breakdown.feedbackCoverage}% • worked {executionScore.breakdown.workedShare}% • штраф попыток -{executionScore.breakdown.attemptsPenalty} • штраф drift -{executionScore.breakdown.driftPenalty}
-                          </div>
+                        {guidance.partialActions > 0 && (
+                          <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-200">
+                            Частично {guidance.partialActions}
+                          </Badge>
                         )}
-                        {guidance.totalActions > 0 && (
-                          <div className="mt-3 space-y-2">
-                            <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
-                              <div
-                                className="h-full rounded-full bg-indigo-400/80"
-                                style={{
-                                  width: `${Math.round((guidance.createdActions / guidance.totalActions) * 100)}%`,
-                                }}
-                              />
-                            </div>
-                            <div className="text-xs text-white/50">
-                              Применение: {Math.round((guidance.createdActions / guidance.totalActions) * 100)}%
-                            </div>
+                        {guidance.failedActions > 0 && (
+                          <Badge className="border-rose-500/20 bg-rose-500/10 text-rose-200">
+                            Не помогло {guidance.failedActions}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                    {guidance.selectedPlan && (
+                      <div className="mt-2 text-[11px] text-white/55">
+                        Score breakdown: создание {executionScore.breakdown.createdCoverage}% •
+                        feedback {executionScore.breakdown.feedbackCoverage}% • worked{" "}
+                        {executionScore.breakdown.workedShare}% • штраф попыток -
+                        {executionScore.breakdown.attemptsPenalty} • штраф drift -
+                        {executionScore.breakdown.driftPenalty}
+                      </div>
+                    )}
+                    {guidance.totalActions > 0 && (
+                      <div className="mt-3 space-y-2">
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                          <div
+                            className="h-full rounded-full bg-indigo-400/80"
+                            style={{
+                              width: `${Math.round((guidance.createdActions / guidance.totalActions) * 100)}%`,
+                            }}
+                          />
+                        </div>
+                        <div className="text-xs text-white/50">
+                          Применение:{" "}
+                          {Math.round((guidance.createdActions / guidance.totalActions) * 100)}%
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                          <div
+                            className="h-full rounded-full bg-emerald-400/80"
+                            style={{
+                              width: `${Math.round((guidance.feedbackActions / guidance.totalActions) * 100)}%`,
+                            }}
+                          />
+                        </div>
+                        <div className="text-xs text-white/50">
+                          Feedback покрытие:{" "}
+                          {Math.round((guidance.feedbackActions / guidance.totalActions) * 100)}%
+                        </div>
+                        {guidance.feedbackActions > 0 && (
+                          <>
                             <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
                               <div
                                 className="h-full rounded-full bg-emerald-400/80"
                                 style={{
-                                  width: `${Math.round((guidance.feedbackActions / guidance.totalActions) * 100)}%`,
+                                  width: `${Math.round((guidance.workedActions / guidance.feedbackActions) * 100)}%`,
                                 }}
                               />
                             </div>
                             <div className="text-xs text-white/50">
-                              Feedback покрытие: {Math.round((guidance.feedbackActions / guidance.totalActions) * 100)}%
+                              Эффективность feedback:{" "}
+                              {Math.round(
+                                (guidance.workedActions / guidance.feedbackActions) * 100
+                              )}
+                              %
                             </div>
-                            {guidance.feedbackActions > 0 && (
-                              <>
-                                <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
-                                  <div
-                                    className="h-full rounded-full bg-emerald-400/80"
-                                    style={{
-                                      width: `${Math.round((guidance.workedActions / guidance.feedbackActions) * 100)}%`,
-                                    }}
-                                  />
-                                </div>
-                                <div className="text-xs text-white/50">
-                                  Эффективность feedback: {Math.round((guidance.workedActions / guidance.feedbackActions) * 100)}%
-                                </div>
-                              </>
-                            )}
-                          </div>
+                          </>
                         )}
-                        {recentFeedbackTrend && (
-                          <div
-                            className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
-                              recentFeedbackTrend.isRisky
-                                ? 'border-amber-500/25 bg-amber-500/10 text-amber-100'
-                                : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-100'
-                            }`}
-                          >
-                            Свежий тренд feedback: {recentFeedbackTrend.windowSize} событий, негативных{' '}
-                            {recentFeedbackTrend.negativeShare}%.
-                            {recentFeedbackTrend.isRisky
-                              ? ' Режим можно упростить до minimum.'
-                              : recentFeedbackTrend.isStable
-                                ? ' Динамика стабильная: можно аккуратно усиливать режим.'
-                              : ' Динамика пока смешанная.'}
-                          </div>
-                        )}
-                        <div className="mt-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2 space-y-2">
+                      </div>
+                    )}
+                    {recentFeedbackTrend && (
+                      <div
+                        className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
+                          recentFeedbackTrend.isRisky
+                            ? "border-amber-500/25 bg-amber-500/10 text-amber-100"
+                            : "border-emerald-500/20 bg-emerald-500/10 text-emerald-100"
+                        }`}
+                      >
+                        Свежий тренд feedback: {recentFeedbackTrend.windowSize} событий, негативных{" "}
+                        {recentFeedbackTrend.negativeShare}%.
+                        {recentFeedbackTrend.isRisky
+                          ? " Режим можно упростить до minimum."
+                          : recentFeedbackTrend.isStable
+                            ? " Динамика стабильная: можно аккуратно усиливать режим."
+                            : " Динамика пока смешанная."}
+                      </div>
+                    )}
+                    <div className="mt-3 space-y-2 rounded-xl border border-white/10 bg-black/15 px-3 py-2">
+                      <div className="text-xs text-white/75">
+                        Цепочка выполнения: leak
+                        {" → "}
+                        {selectedModeForChain
+                          ? `режим ${PLAN_MODE_LABELS[selectedModeForChain]}`
+                          : "режим не выбран"}
+                        {" → "}
+                        создано сущностей {createdEntityCountForChain}
+                        {" → "}
+                        feedback {feedbackCountForChain}
+                        {" → "}
+                        worked {workedCountForChain}
+                      </div>
+                      <div className="grid gap-2 md:grid-cols-4">
+                        <div className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5">
+                          <div className="text-[11px] text-white/50">Leak</div>
+                          <div className="text-xs text-white/75">captured</div>
+                        </div>
+                        <div className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5">
+                          <div className="text-[11px] text-white/50">Mode</div>
                           <div className="text-xs text-white/75">
-                            Цепочка выполнения:
-                            {' '}
-                            leak
-                            {' → '}
-                            {selectedModeForChain ? `режим ${PLAN_MODE_LABELS[selectedModeForChain]}` : 'режим не выбран'}
-                            {' → '}
-                            создано сущностей {createdEntityCountForChain}
-                            {' → '}
-                            feedback {feedbackCountForChain}
-                            {' → '}
-                            worked {workedCountForChain}
+                            {selectedModeForChain
+                              ? PLAN_MODE_LABELS[selectedModeForChain]
+                              : "не выбран"}
                           </div>
-                          <div className="grid gap-2 md:grid-cols-4">
-                            <div className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5">
-                              <div className="text-[11px] text-white/50">Leak</div>
-                              <div className="text-xs text-white/75">captured</div>
-                            </div>
-                            <div className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5">
-                              <div className="text-[11px] text-white/50">Mode</div>
-                              <div className="text-xs text-white/75">
-                                {selectedModeForChain ? PLAN_MODE_LABELS[selectedModeForChain] : 'не выбран'}
-                              </div>
-                            </div>
-                            <div className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5">
-                              <div className="text-[11px] text-white/50">Entities</div>
-                              <div className="text-xs text-white/75">
-                                {createdEntityCountForChain} всего, policy-linked {policyLinkedCreatedCount}
-                              </div>
-                              {policyLinkedCreatedWithoutFeedback > 0 && (
-                                <div className="mt-1 text-[11px] text-amber-200">
-                                  Без feedback: {policyLinkedCreatedWithoutFeedback}
-                                </div>
-                              )}
-                              {firstPolicyLinkedWithoutFeedbackActionId && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => focusPlanAction(leak.id, firstPolicyLinkedWithoutFeedbackActionId)}
-                                  className="mt-1 h-6 border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 px-2 text-[11px] text-amber-200"
-                                >
-                                  К первому без feedback
-                                </Button>
-                              )}
-                            </div>
-                            <div className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5">
-                              <div className="text-[11px] text-white/50">Feedback</div>
-                              <div className="text-xs text-white/75">
-                                {feedbackCountForChain} событий • worked {workedCountForChain}
-                              </div>
-                            </div>
+                        </div>
+                        <div className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5">
+                          <div className="text-[11px] text-white/50">Entities</div>
+                          <div className="text-xs text-white/75">
+                            {createdEntityCountForChain} всего, policy-linked{" "}
+                            {policyLinkedCreatedCount}
                           </div>
-                          {latestPolicyFailedOutcome && (
-                            <div className="flex flex-wrap gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={async () => {
-                                  const action = latestPolicyFailedOutcome.actionId
-                                    ? planActionsById.get(latestPolicyFailedOutcome.actionId) || null
-                                    : null
-                                  await executePolicyAction(leak, {
-                                    actionType: 'retry',
-                                    correlationId: latestPolicyFailedOutcome.policyCorrelationId || null,
-                                    actionId: action?.id || latestPolicyFailedOutcome.actionId || null,
-                                    actionTitle: action?.title || latestPolicyFailedOutcome.actionTitle || null,
-                                    actionKind: action?.kind || latestPolicyFailedOutcome.actionKind || null,
-                                    reason: latestPolicyFailedOutcome.note || 'policy_outcome_failed',
-                                  })
-                                  await retryLeakPlanning(leak, {
-                                    action,
-                                    failureReason: latestPolicyFailedOutcome.note || null,
-                                  })
-                                }}
-                                disabled={policyActionBusy || retryingLeakId === leak.id}
-                                className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
-                              >
-                                {policyActionBusy || retryingLeakId === leak.id ? 'Обновляю...' : 'Retry from policy failure'}
-                              </Button>
-                              <div className="self-center text-[11px] text-white/55">
-                                Последний провал:
-                                {' '}
-                                {latestPolicyFailedOutcome.actionTitle || 'шаг не указан'}
-                                {' • '}
-                                {formatDate(latestPolicyFailedOutcome.at)}
-                              </div>
+                          {policyLinkedCreatedWithoutFeedback > 0 && (
+                            <div className="mt-1 text-[11px] text-amber-200">
+                              Без feedback: {policyLinkedCreatedWithoutFeedback}
                             </div>
                           )}
+                          {firstPolicyLinkedWithoutFeedbackActionId && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                focusPlanAction(leak.id, firstPolicyLinkedWithoutFeedbackActionId)
+                              }
+                              className="mt-1 h-6 border-amber-500/20 bg-amber-500/10 px-2 text-[11px] text-amber-200 hover:bg-amber-500/15"
+                            >
+                              К первому без feedback
+                            </Button>
+                          )}
                         </div>
-                        {contextDriftHint && (
-                          <div
-                            className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
-                              contextDriftHint.isStale
-                                ? 'border-rose-500/25 bg-rose-500/10 text-rose-100'
-                                : 'border-white/10 bg-black/10 text-white/70'
-                            }`}
+                        <div className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5">
+                          <div className="text-[11px] text-white/50">Feedback</div>
+                          <div className="text-xs text-white/75">
+                            {feedbackCountForChain} событий • worked {workedCountForChain}
+                          </div>
+                        </div>
+                      </div>
+                      {latestPolicyFailedOutcome && (
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              const action = latestPolicyFailedOutcome.actionId
+                                ? planActionsById.get(latestPolicyFailedOutcome.actionId) || null
+                                : null;
+                              await executePolicyAction(leak, {
+                                actionType: "retry",
+                                correlationId:
+                                  latestPolicyFailedOutcome.policyCorrelationId || null,
+                                actionId: action?.id || latestPolicyFailedOutcome.actionId || null,
+                                actionTitle:
+                                  action?.title || latestPolicyFailedOutcome.actionTitle || null,
+                                actionKind:
+                                  action?.kind || latestPolicyFailedOutcome.actionKind || null,
+                                reason: latestPolicyFailedOutcome.note || "policy_outcome_failed",
+                              });
+                              await retryLeakPlanning(leak, {
+                                action,
+                                failureReason: latestPolicyFailedOutcome.note || null,
+                              });
+                            }}
+                            disabled={policyActionBusy || retryingLeakId === leak.id}
+                            className="border-amber-500/20 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15"
                           >
-                            Drift контекста: {contextDriftHint.score}%.
-                            {contextDriftHint.generatedAt
-                              ? ` База: ${formatDate(contextDriftHint.generatedAt)}.`
-                              : ' База генерации ещё не зафиксирована.'}
-                            {contextDriftHint.changedMetrics.length > 0 && (
-                              <div className="mt-1 text-[11px] text-white/60">
-                                Изменилось: {contextDriftHint.changedMetrics.map((item) => `${item.key} (${item.deltaPct > 0 ? '+' : ''}${item.deltaPct}%)`).join(', ')}
-                              </div>
-                            )}
-                            {contextDriftHint.changedMetrics.length > 0 && (
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {contextDriftHint.changedMetrics.slice(0, 4).map((item) => (
-                                  <Badge
-                                    key={`${item.key}-${item.deltaPct}`}
-                                    className="bg-white/10 text-white/70 border-white/10"
-                                  >
-                                    {item.key}: {item.before} → {item.now} ({item.deltaPct > 0 ? '+' : ''}{item.deltaPct}%)
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
+                            {policyActionBusy || retryingLeakId === leak.id
+                              ? "Обновляю..."
+                              : "Retry from policy failure"}
+                          </Button>
+                          <div className="self-center text-[11px] text-white/55">
+                            Последний провал:{" "}
+                            {latestPolicyFailedOutcome.actionTitle || "шаг не указан"}
+                            {" • "}
+                            {formatDate(latestPolicyFailedOutcome.at)}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {contextDriftHint && (
+                      <div
+                        className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
+                          contextDriftHint.isStale
+                            ? "border-rose-500/25 bg-rose-500/10 text-rose-100"
+                            : "border-white/10 bg-black/10 text-white/70"
+                        }`}
+                      >
+                        Drift контекста: {contextDriftHint.score}%.
+                        {contextDriftHint.generatedAt
+                          ? ` База: ${formatDate(contextDriftHint.generatedAt)}.`
+                          : " База генерации ещё не зафиксирована."}
+                        {contextDriftHint.changedMetrics.length > 0 && (
+                          <div className="mt-1 text-[11px] text-white/60">
+                            Изменилось:{" "}
+                            {contextDriftHint.changedMetrics
+                              .map(
+                                (item) =>
+                                  `${item.key} (${item.deltaPct > 0 ? "+" : ""}${item.deltaPct}%)`
+                              )
+                              .join(", ")}
                           </div>
                         )}
-                        {nextBestActionHint && (
-                          <div className="mt-3 rounded-xl border border-indigo-500/20 bg-indigo-500/10 px-3 py-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <div className="text-xs uppercase tracking-wide text-indigo-200/80">
-                                Next Best Action ({nextBestActionHint.confidence})
-                              </div>
+                        {contextDriftHint.changedMetrics.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {contextDriftHint.changedMetrics.slice(0, 4).map((item) => (
                               <Badge
-                                className={
-                                  policyDecisionState === 'accepted'
-                                    ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
-                                    : policyDecisionState === 'rejected'
-                                      ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
-                                      : 'bg-white/10 text-white/70 border-white/10'
-                                }
+                                key={`${item.key}-${item.deltaPct}`}
+                                className="border-white/10 bg-white/10 text-white/70"
                               >
-                                {policyDecisionState === 'accepted'
-                                  ? 'Статус: принят'
-                                  : policyDecisionState === 'rejected'
-                                    ? 'Статус: отклонён'
-                                    : 'Статус: без ответа'}
+                                {item.key}: {item.before} → {item.now} (
+                                {item.deltaPct > 0 ? "+" : ""}
+                                {item.deltaPct}%)
                               </Badge>
-                            </div>
-                            <div className="mt-1 text-sm text-indigo-100">{nextBestActionHint.reason}</div>
-                            {nextBestActionHint.factors && nextBestActionHint.factors.length > 0 && (
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {nextBestActionHint.factors.slice(0, 3).map((factor) => (
-                                  <Badge
-                                    key={`${factor.key}-${factor.weight}`}
-                                    className="border-white/15 bg-black/15 text-indigo-100/90"
-                                  >
-                                    {factor.key}: {Math.round(factor.weight * 100)}%
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {nextBestActionHint.type === 'switch_mode' && nextBestActionHint.targetMode && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan || null, planActionsById)}
-                                  disabled={selectingPlanLeakId === leak.id || policyActionBusy}
-                                  className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
-                                >
-                                  {selectingPlanLeakId === leak.id || policyActionBusy
-                                    ? 'Переключаю...'
-                                    : `Переключить: ${PLAN_MODE_LABELS[nextBestActionHint.targetMode]}`}
-                                </Button>
-                              )}
-                              {nextBestActionHint.type === 'create_entity' && nextBestActionHint.actionId && selectedPlan && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan || null, planActionsById)}
-                                  disabled={policyActionBusy}
-                                  className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
-                                >
-                                  {policyActionBusy ? 'Выполняю...' : 'Создать рекомендуемый шаг'}
-                                </Button>
-                              )}
-                              {nextBestActionHint.type === 'give_feedback' && nextBestActionHint.actionId && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan || null, planActionsById)}
-                                  disabled={policyActionBusy}
-                                  className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
-                                >
-                                  {policyActionBusy ? 'Выполняю...' : 'Перейти к feedback'}
-                                </Button>
-                              )}
-                              {nextBestActionHint.type === 'retry' && nextBestActionHint.actionId && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan || null, planActionsById)}
-                                  disabled={retryingLeakId === leak.id || policyActionBusy}
-                                  className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
-                                >
-                                  {retryingLeakId === leak.id || policyActionBusy ? 'Обновляю...' : 'Retry по рекомендации'}
-                                </Button>
-                              )}
-                              {(nextBestActionHint.type === 'generate' || nextBestActionHint.type === 'regenerate_context') && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan || null, planActionsById)}
-                                  disabled={generatingPlansLeakId === leak.id || policyActionBusy}
-                                  className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
-                                >
-                                  {generatingPlansLeakId === leak.id || policyActionBusy ? 'Собираю...' : 'Пересобрать планы'}
-                                </Button>
-                              )}
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {nextBestActionHint && (
+                      <div className="mt-3 rounded-xl border border-indigo-500/20 bg-indigo-500/10 px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="text-xs tracking-wide text-indigo-200/80 uppercase">
+                            Next Best Action ({nextBestActionHint.confidence})
+                          </div>
+                          <Badge
+                            className={
+                              policyDecisionState === "accepted"
+                                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
+                                : policyDecisionState === "rejected"
+                                  ? "border-amber-500/20 bg-amber-500/10 text-amber-200"
+                                  : "border-white/10 bg-white/10 text-white/70"
+                            }
+                          >
+                            {policyDecisionState === "accepted"
+                              ? "Статус: принят"
+                              : policyDecisionState === "rejected"
+                                ? "Статус: отклонён"
+                                : "Статус: без ответа"}
+                          </Badge>
+                        </div>
+                        <div className="mt-1 text-sm text-indigo-100">
+                          {nextBestActionHint.reason}
+                        </div>
+                        {nextBestActionHint.factors && nextBestActionHint.factors.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {nextBestActionHint.factors.slice(0, 3).map((factor) => (
+                              <Badge
+                                key={`${factor.key}-${factor.weight}`}
+                                className="border-white/15 bg-black/15 text-indigo-100/90"
+                              >
+                                {factor.key}: {Math.round(factor.weight * 100)}%
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {nextBestActionHint.type === "switch_mode" &&
+                            nextBestActionHint.targetMode && (
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan || null, planActionsById)}
-                                disabled={policyActionBusy}
-                                className="border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-200"
+                                onClick={() =>
+                                  executeSuggestedPolicyAction(
+                                    leak,
+                                    nextBestActionHint,
+                                    selectedPlan || null,
+                                    planActionsById
+                                  )
+                                }
+                                disabled={selectingPlanLeakId === leak.id || policyActionBusy}
+                                className="border-indigo-400/25 bg-indigo-500/10 text-indigo-100 hover:bg-indigo-500/15"
                               >
-                                {policyActionBusy ? 'Фиксирую...' : 'Принять совет'}
+                                {selectingPlanLeakId === leak.id || policyActionBusy
+                                  ? "Переключаю..."
+                                  : `Переключить: ${PLAN_MODE_LABELS[nextBestActionHint.targetMode]}`}
                               </Button>
-                              {[
-                                { key: 'not_now', label: 'Не сейчас' },
-                                { key: 'too_hard', label: 'Сложно сейчас' },
-                                { key: 'not_relevant', label: 'Не по контексту' },
-                              ].map((reject) => (
+                            )}
+                          {nextBestActionHint.type === "create_entity" &&
+                            nextBestActionHint.actionId &&
+                            selectedPlan && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  executeSuggestedPolicyAction(
+                                    leak,
+                                    nextBestActionHint,
+                                    selectedPlan || null,
+                                    planActionsById
+                                  )
+                                }
+                                disabled={policyActionBusy}
+                                className="border-indigo-400/25 bg-indigo-500/10 text-indigo-100 hover:bg-indigo-500/15"
+                              >
+                                {policyActionBusy ? "Выполняю..." : "Создать рекомендуемый шаг"}
+                              </Button>
+                            )}
+                          {nextBestActionHint.type === "give_feedback" &&
+                            nextBestActionHint.actionId && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  executeSuggestedPolicyAction(
+                                    leak,
+                                    nextBestActionHint,
+                                    selectedPlan || null,
+                                    planActionsById
+                                  )
+                                }
+                                disabled={policyActionBusy}
+                                className="border-indigo-400/25 bg-indigo-500/10 text-indigo-100 hover:bg-indigo-500/15"
+                              >
+                                {policyActionBusy ? "Выполняю..." : "Перейти к feedback"}
+                              </Button>
+                            )}
+                          {nextBestActionHint.type === "retry" && nextBestActionHint.actionId && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                executeSuggestedPolicyAction(
+                                  leak,
+                                  nextBestActionHint,
+                                  selectedPlan || null,
+                                  planActionsById
+                                )
+                              }
+                              disabled={retryingLeakId === leak.id || policyActionBusy}
+                              className="border-indigo-400/25 bg-indigo-500/10 text-indigo-100 hover:bg-indigo-500/15"
+                            >
+                              {retryingLeakId === leak.id || policyActionBusy
+                                ? "Обновляю..."
+                                : "Retry по рекомендации"}
+                            </Button>
+                          )}
+                          {(nextBestActionHint.type === "generate" ||
+                            nextBestActionHint.type === "regenerate_context") && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                executeSuggestedPolicyAction(
+                                  leak,
+                                  nextBestActionHint,
+                                  selectedPlan || null,
+                                  planActionsById
+                                )
+                              }
+                              disabled={generatingPlansLeakId === leak.id || policyActionBusy}
+                              className="border-indigo-400/25 bg-indigo-500/10 text-indigo-100 hover:bg-indigo-500/15"
+                            >
+                              {generatingPlansLeakId === leak.id || policyActionBusy
+                                ? "Собираю..."
+                                : "Пересобрать планы"}
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              executeSuggestedPolicyAction(
+                                leak,
+                                nextBestActionHint,
+                                selectedPlan || null,
+                                planActionsById
+                              )
+                            }
+                            disabled={policyActionBusy}
+                            className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/15"
+                          >
+                            {policyActionBusy ? "Фиксирую..." : "Принять совет"}
+                          </Button>
+                          {[
+                            { key: "not_now", label: "Не сейчас" },
+                            { key: "too_hard", label: "Сложно сейчас" },
+                            { key: "not_relevant", label: "Не по контексту" },
+                          ].map((reject) => (
+                            <Button
+                              key={`reject-${reject.key}`}
+                              size="sm"
+                              variant="outline"
+                              disabled={policyActionBusy}
+                              onClick={() =>
+                                executePolicyAction(leak, {
+                                  actionType:
+                                    nextBestActionHint.type === "switch_mode"
+                                      ? "switch_mode"
+                                      : nextBestActionHint.type === "retry"
+                                        ? "retry"
+                                        : nextBestActionHint.type === "regenerate_context"
+                                          ? "regenerate_context"
+                                          : "focus_action",
+                                  decision: "rejected",
+                                  reason: reject.key,
+                                  correlationId: nextBestActionHint.correlationId || null,
+                                  targetMode: nextBestActionHint.targetMode || undefined,
+                                  actionId: nextBestActionHint.actionId || undefined,
+                                  factors: nextBestActionHint.factors || [],
+                                })
+                              }
+                              className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                            >
+                              {policyActionBusy ? "Фиксирую..." : reject.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {SHOW_POLICY_INSPECTOR && policy && (
+                      <div className="mt-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2">
+                        <div className="text-xs tracking-wide text-white/55 uppercase">
+                          Policy inspector
+                        </div>
+                        <div className="mt-1 text-xs text-white/70">
+                          v{policy.policyVersion || 1}
+                          {policy.computedAt ? ` • ${formatDate(policy.computedAt)}` : ""}
+                          {policyComputedMinutes !== null
+                            ? ` • ${policyComputedMinutes}м назад`
+                            : ""}
+                        </div>
+                        {SHOW_FUNNELS && currentFunnel && (
+                          <div className="mt-2 rounded-xl border border-white/10 bg-black/10 px-2 py-2">
+                            <div className="text-[11px] text-white/55">
+                              Current funnel: {currentFunnel.correlationId}
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-2">
+                              <Badge
+                                className={
+                                  currentFunnel.suggestedAt
+                                    ? "border-indigo-500/20 bg-indigo-500/10 text-indigo-200"
+                                    : "border-white/10 bg-white/10 text-white/60"
+                                }
+                              >
+                                Suggested
+                              </Badge>
+                              <Badge
+                                className={
+                                  currentFunnel.acceptedAt
+                                    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
+                                    : "border-white/10 bg-white/10 text-white/60"
+                                }
+                              >
+                                Accepted
+                              </Badge>
+                              <Badge
+                                className={
+                                  currentFunnel.rejectedAt
+                                    ? "border-amber-500/20 bg-amber-500/10 text-amber-200"
+                                    : "border-white/10 bg-white/10 text-white/60"
+                                }
+                              >
+                                Rejected
+                              </Badge>
+                              <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
+                                Entities: {currentFunnel.entityCreatedCount}
+                              </Badge>
+                              <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200">
+                                Outcomes: {currentFunnel.outcomeCount}
+                              </Badge>
+                              <Badge className="border-white/10 bg-white/10 text-white/70">
+                                Этап: {currentFunnelStageLabel}
+                              </Badge>
+                              <Badge
+                                className={
+                                  currentFunnel.urgency === "high"
+                                    ? "border-rose-500/20 bg-rose-500/10 text-rose-200"
+                                    : currentFunnel.urgency === "medium"
+                                      ? "border-amber-500/20 bg-amber-500/10 text-amber-200"
+                                      : "border-white/10 bg-white/10 text-white/65"
+                                }
+                              >
+                                Срочность: {getPolicyUrgencyLabel(currentFunnel.urgency)}
+                              </Badge>
+                              <Badge className="border-white/10 bg-white/10 text-white/65">
+                                Stuck score: {currentFunnel.stuckScore}
+                              </Badge>
+                              <Badge className="border-white/10 bg-white/10 text-white/60">
+                                Сигнал:{" "}
+                                {getPolicyStuckSignalLabel(currentFunnel.primaryStuckSignal)}
+                              </Badge>
+                              {currentFunnel.recommendedNudge !== "none" && (
+                                <Badge className="border-rose-500/20 bg-rose-500/10 text-rose-200">
+                                  Nudge: {getPolicyNudgeLabel(currentFunnel.recommendedNudge)}
+                                </Badge>
+                              )}
+                              {currentFunnel.pendingOutcomeActionIds.length > 0 && (
+                                <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-200">
+                                  Pending outcome: {currentFunnel.pendingOutcomeActionIds.length}
+                                </Badge>
+                              )}
+                              {nextPendingFunnelActionId && (
                                 <Button
-                                  key={`reject-${reject.key}`}
                                   size="sm"
                                   variant="outline"
-                                  disabled={policyActionBusy}
                                   onClick={() =>
-                                    executePolicyAction(leak, {
-                                      actionType: nextBestActionHint.type === 'switch_mode'
-                                        ? 'switch_mode'
-                                        : nextBestActionHint.type === 'retry'
-                                          ? 'retry'
-                                          : nextBestActionHint.type === 'regenerate_context'
-                                            ? 'regenerate_context'
-                                            : 'focus_action',
-                                      decision: 'rejected',
-                                      reason: reject.key,
-                                      correlationId: nextBestActionHint.correlationId || null,
-                                      targetMode: nextBestActionHint.targetMode || undefined,
-                                      actionId: nextBestActionHint.actionId || undefined,
-                                      factors: nextBestActionHint.factors || [],
-                                    })
+                                    focusPlanAction(leak.id, nextPendingFunnelActionId)
                                   }
-                                  className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                  className="h-6 border-amber-500/20 bg-amber-500/10 px-2 text-[11px] text-amber-200 hover:bg-amber-500/15"
                                 >
-                                  {policyActionBusy ? 'Фиксирую...' : reject.label}
+                                  {nextPendingFunnelActionTitle
+                                    ? `К pending: ${nextPendingFunnelActionTitle}`
+                                    : "К pending шагу"}
                                 </Button>
-                              ))}
+                              )}
+                              {nextPendingFunnelActionId && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    sendPlanActionFeedback(
+                                      leak.id,
+                                      nextPendingFunnelActionId,
+                                      "partially",
+                                      getFeedbackCommentDraft(
+                                        planActionsById.get(nextPendingFunnelActionId) || null
+                                      ),
+                                      { silent: false }
+                                    )
+                                  }
+                                  disabled={savingFeedbackActionId === nextPendingFunnelActionId}
+                                  className="h-6 border-indigo-500/20 bg-indigo-500/10 px-2 text-[11px] text-indigo-200 hover:bg-indigo-500/15"
+                                >
+                                  {savingFeedbackActionId === nextPendingFunnelActionId
+                                    ? "Сохраняю..."
+                                    : "Quick feedback"}
+                                </Button>
+                              )}
                             </div>
-                          </div>
-                        )}
-                        {SHOW_POLICY_INSPECTOR && policy && (
-                          <div className="mt-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2">
-                            <div className="text-xs uppercase tracking-wide text-white/55">Policy inspector</div>
-                            <div className="mt-1 text-xs text-white/70">
-                              v{policy.policyVersion || 1}
-                              {policy.computedAt ? ` • ${formatDate(policy.computedAt)}` : ''}
-                              {policyComputedMinutes !== null ? ` • ${policyComputedMinutes}м назад` : ''}
+                            <div className="mt-1 text-[11px] text-white/60">
+                              {currentFunnel.urgencyReason}. {currentFunnel.recommendedNudgeReason}.
                             </div>
-                            {SHOW_FUNNELS && currentFunnel && (
-                              <div className="mt-2 rounded-xl border border-white/10 bg-black/10 px-2 py-2">
-                                <div className="text-[11px] text-white/55">
-                                  Current funnel: {currentFunnel.correlationId}
-                                </div>
-                                <div className="mt-1 flex flex-wrap gap-2">
-                                  <Badge
-                                    className={
-                                      currentFunnel.suggestedAt
-                                        ? 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20'
-                                        : 'bg-white/10 text-white/60 border-white/10'
-                                    }
-                                  >
-                                    Suggested
+                            <div className="mt-1 flex flex-wrap gap-2">
+                              {currentFunnel.suggestedAgeMinutes !== null && (
+                                <Badge className="border-white/10 bg-white/10 text-white/60">
+                                  Suggested age: {currentFunnel.suggestedAgeMinutes}m
+                                </Badge>
+                              )}
+                              {currentFunnel.acceptedAgeMinutes !== null && (
+                                <Badge className="border-white/10 bg-white/10 text-white/60">
+                                  Accepted age: {currentFunnel.acceptedAgeMinutes}m
+                                </Badge>
+                              )}
+                              {currentFunnel.maxPendingOutcomeAgeMinutes !== null && (
+                                <Badge
+                                  className={
+                                    currentFunnel.maxPendingOutcomeAgeMinutes >= 180
+                                      ? "border-rose-500/20 bg-rose-500/10 text-rose-200"
+                                      : "border-white/10 bg-white/10 text-white/60"
+                                  }
+                                >
+                                  Pending age: {currentFunnel.maxPendingOutcomeAgeMinutes}m
+                                </Badge>
+                              )}
+                              {currentFunnel.oldestPendingOutcomeActionId && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    focusPlanAction(
+                                      leak.id,
+                                      currentFunnel.oldestPendingOutcomeActionId || ""
+                                    )
+                                  }
+                                  className="h-6 border-rose-500/20 bg-rose-500/10 px-2 text-[11px] text-rose-200 hover:bg-rose-500/15"
+                                >
+                                  {currentFunnel.oldestPendingOutcomeActionTitle
+                                    ? `Самый старый: ${currentFunnel.oldestPendingOutcomeActionTitle}`
+                                    : "К самому старому pending"}
+                                </Button>
+                              )}
+                            </div>
+                            {(currentFunnel.stuckSignals.noDecision ||
+                              currentFunnel.stuckSignals.noEntityAfterAccept ||
+                              currentFunnel.stuckSignals.pendingFeedback ||
+                              currentFunnel.stuckSignals.noOutcomeAfterCreate) && (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {currentFunnel.stuckSignals.noDecision && (
+                                  <Badge className="border-rose-500/20 bg-rose-500/10 text-rose-200">
+                                    Нет решения по совету
                                   </Badge>
-                                  <Badge
-                                    className={
-                                      currentFunnel.acceptedAt
-                                        ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
-                                        : 'bg-white/10 text-white/60 border-white/10'
-                                    }
-                                  >
-                                    Accepted
+                                )}
+                                {currentFunnel.stuckSignals.noEntityAfterAccept && (
+                                  <Badge className="border-rose-500/20 bg-rose-500/10 text-rose-200">
+                                    После принятия не создано сущностей
                                   </Badge>
-                                  <Badge
-                                    className={
-                                      currentFunnel.rejectedAt
-                                        ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
-                                        : 'bg-white/10 text-white/60 border-white/10'
-                                    }
-                                  >
-                                    Rejected
+                                )}
+                                {currentFunnel.stuckSignals.pendingFeedback && (
+                                  <Badge className="border-rose-500/20 bg-rose-500/10 text-rose-200">
+                                    Feedback слишком долго не закрыт
                                   </Badge>
-                                  <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
-                                    Entities: {currentFunnel.entityCreatedCount}
+                                )}
+                                {currentFunnel.stuckSignals.noOutcomeAfterCreate && (
+                                  <Badge className="border-rose-500/20 bg-rose-500/10 text-rose-200">
+                                    Создано, но нет outcome
                                   </Badge>
-                                  <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
-                                    Outcomes: {currentFunnel.outcomeCount}
-                                  </Badge>
-                                  <Badge className="bg-white/10 text-white/70 border-white/10">
-                                    Этап: {currentFunnelStageLabel}
-                                  </Badge>
-                                  <Badge
-                                    className={
-                                      currentFunnel.urgency === 'high'
-                                        ? 'bg-rose-500/10 text-rose-200 border-rose-500/20'
-                                        : currentFunnel.urgency === 'medium'
-                                          ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
-                                          : 'bg-white/10 text-white/65 border-white/10'
-                                    }
-                                  >
-                                    Срочность: {getPolicyUrgencyLabel(currentFunnel.urgency)}
-                                  </Badge>
-                                  <Badge className="bg-white/10 text-white/65 border-white/10">
-                                    Stuck score: {currentFunnel.stuckScore}
-                                  </Badge>
-                                  <Badge className="bg-white/10 text-white/60 border-white/10">
-                                    Сигнал: {getPolicyStuckSignalLabel(currentFunnel.primaryStuckSignal)}
-                                  </Badge>
-                                  {currentFunnel.recommendedNudge !== 'none' && (
-                                    <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
-                                      Nudge: {getPolicyNudgeLabel(currentFunnel.recommendedNudge)}
-                                    </Badge>
-                                  )}
-                                  {currentFunnel.pendingOutcomeActionIds.length > 0 && (
-                                    <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
-                                      Pending outcome: {currentFunnel.pendingOutcomeActionIds.length}
-                                    </Badge>
-                                  )}
-                                  {nextPendingFunnelActionId && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => focusPlanAction(leak.id, nextPendingFunnelActionId)}
-                                      className="h-6 border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 px-2 text-[11px] text-amber-200"
-                                    >
-                                      {nextPendingFunnelActionTitle
-                                        ? `К pending: ${nextPendingFunnelActionTitle}`
-                                        : 'К pending шагу'}
-                                    </Button>
-                                  )}
-                                  {nextPendingFunnelActionId && (
+                                )}
+                              </div>
+                            )}
+                            {currentFunnel.recommendedNudge !== "none" && (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {currentFunnel.recommendedNudge === "collect_feedback" &&
+                                  currentFunnel.nextPendingOutcomeActionId && (
                                     <Button
                                       size="sm"
                                       variant="outline"
                                       onClick={() =>
                                         sendPlanActionFeedback(
                                           leak.id,
-                                          nextPendingFunnelActionId,
-                                          'partially',
+                                          currentFunnel.nextPendingOutcomeActionId || "",
+                                          "partially",
                                           getFeedbackCommentDraft(
-                                            planActionsById.get(nextPendingFunnelActionId) || null,
-                                          ),
-                                          { silent: false },
+                                            planActionsById.get(
+                                              currentFunnel.nextPendingOutcomeActionId || ""
+                                            ) || null
+                                          )
                                         )
                                       }
-                                      disabled={savingFeedbackActionId === nextPendingFunnelActionId}
-                                      className="h-6 border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 px-2 text-[11px] text-indigo-200"
+                                      disabled={
+                                        savingFeedbackActionId ===
+                                        currentFunnel.nextPendingOutcomeActionId
+                                      }
+                                      className="border-amber-500/20 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15"
                                     >
-                                      {savingFeedbackActionId === nextPendingFunnelActionId
-                                        ? 'Сохраняю...'
-                                        : 'Quick feedback'}
+                                      Быстрый outcome
                                     </Button>
                                   )}
-                                </div>
-                                <div className="mt-1 text-[11px] text-white/60">
-                                  {currentFunnel.urgencyReason}. {currentFunnel.recommendedNudgeReason}.
-                                </div>
-                                <div className="mt-1 flex flex-wrap gap-2">
-                                  {currentFunnel.suggestedAgeMinutes !== null && (
-                                    <Badge className="bg-white/10 text-white/60 border-white/10">
-                                      Suggested age: {currentFunnel.suggestedAgeMinutes}m
-                                    </Badge>
-                                  )}
-                                  {currentFunnel.acceptedAgeMinutes !== null && (
-                                    <Badge className="bg-white/10 text-white/60 border-white/10">
-                                      Accepted age: {currentFunnel.acceptedAgeMinutes}m
-                                    </Badge>
-                                  )}
-                                  {currentFunnel.maxPendingOutcomeAgeMinutes !== null && (
-                                    <Badge
-                                      className={
-                                        currentFunnel.maxPendingOutcomeAgeMinutes >= 180
-                                          ? 'bg-rose-500/10 text-rose-200 border-rose-500/20'
-                                          : 'bg-white/10 text-white/60 border-white/10'
-                                      }
-                                    >
-                                      Pending age: {currentFunnel.maxPendingOutcomeAgeMinutes}m
-                                    </Badge>
-                                  )}
-                                  {currentFunnel.oldestPendingOutcomeActionId && (
+                                {currentFunnel.recommendedNudge === "create_entity" &&
+                                  nextBestActionHint &&
+                                  nextBestActionHint.type === "create_entity" &&
+                                  selectedPlan &&
+                                  nextBestActionHint.actionId && (
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      onClick={() => focusPlanAction(leak.id, currentFunnel.oldestPendingOutcomeActionId || '')}
-                                      className="h-6 border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/15 px-2 text-[11px] text-rose-200"
+                                      onClick={() =>
+                                        executeSuggestedPolicyAction(
+                                          leak,
+                                          nextBestActionHint,
+                                          selectedPlan,
+                                          planActionsById
+                                        )
+                                      }
+                                      disabled={policyActionBusy}
+                                      className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200 hover:bg-indigo-500/15"
                                     >
-                                      {currentFunnel.oldestPendingOutcomeActionTitle
-                                        ? `Самый старый: ${currentFunnel.oldestPendingOutcomeActionTitle}`
-                                        : 'К самому старому pending'}
+                                      Создать следующий шаг
                                     </Button>
                                   )}
-                                </div>
-                                {(currentFunnel.stuckSignals.noDecision ||
-                                  currentFunnel.stuckSignals.noEntityAfterAccept ||
-                                  currentFunnel.stuckSignals.pendingFeedback ||
-                                  currentFunnel.stuckSignals.noOutcomeAfterCreate) && (
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {currentFunnel.stuckSignals.noDecision && (
-                                      <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
-                                        Нет решения по совету
-                                      </Badge>
-                                    )}
-                                    {currentFunnel.stuckSignals.noEntityAfterAccept && (
-                                      <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
-                                        После принятия не создано сущностей
-                                      </Badge>
-                                    )}
-                                    {currentFunnel.stuckSignals.pendingFeedback && (
-                                      <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
-                                        Feedback слишком долго не закрыт
-                                      </Badge>
-                                    )}
-                                    {currentFunnel.stuckSignals.noOutcomeAfterCreate && (
-                                      <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
-                                        Создано, но нет outcome
-                                      </Badge>
-                                    )}
-                                  </div>
-                                )}
-                                {currentFunnel.recommendedNudge !== 'none' && (
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {currentFunnel.recommendedNudge === 'collect_feedback' &&
-                                      currentFunnel.nextPendingOutcomeActionId && (
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() =>
-                                            sendPlanActionFeedback(
-                                              leak.id,
-                                              currentFunnel.nextPendingOutcomeActionId || '',
-                                              'partially',
-                                              getFeedbackCommentDraft(
-                                                planActionsById.get(currentFunnel.nextPendingOutcomeActionId || '') || null,
-                                              ),
-                                            )
-                                          }
-                                          disabled={savingFeedbackActionId === currentFunnel.nextPendingOutcomeActionId}
-                                          className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
-                                        >
-                                          Быстрый outcome
-                                        </Button>
-                                      )}
-                                    {currentFunnel.recommendedNudge === 'create_entity' &&
-                                      nextBestActionHint &&
-                                      nextBestActionHint.type === 'create_entity' &&
-                                      selectedPlan &&
-                                      nextBestActionHint.actionId && (
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() => executeSuggestedPolicyAction(leak, nextBestActionHint, selectedPlan, planActionsById)}
-                                          disabled={policyActionBusy}
-                                          className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
-                                        >
-                                          Создать следующий шаг
-                                        </Button>
-                                      )}
-                                    {currentFunnel.recommendedNudge === 'accept_or_reject' && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => loadPolicyForLeak(leak.id)}
-                                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                                      >
-                                        Освежить совет
-                                      </Button>
-                                    )}
-                                  </div>
-                                )}
-                                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                                  <div
-                                    className="h-full rounded-full bg-indigo-400/80"
-                                    style={{
-                                      width: `${Math.min(
-                                        100,
-                                        (currentFunnel.suggestedAt ? 25 : 0) +
-                                          (currentFunnel.acceptedAt ? 25 : 0) +
-                                          (currentFunnel.entityCreatedCount > 0 ? 25 : 0) +
-                                          (currentFunnel.outcomeCount > 0 ? 25 : 0),
-                                      )}%`,
-                                    }}
-                                  />
-                                </div>
-                                <div className="mt-2 grid gap-1 md:grid-cols-2">
-                                  <div className="text-[11px] text-white/55">
-                                    Suggested: {currentFunnel.suggestedAt ? formatDate(currentFunnel.suggestedAt) : '—'}
-                                  </div>
-                                  <div className="text-[11px] text-white/55">
-                                    Accepted: {currentFunnel.acceptedAt ? formatDate(currentFunnel.acceptedAt) : '—'}
-                                  </div>
-                                  <div className="text-[11px] text-white/55">
-                                    Rejected: {currentFunnel.rejectedAt ? formatDate(currentFunnel.rejectedAt) : '—'}
-                                  </div>
-                                  <div className="text-[11px] text-white/55">
-                                    Last outcome: {currentFunnel.lastOutcomeAt ? formatDate(currentFunnel.lastOutcomeAt) : '—'}
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                            {SHOW_FUNNELS && recentFunnels.length > 0 && (
-                              <div className="mt-2 space-y-1">
-                                <div className="text-[11px] text-white/55">Recent funnels</div>
-                                {recentFunnels.map((funnel) => {
-                                  const stageLabel =
-                                    funnel.stage === 'suggested'
-                                      ? 'совет'
-                                      : funnel.stage === 'accepted'
-                                        ? 'принят'
-                                        : funnel.stage === 'awaiting_feedback'
-                                          ? 'ждёт feedback'
-                                          : funnel.stage === 'learning'
-                                            ? 'learning'
-                                            : funnel.stage === 'completed'
-                                              ? 'завершён'
-                                              : 'отклонён'
-                                  return (
-                                    <div
-                                      key={`recent-funnel-${funnel.correlationId}`}
-                                      className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5"
-                                    >
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <Badge className="bg-white/10 text-white/65 border-white/10">
-                                          {funnel.correlationId}
-                                        </Badge>
-                                        <Badge className="bg-white/10 text-white/65 border-white/10">
-                                          Этап: {stageLabel}
-                                        </Badge>
-                                        <Badge
-                                          className={
-                                            funnel.urgency === 'high'
-                                              ? 'bg-rose-500/10 text-rose-200 border-rose-500/20'
-                                              : funnel.urgency === 'medium'
-                                                ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
-                                                : 'bg-white/10 text-white/60 border-white/10'
-                                          }
-                                        >
-                                          Срочность: {getPolicyUrgencyLabel(funnel.urgency)}
-                                        </Badge>
-                                        <Badge className="bg-white/10 text-white/60 border-white/10">
-                                          Stuck score: {funnel.stuckScore}
-                                        </Badge>
-                                        <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
-                                          E:{funnel.entityCreatedCount}
-                                        </Badge>
-                                        <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
-                                          O:{funnel.outcomeCount}
-                                        </Badge>
-                                        {funnel.pendingOutcomeActionIds.length > 0 && (
-                                          <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
-                                            pending {funnel.pendingOutcomeActionIds.length}
-                                          </Badge>
-                                        )}
-                                        {funnel.maxPendingOutcomeAgeMinutes !== null && (
-                                          <Badge className="bg-white/10 text-white/60 border-white/10">
-                                            age {funnel.maxPendingOutcomeAgeMinutes}m
-                                          </Badge>
-                                        )}
-                                        {funnel.recommendedNudge !== 'none' && (
-                                          <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
-                                            Nudge: {getPolicyNudgeLabel(funnel.recommendedNudge)}
-                                          </Badge>
-                                        )}
-                                        <Badge className="bg-white/10 text-white/60 border-white/10">
-                                          Сигнал: {getPolicyStuckSignalLabel(funnel.primaryStuckSignal)}
-                                        </Badge>
-                                        {(funnel.oldestPendingOutcomeActionId || funnel.nextPendingOutcomeActionId) && (
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() =>
-                                              focusPlanAction(
-                                                leak.id,
-                                                funnel.oldestPendingOutcomeActionId ||
-                                                  funnel.nextPendingOutcomeActionId ||
-                                                  '',
-                                              )
-                                            }
-                                            className="h-6 border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 px-2 text-[11px] text-amber-200"
-                                          >
-                                            К pending
-                                          </Button>
-                                        )}
-                                        {funnel.recommendedNudge === 'collect_feedback' &&
-                                          (funnel.oldestPendingOutcomeActionId ||
-                                            funnel.nextPendingOutcomeActionId) && (
-                                            <Button
-                                              size="sm"
-                                              variant="outline"
-                                              onClick={() => {
-                                                const targetActionId =
-                                                  funnel.oldestPendingOutcomeActionId ||
-                                                  funnel.nextPendingOutcomeActionId ||
-                                                  ''
-                                                sendPlanActionFeedback(
-                                                  leak.id,
-                                                  targetActionId,
-                                                  'partially',
-                                                  getFeedbackCommentDraft(
-                                                    planActionsById.get(targetActionId) || null,
-                                                  ),
-                                                )
-                                              }}
-                                              disabled={
-                                                savingFeedbackActionId ===
-                                                (funnel.oldestPendingOutcomeActionId ||
-                                                  funnel.nextPendingOutcomeActionId)
-                                              }
-                                              className="h-6 border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 px-2 text-[11px] text-indigo-200"
-                                            >
-                                              Quick outcome
-                                            </Button>
-                                          )}
-                                      </div>
-                                      <div className="mt-1 text-[11px] text-white/55">
-                                        {funnel.urgencyReason}. {funnel.recommendedNudgeReason}.
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            )}
-                            {policyStuckOverview.totalFunnels > 0 && (
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                <Badge className="bg-white/10 text-white/70 border-white/10">
-                                  Funnels: {policyStuckOverview.totalFunnels}
-                                </Badge>
-                                <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
-                                  High: {policyStuckOverview.high}
-                                </Badge>
-                                <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
-                                  Medium: {policyStuckOverview.medium}
-                                </Badge>
-                                <Badge className="bg-white/10 text-white/65 border-white/10">
-                                  Low: {policyStuckOverview.low}
-                                </Badge>
-                                <Badge className="bg-white/10 text-white/65 border-white/10">
-                                  Blocked: {policyStuckOverview.blockedFunnels}
-                                </Badge>
-                                <Badge className="bg-white/10 text-white/65 border-white/10">
-                                  Max score: {policyStuckOverview.maxStuckScore}
-                                </Badge>
-                              </div>
-                            )}
-                            {SHOW_PRIORITY_PENDING_QUEUE && priorityPendingQueue.length > 0 && (
-                              <div className="mt-2 rounded-xl border border-white/10 bg-black/10 px-2 py-2 space-y-1">
-                                <div className="text-[11px] text-white/55">Priority pending queue</div>
-                                {priorityPendingQueue.slice(0, 3).map((item) => (
-                                  <div
-                                    key={`priority-${item.correlationId}`}
-                                    className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5"
+                                {currentFunnel.recommendedNudge === "accept_or_reject" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => loadPolicyForLeak(leak.id)}
+                                    className="border-white/15 bg-white/5 text-white hover:bg-white/10"
                                   >
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <Badge className="bg-white/10 text-white/65 border-white/10">
-                                        {item.correlationId}
+                                    Освежить совет
+                                  </Button>
+                                )}
+                              </div>
+                            )}
+                            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                              <div
+                                className="h-full rounded-full bg-indigo-400/80"
+                                style={{
+                                  width: `${Math.min(
+                                    100,
+                                    (currentFunnel.suggestedAt ? 25 : 0) +
+                                      (currentFunnel.acceptedAt ? 25 : 0) +
+                                      (currentFunnel.entityCreatedCount > 0 ? 25 : 0) +
+                                      (currentFunnel.outcomeCount > 0 ? 25 : 0)
+                                  )}%`,
+                                }}
+                              />
+                            </div>
+                            <div className="mt-2 grid gap-1 md:grid-cols-2">
+                              <div className="text-[11px] text-white/55">
+                                Suggested:{" "}
+                                {currentFunnel.suggestedAt
+                                  ? formatDate(currentFunnel.suggestedAt)
+                                  : "—"}
+                              </div>
+                              <div className="text-[11px] text-white/55">
+                                Accepted:{" "}
+                                {currentFunnel.acceptedAt
+                                  ? formatDate(currentFunnel.acceptedAt)
+                                  : "—"}
+                              </div>
+                              <div className="text-[11px] text-white/55">
+                                Rejected:{" "}
+                                {currentFunnel.rejectedAt
+                                  ? formatDate(currentFunnel.rejectedAt)
+                                  : "—"}
+                              </div>
+                              <div className="text-[11px] text-white/55">
+                                Last outcome:{" "}
+                                {currentFunnel.lastOutcomeAt
+                                  ? formatDate(currentFunnel.lastOutcomeAt)
+                                  : "—"}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {SHOW_FUNNELS && recentFunnels.length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            <div className="text-[11px] text-white/55">Recent funnels</div>
+                            {recentFunnels.map((funnel) => {
+                              const stageLabel =
+                                funnel.stage === "suggested"
+                                  ? "совет"
+                                  : funnel.stage === "accepted"
+                                    ? "принят"
+                                    : funnel.stage === "awaiting_feedback"
+                                      ? "ждёт feedback"
+                                      : funnel.stage === "learning"
+                                        ? "learning"
+                                        : funnel.stage === "completed"
+                                          ? "завершён"
+                                          : "отклонён";
+                              return (
+                                <div
+                                  key={`recent-funnel-${funnel.correlationId}`}
+                                  className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5"
+                                >
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Badge className="border-white/10 bg-white/10 text-white/65">
+                                      {funnel.correlationId}
+                                    </Badge>
+                                    <Badge className="border-white/10 bg-white/10 text-white/65">
+                                      Этап: {stageLabel}
+                                    </Badge>
+                                    <Badge
+                                      className={
+                                        funnel.urgency === "high"
+                                          ? "border-rose-500/20 bg-rose-500/10 text-rose-200"
+                                          : funnel.urgency === "medium"
+                                            ? "border-amber-500/20 bg-amber-500/10 text-amber-200"
+                                            : "border-white/10 bg-white/10 text-white/60"
+                                      }
+                                    >
+                                      Срочность: {getPolicyUrgencyLabel(funnel.urgency)}
+                                    </Badge>
+                                    <Badge className="border-white/10 bg-white/10 text-white/60">
+                                      Stuck score: {funnel.stuckScore}
+                                    </Badge>
+                                    <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
+                                      E:{funnel.entityCreatedCount}
+                                    </Badge>
+                                    <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200">
+                                      O:{funnel.outcomeCount}
+                                    </Badge>
+                                    {funnel.pendingOutcomeActionIds.length > 0 && (
+                                      <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-200">
+                                        pending {funnel.pendingOutcomeActionIds.length}
                                       </Badge>
-                                      <Badge
-                                        className={
-                                          item.urgency === 'high'
-                                            ? 'bg-rose-500/10 text-rose-200 border-rose-500/20'
-                                            : item.urgency === 'medium'
-                                              ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
-                                              : 'bg-white/10 text-white/60 border-white/10'
-                                        }
-                                      >
-                                        {getPolicyUrgencyLabel(item.urgency)} • {item.stuckScore}
+                                    )}
+                                    {funnel.maxPendingOutcomeAgeMinutes !== null && (
+                                      <Badge className="border-white/10 bg-white/10 text-white/60">
+                                        age {funnel.maxPendingOutcomeAgeMinutes}m
                                       </Badge>
-                                      {item.maxPendingOutcomeAgeMinutes !== null && (
-                                        <Badge className="bg-white/10 text-white/60 border-white/10">
-                                          {item.maxPendingOutcomeAgeMinutes}m
-                                        </Badge>
-                                      )}
-                                      <Badge className="bg-white/10 text-white/60 border-white/10">
-                                        {getPolicyStuckSignalLabel(item.primaryStuckSignal)}
+                                    )}
+                                    {funnel.recommendedNudge !== "none" && (
+                                      <Badge className="border-rose-500/20 bg-rose-500/10 text-rose-200">
+                                        Nudge: {getPolicyNudgeLabel(funnel.recommendedNudge)}
                                       </Badge>
+                                    )}
+                                    <Badge className="border-white/10 bg-white/10 text-white/60">
+                                      Сигнал: {getPolicyStuckSignalLabel(funnel.primaryStuckSignal)}
+                                    </Badge>
+                                    {(funnel.oldestPendingOutcomeActionId ||
+                                      funnel.nextPendingOutcomeActionId) && (
                                       <Button
                                         size="sm"
                                         variant="outline"
                                         onClick={() =>
                                           focusPlanAction(
                                             leak.id,
-                                            item.oldestPendingOutcomeActionId || item.nextPendingOutcomeActionId || '',
+                                            funnel.oldestPendingOutcomeActionId ||
+                                              funnel.nextPendingOutcomeActionId ||
+                                              ""
                                           )
                                         }
-                                        className="h-6 border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 px-2 text-[11px] text-amber-200"
+                                        className="h-6 border-amber-500/20 bg-amber-500/10 px-2 text-[11px] text-amber-200 hover:bg-amber-500/15"
                                       >
-                                        Фокус
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => {
-                                          const targetActionId =
-                                            item.oldestPendingOutcomeActionId ||
-                                            item.nextPendingOutcomeActionId ||
-                                            ''
-                                          sendPlanActionFeedback(
-                                            leak.id,
-                                            targetActionId,
-                                            'partially',
-                                            getFeedbackCommentDraft(
-                                              planActionsById.get(targetActionId) || null,
-                                            ),
-                                          )
-                                        }}
-                                        disabled={
-                                          savingFeedbackActionId ===
-                                          (item.oldestPendingOutcomeActionId ||
-                                            item.nextPendingOutcomeActionId)
-                                        }
-                                        className="h-6 border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 px-2 text-[11px] text-indigo-200"
-                                      >
-                                        Outcome
-                                      </Button>
-                                    </div>
-                                    <div className="mt-1 text-[11px] text-white/55">
-                                      {item.urgencyReason}. {item.recommendedNudgeReason}.
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
-                                Принято: {policyAcceptedCount}
-                              </Badge>
-                              <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
-                                Отклонено: {policyRejectedCount}
-                              </Badge>
-                              <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
-                                Outcome: {policyOutcomeCount}
-                              </Badge>
-                              <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
-                                Worked: {policyOutcomeWorked}
-                              </Badge>
-                              <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
-                                Partial: {policyOutcomePartial}
-                              </Badge>
-                              <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
-                                Failed: {policyOutcomeFailed}
-                              </Badge>
-                              <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
-                                Created by policy: {policyLinkedCreatedCount}
-                              </Badge>
-                              {policyAcceptRate !== null && (
-                                <Badge className="bg-white/10 text-white/75 border-white/10">
-                                  Accept rate: {policyAcceptRate}%
-                                </Badge>
-                              )}
-                              {policyWorkedRate !== null && (
-                                <Badge className="bg-white/10 text-white/75 border-white/10">
-                                  Worked rate: {policyWorkedRate}%
-                                </Badge>
-                              )}
-                            </div>
-                            {learningSignals.recentFeedbackCount > 0 && (
-                              <div className="mt-2 rounded-xl border border-white/10 bg-black/10 px-2 py-2 space-y-2">
-                                <div className="flex flex-wrap gap-2">
-                                  <Badge
-                                    className={
-                                      learningSignals.loopHealth >= 70
-                                        ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
-                                        : learningSignals.loopHealth >= 45
-                                          ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
-                                          : 'bg-rose-500/10 text-rose-200 border-rose-500/20'
-                                    }
-                                  >
-                                    Loop health: {learningSignals.loopHealth}
-                                  </Badge>
-                                  <Badge className="bg-white/10 text-white/70 border-white/10">
-                                    Recent feedback: {learningSignals.recentFeedbackCount}
-                                  </Badge>
-                                  <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
-                                    Worked {learningSignals.recentWorkedCount}
-                                  </Badge>
-                                  <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
-                                    Partial {learningSignals.recentPartialCount}
-                                  </Badge>
-                                  <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
-                                    Failed {learningSignals.recentFailedCount}
-                                  </Badge>
-                                </div>
-                                {learningSignals.topFailureReasons.length > 0 && (
-                                  <div className="flex flex-wrap gap-2">
-                                    {learningSignals.topFailureReasons.map((item) => (
-                                      <Badge
-                                        key={`failure-reason-${item.text}`}
-                                        className="bg-amber-500/10 text-amber-200 border-amber-500/20"
-                                      >
-                                        {item.text} ({item.count})
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                )}
-                                <div className="flex flex-wrap gap-2">
-                                  <Badge className="bg-white/10 text-white/70 border-white/10">
-                                    Bucket: time {learningSignals.failureBuckets.time}
-                                  </Badge>
-                                  <Badge className="bg-white/10 text-white/70 border-white/10">
-                                    energy {learningSignals.failureBuckets.energy}
-                                  </Badge>
-                                  <Badge className="bg-white/10 text-white/70 border-white/10">
-                                    context {learningSignals.failureBuckets.context}
-                                  </Badge>
-                                  <Badge className="bg-white/10 text-white/70 border-white/10">
-                                    complexity {learningSignals.failureBuckets.complexity}
-                                  </Badge>
-                                  <Badge className="bg-white/10 text-white/70 border-white/10">
-                                    unknown {learningSignals.failureBuckets.unknown}
-                                  </Badge>
-                                  <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
-                                    Dominant: {learningSignals.dominantFailureBucket}
-                                  </Badge>
-                                </div>
-                                {learningSignals.repeatedActions.length > 0 && (
-                                  <div className="flex flex-wrap gap-2">
-                                    {learningSignals.repeatedActions.slice(0, 3).map((item) => (
-                                      <Badge
-                                        key={`repeat-action-${item.actionId}`}
-                                        className="bg-white/10 text-white/70 border-white/10"
-                                      >
-                                        Retry: {item.actionTitle} ({item.attempt})
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                )}
-                                {learningSignals.unstableActions.length > 0 && (
-                                  <div className="space-y-1">
-                                    {learningSignals.unstableActions.slice(0, 3).map((item) => (
-                                      <div
-                                        key={`unstable-action-${item.actionId}`}
-                                        className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5"
-                                      >
-                                        <div className="flex flex-wrap items-center gap-2">
-                                          <Badge className="bg-white/10 text-white/70 border-white/10">
-                                            {item.actionTitle}
-                                          </Badge>
-                                          <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
-                                            Fail {item.failures}
-                                          </Badge>
-                                          <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
-                                            Partial {item.partials}
-                                          </Badge>
-                                          <Badge className="bg-white/10 text-white/70 border-white/10">
-                                            Attempts {item.attempts}
-                                          </Badge>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => focusPlanAction(leak.id, item.actionId)}
-                                            className="h-6 border-white/15 bg-white/5 hover:bg-white/10 px-2 text-[11px] text-white"
-                                          >
-                                            К шагу
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                                <div className="flex flex-wrap gap-2">
-                                  {learningSignals.loopHealth < 45 && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() =>
-                                        executePolicyAction(leak, {
-                                          actionType: 'regenerate_context',
-                                          reason: 'low_loop_health',
-                                        })
-                                      }
-                                      disabled={policyActionBusy}
-                                      className="border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/15 text-rose-200"
-                                    >
-                                      Обновить контекст
-                                    </Button>
-                                  )}
-                                  {learningSignals.dominantFailureBucket === 'complexity' &&
-                                    selectedPlan &&
-                                    selectedPlan.mode !== 'minimum' && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() =>
-                                          executePolicyAction(leak, {
-                                            actionType: 'switch_mode',
-                                            targetMode: 'minimum',
-                                            reason: 'dominant_complexity_failure',
-                                          })
-                                        }
-                                        disabled={policyActionBusy}
-                                        className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
-                                      >
-                                        Упростить режим
+                                        К pending
                                       </Button>
                                     )}
-                                  {learningSignals.dominantFailureBucket === 'context' && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() =>
-                                        executePolicyAction(leak, {
-                                          actionType: 'regenerate_context',
-                                          reason: 'dominant_context_failure',
-                                        })
-                                      }
-                                      disabled={policyActionBusy}
-                                      className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
-                                    >
-                                      Пересобрать с новым контекстом
-                                    </Button>
-                                  )}
-                                  {learningSignals.repeatedActions.length > 0 &&
-                                    selectedPlan &&
-                                    selectedPlan.mode !== 'minimum' && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() =>
-                                          executePolicyAction(leak, {
-                                            actionType: 'switch_mode',
-                                            targetMode: 'minimum',
-                                            reason: 'repeat_action_pressure',
-                                          })
-                                        }
-                                        disabled={policyActionBusy}
-                                        className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
-                                      >
-                                        Переключить на minimum
-                                      </Button>
-                                    )}
-                                </div>
-                              </div>
-                            )}
-                            {Object.keys(policyRejectReasonCounts).length > 0 && (
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {Object.entries(policyRejectReasonCounts).map(([reason, count]) => (
-                                  <Badge
-                                    key={`reject-reason-${reason}`}
-                                    className="bg-white/10 text-white/70 border-white/10"
-                                  >
-                                    reject:{' '}
-                                    {reason === 'not_now'
-                                      ? 'не сейчас'
-                                      : reason === 'too_hard'
-                                        ? 'сложно сейчас'
-                                        : reason === 'not_relevant'
-                                          ? 'не по контексту'
-                                          : reason}
-                                    {' '}({count})
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
-                            {policyEvents.length > 0 && (
-                              <div className="mt-2 space-y-1">
-                                {policyEvents
-                                  .slice(0, 4)
-                                  .map((event) => (
-                                    <div
-                                      key={`${event.type}-${event.at}-${event.policyCorrelationId || ''}`}
-                                      className="text-xs text-white/65 flex flex-wrap items-center gap-2"
-                                    >
-                                      <span>
-                                        {getPolicyEventLabel(event.type)} • {formatDate(event.at)}
-                                        {event.policyActionType ? ` • ${getPolicyActionLabel(event.policyActionType)}` : ''}
-                                        {event.result ? ` • ${getPolicyResultLabel(event.result)}` : ''}
-                                        {event.attempt ? ` • attempt ${event.attempt}` : ''}
-                                        {event.actor ? ` • ${event.actor}` : ''}
-                                        {event.note ? ` • ${event.note}` : ''}
-                                        {event.actionTitle ? ` • ${event.actionTitle}` : ''}
-                                        {event.factors && event.factors.length > 0
-                                          ? ` • factors: ${event.factors.slice(0, 2).map((item) => item.key).join(', ')}`
-                                          : ''}
-                                      </span>
-                                      {event.actionId && (
+                                    {funnel.recommendedNudge === "collect_feedback" &&
+                                      (funnel.oldestPendingOutcomeActionId ||
+                                        funnel.nextPendingOutcomeActionId) && (
                                         <Button
                                           size="sm"
                                           variant="outline"
-                                          onClick={() => focusPlanAction(leak.id, event.actionId || '')}
-                                          className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                          onClick={() => {
+                                            const targetActionId =
+                                              funnel.oldestPendingOutcomeActionId ||
+                                              funnel.nextPendingOutcomeActionId ||
+                                              "";
+                                            sendPlanActionFeedback(
+                                              leak.id,
+                                              targetActionId,
+                                              "partially",
+                                              getFeedbackCommentDraft(
+                                                planActionsById.get(targetActionId) || null
+                                              )
+                                            );
+                                          }}
+                                          disabled={
+                                            savingFeedbackActionId ===
+                                            (funnel.oldestPendingOutcomeActionId ||
+                                              funnel.nextPendingOutcomeActionId)
+                                          }
+                                          className="h-6 border-indigo-500/20 bg-indigo-500/10 px-2 text-[11px] text-indigo-200 hover:bg-indigo-500/15"
                                         >
-                                          К шагу
+                                          Quick outcome
                                         </Button>
                                       )}
-                                      {event.type === 'policy_outcome' &&
-                                        event.result === 'not_worked' &&
-                                        event.actionId && (
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={async () => {
-                                              const action = planActionsById.get(event.actionId || '') || null
-                                              await executePolicyAction(leak, {
-                                                actionType: 'retry',
-                                                correlationId: event.policyCorrelationId || null,
-                                                actionId: action?.id || event.actionId || null,
-                                                actionTitle: action?.title || event.actionTitle || null,
-                                                actionKind: action?.kind || event.actionKind || null,
-                                                reason: event.note || 'policy_outcome_failed',
-                                              })
-                                              await retryLeakPlanning(leak, {
-                                                action,
-                                                failureReason: event.note || null,
-                                              })
-                                            }}
-                                            disabled={policyActionBusy || retryingLeakId === leak.id}
-                                            className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
-                                          >
-                                            Retry
-                                          </Button>
-                                        )}
-                                    </div>
-                                  ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {guidance.action && (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => runGuidanceAction(leak, guidance.action)}
-                              disabled={
-                                retryingLeakId === leak.id ||
-                                updatingLeakId === leak.id ||
-                                generatingPlansLeakId === leak.id
-                              }
-                              className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                            >
-                              {retryingLeakId === leak.id && guidance.action === 'retry'
-                                ? 'Обновляю...'
-                                : guidance.actionLabel}
-                            </Button>
-                          </div>
-                        )}
-                        {adaptiveModeSuggestion &&
-                          selectedPlan &&
-                          adaptiveModeSuggestion.targetMode !== selectedPlan.mode && (
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  executePolicyAction(leak, {
-                                    actionType: 'switch_mode',
-                                    reason: 'adaptive_mode_suggestion',
-                                    targetMode: adaptiveModeSuggestion.targetMode,
-                                  })
-                                }
-                                disabled={selectingPlanLeakId === leak.id || policyActionBusy}
-                                className="border-indigo-400/25 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-100"
-                              >
-                                {selectingPlanLeakId === leak.id || policyActionBusy
-                                  ? 'Переключаю...'
-                                  : `Adaptive: ${PLAN_MODE_LABELS[adaptiveModeSuggestion.targetMode]}`}
-                              </Button>
-                              <div className="text-xs text-white/60 self-center">
-                                {adaptiveModeSuggestion.reason}
-                              </div>
-                            </div>
-                          )}
-                        {guidance.bottleneckActionId && (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => focusPlanAction(leak.id, guidance.bottleneckActionId)}
-                              className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                            >
-                              Перейти к узкому шагу
-                            </Button>
-                            {selectedPlan && bottleneckPlanAction && !bottleneckLinkedEntity && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => applySinglePlanAction(leak, selectedPlan.mode, bottleneckPlanAction)}
-                                disabled={applyingPlanActionId === bottleneckPlanAction.id || applyingPlanLeakId === leak.id}
-                                className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
-                              >
-                                {applyingPlanActionId === bottleneckPlanAction.id ? 'Создаю...' : 'Создать узкий шаг'}
-                              </Button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-              ) : null
-
-              return (
-                <div key={leak.id} className="space-y-2">
-                {showGroupHeader && (
-                    <div className="px-1">
-                      <div className="text-[11px] uppercase tracking-wide text-white/35">
-                      {getLeakGroupLabel(groupKey, groupBy)} ({groupCounts[groupKey] || 0})
-                      </div>
-                    </div>
-                )}
-                <Card style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  <CardContent className="pt-4 space-y-3">
-                  {mainActionBlock}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-white font-medium">{leak.title}</div>
-                      <div className="text-xs text-white/35 mt-1">
-                        Создан: {formatDate(leak.createdAt)}
-                        {leak.resolvedAt ? ` • Решён: ${formatDate(leak.resolvedAt)}` : ''}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap justify-end gap-2">
-                      {isFocusLeak(leak) && (
-                        <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
-                          Фокус
-                        </Badge>
-                      )}
-                      <Badge className={STATUS_STYLES[leak.status]}>{STATUS_LABELS[leak.status]}</Badge>
-                      <Badge className={SEVERITY_STYLES[leak.severity]}>{leak.severity}</Badge>
-                      {leak.actions.length > 0 && (
-                        <Badge className="bg-white/10 text-white/75 border-white/10">
-                          Действий: {leak.actions.length}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-
-                  {leak.description && (
-                    <p className="text-sm text-white/72 whitespace-pre-wrap">{leak.description}</p>
-                  )}
-
-                  {leak.actions.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {leak.actions.map((action) => (
-                        <button
-                          key={action.id}
-                          type="button"
-                          onClick={() => setScreen(getActionScreen(action.entityType))}
-                          className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70 hover:bg-white/10"
-                        >
-                          {getActionLabel(action.entityType)}: {action.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap gap-2">
-                    {leak.status === 'new' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => updateLeakStatus(leak.id, 'in_progress')}
-                        disabled={updatingLeakId === leak.id}
-                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                      >
-                        В работу
-                      </Button>
-                    )}
-                    {leak.status !== 'resolved' && leak.status !== 'archived' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => updateLeakStatus(leak.id, 'resolved')}
-                        disabled={updatingLeakId === leak.id}
-                        className="border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-200"
-                      >
-                        Решено
-                      </Button>
-                    )}
-                    {leak.status !== 'archived' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => updateLeakStatus(leak.id, 'archived')}
-                        disabled={updatingLeakId === leak.id}
-                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                      >
-                        В архив
-                      </Button>
-                    )}
-                    {(leak.status === 'resolved' || leak.status === 'archived') && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => updateLeakStatus(leak.id, 'in_progress')}
-                        disabled={updatingLeakId === leak.id}
-                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                      >
-                        Вернуть в работу
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => toggleLeakFocus(leak)}
-                      disabled={updatingLeakId === leak.id}
-                      className={
-                        isFocusLeak(leak)
-                          ? 'border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200'
-                          : 'border-white/15 bg-white/5 hover:bg-white/10 text-white'
-                      }
-                    >
-                      {isFocusLeak(leak) ? 'Убрать из фокуса' : 'В фокус'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => toggleLeakDetails(leak.id)}
-                      className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                    >
-                      {expandedLeakId === leak.id ? 'Скрыть детали' : 'Детали'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        setSelectedDraft({
-                          leakType: leak.title,
-                          leakMessage: buildLeakMessage(leak),
-                          severity: leak.severity,
-                        })
-                      }
-                      className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
-                    >
-                      Разобрать
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => startEditingLeak(leak)}
-                      className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                    >
-                      Редактировать
-                    </Button>
-                  </div>
-
-                  {expandedLeakId === leak.id && (
-                    <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-
-
-                      <div className="flex flex-wrap gap-2">
-                        <Badge className="bg-white/10 text-white/75 border-white/10">
-                          Источник: {getSourceLabel(leak.source)}
-                        </Badge>
-                        {leak.sphere && (
-                          <Badge className="bg-white/10 text-white/75 border-white/10">
-                            Сфера: {getSphereLabel(leak.sphere)}
-                          </Badge>
-                        )}
-                      </div>
-
-                      {editingLeakId === leak.id && (
-                        <div className="space-y-3 rounded-2xl border border-white/10 bg-black/10 p-3">
-                          <Input
-                            value={editingLeakTitle}
-                            onChange={(event) => setEditingLeakTitle(event.target.value)}
-                            placeholder="Название лика"
-                            className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
-                          />
-                          <Textarea
-                            value={editingLeakDescription}
-                            onChange={(event) => setEditingLeakDescription(event.target.value)}
-                            placeholder="Уточни, что именно происходит и что хочешь исправить"
-                            className="min-h-24 bg-white/5 border-white/10 text-white placeholder:text-white/30"
-                          />
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              size="sm"
-                              onClick={() => saveLeakEdits(leak.id)}
-                              disabled={!editingLeakTitle.trim() || updatingLeakId === leak.id}
-                              className="bg-indigo-600 hover:bg-indigo-500 text-white"
-                            >
-                              {updatingLeakId === leak.id ? 'Сохраняю...' : 'Сохранить'}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={cancelEditingLeak}
-                              className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                            >
-                              Отмена
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="space-y-2">
-                        <div className="text-xs uppercase tracking-wide text-white/40">
-                          Сфера
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => updateLeakSphere(leak.id, null)}
-                            disabled={updatingLeakId === leak.id}
-                            className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                              !leak.sphere
-                                ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
-                                : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
-                            }`}
-                          >
-                            Без сферы
-                          </button>
-                          {SPHERE_OPTIONS.map((option) => (
-                            <button
-                              key={option.id}
-                              type="button"
-                              onClick={() => updateLeakSphere(leak.id, option.id)}
-                              disabled={updatingLeakId === leak.id}
-                              className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                                leak.sphere === option.id
-                                  ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
-                                  : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
-                              }`}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {getContextSnapshotItems(leak.contextSnapshot).length > 0 && (
-                        <div className="space-y-2">
-                          <div className="text-xs uppercase tracking-wide text-white/40">
-                            Контекст
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {getContextSnapshotItems(leak.contextSnapshot).map((item) => (
-                              <Badge
-                                key={item}
-                                variant="outline"
-                                className="border-white/10 text-white/60 whitespace-normal text-left"
-                              >
-                                {item}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {(contextPulse.energyAvg !== null ||
-                        contextPulse.stressAvg !== null ||
-                        contextPulse.sleepHoursAvg !== null ||
-                        contextPulse.openTasks !== null) && (
-                        <div className="space-y-2">
-                          <div className="text-xs uppercase tracking-wide text-white/40">
-                            Контекстный пульс
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <Badge
-                              className={
-                                contextPulseRisk === 'high'
-                                  ? 'bg-rose-500/10 text-rose-200 border-rose-500/20'
-                                  : 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
-                              }
-                            >
-                              Риск контекста: {contextPulseRisk === 'high' ? 'высокий' : 'нормальный'}
-                            </Badge>
-                            {contextPulse.energyAvg !== null && (
-                              <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
-                                Энергия: {contextPulse.energyAvg}
-                              </Badge>
-                            )}
-                            {contextPulse.stressAvg !== null && (
-                              <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
-                                Стресс: {contextPulse.stressAvg}
-                              </Badge>
-                            )}
-                            {contextPulse.sleepHoursAvg !== null && (
-                              <Badge className="bg-sky-500/10 text-sky-200 border-sky-500/20">
-                                Сон: {contextPulse.sleepHoursAvg}ч
-                              </Badge>
-                            )}
-                            {contextPulse.openTasks !== null && (
-                              <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
-                                Открытые задачи: {contextPulse.openTasks}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {contextHypotheses.length > 0 && (
-                        <div className="space-y-2">
-                          <div className="text-xs uppercase tracking-wide text-white/40">
-                            Контекстные гипотезы
-                          </div>
-                          <div className="space-y-2">
-                            {contextHypotheses.map((item) => (
-                              <div
-                                key={item}
-                                className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
-                              >
-                                {item}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {(snapshotHistory.linkedEntities.length > 0 || snapshotHistory.actionFeedback.length > 0) && (
-                        <div className="space-y-2">
-                          <div className="text-xs uppercase tracking-wide text-white/40">
-                            Learning memory (snapshot)
-                          </div>
-                          <div className="grid gap-2 md:grid-cols-2">
-                            <div className="rounded-xl border border-white/10 bg-black/10 px-3 py-2 space-y-1">
-                              <div className="text-xs text-white/55">Последние созданные сущности</div>
-                              {snapshotHistory.linkedEntities.slice(0, 4).map((item) => (
-                                <div key={`${item.entityType}-${item.label}-${item.createdAt}`} className="text-xs text-white/70">
-                                  <div>
-                                    {item.sourcePlanMode && item.sourcePlanMode in PLAN_MODE_LABELS
-                                      ? `[${PLAN_MODE_LABELS[item.sourcePlanMode as LeakSolutionPlan['mode']]}] `
-                                      : ''}
-                                    {item.label} • {formatDate(item.createdAt)}
                                   </div>
-                                  <div className="mt-1 flex flex-wrap gap-1">
-                                    {item.reused && (
-                                      <Badge className="bg-white/10 text-white/65 border-white/10">Reused</Badge>
-                                    )}
-                                    {item.policyCorrelationId && (
-                                      <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
-                                        Corr: {item.policyCorrelationId.slice(0, 18)}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  {isLeakEntityType(item.entityType) && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => setScreen(getActionScreen(item.entityType))}
-                                      className="mt-1 border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                                    >
-                                      Открыть {getActionLabel(item.entityType)}
-                                    </Button>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                            <div className="rounded-xl border border-white/10 bg-black/10 px-3 py-2 space-y-1">
-                              <div className="text-xs text-white/55">Последние feedback из истории</div>
-                              {snapshotHistory.actionFeedback.slice(0, 4).map((item) => (
-                                <div key={`${item.actionTitle}-${item.updatedAt}`} className="text-xs text-white/70">
-                                  <div>
-                                    {item.actionTitle} • {item.result} • {formatDate(item.updatedAt)}
-                                  </div>
-                                  <div className="mt-1 flex flex-wrap gap-1">
-                                    {item.feedbackSource === 'policy' && (
-                                      <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
-                                        Policy outcome
-                                      </Badge>
-                                    )}
-                                    {item.attempt && (
-                                      <Badge className="bg-white/10 text-white/65 border-white/10">
-                                        Attempt {item.attempt}
-                                      </Badge>
-                                    )}
-                                    {item.policyCorrelationId && (
-                                      <Badge className="bg-white/10 text-white/65 border-white/10">
-                                        Corr: {item.policyCorrelationId.slice(0, 18)}
-                                      </Badge>
-                                    )}
+                                  <div className="mt-1 text-[11px] text-white/55">
+                                    {funnel.urgencyReason}. {funnel.recommendedNudgeReason}.
                                   </div>
                                 </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      {recentFeedbackWindow.length > 0 && (
-                        <div className="space-y-2">
-                          <div className="text-xs uppercase tracking-wide text-white/40">
-                            Learning summary
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <Badge className="bg-white/10 text-white/70 border-white/10">
-                              Recent: {recentFeedbackWindow.length}
-                            </Badge>
-                            <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
-                              Worked: {recentWorkedCount}
-                            </Badge>
-                            <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
-                              Partial: {recentPartialCount}
-                            </Badge>
-                            <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
-                              Failed: {recentFailedCount}
-                            </Badge>
-                            <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
-                              Без feedback по policy-created: {policyLinkedCreatedWithoutFeedback}
-                            </Badge>
-                          </div>
-                        </div>
-                      )}
-
-                      {SHOW_PATTERN_ANALYTICS && (matchedPattern || selectedPlan) && (
-                        <div className="space-y-2">
-                          <div className="text-xs uppercase tracking-wide text-white/40">
-                            Learning слой
-                          </div>
-                          {matchedPattern && (
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge className="bg-white/10 text-white/70 border-white/10">
-                                Паттерн: {matchedPattern.leakType}
-                              </Badge>
-                              <Badge className="bg-white/10 text-white/70 border-white/10">
-                                Анализов: {matchedPattern.analysisCount}
-                              </Badge>
-                              <Badge
-                                className={
-                                  matchedPatternLinkType === 'exact'
-                                    ? 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20'
-                                    : matchedPatternLinkType === 'fuzzy'
-                                      ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
-                                      : 'bg-white/10 text-white/70 border-white/10'
-                                }
-                              >
-                                Связь:{' '}
-                                {matchedPatternLinkType === 'exact'
-                                  ? 'точное совпадение'
-                                  : matchedPatternLinkType === 'fuzzy'
-                                    ? 'похожее название'
-                                    : 'не определена'}
-                              </Badge>
-                              <Badge className="bg-white/10 text-white/70 border-white/10">
-                                Обновлено: {formatDate(matchedPattern.updatedAt)}
-                              </Badge>
-                              {(matchedPattern.workedCount || 0) > 0 && (
-                                <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
-                                  Сработало: {matchedPattern.workedCount}
-                                </Badge>
-                              )}
-                              {(matchedPattern.partialCount || 0) > 0 && (
-                                <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
-                                  Частично: {matchedPattern.partialCount}
-                                </Badge>
-                              )}
-                              {(matchedPattern.failedCount || 0) > 0 && (
-                                <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
-                                  Не помогло: {matchedPattern.failedCount}
-                                </Badge>
-                              )}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setActiveTab('patterns')}
-                                className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                              >
-                                Открыть Patterns
-                              </Button>
-                            </div>
-                          )}
-                          {matchedPattern && (
-                            <div className="text-xs text-white/55">
-                              {matchedPatternLinkType === 'exact'
-                                ? 'Связь построена по точному совпадению названия leak и pattern.'
-                                : matchedPatternLinkType === 'fuzzy'
-                                  ? 'Связь построена по похожему названию. Проверь формулировку leak для более точного обучения.'
-                                  : 'Тип связи не определён автоматически.'}
-                            </div>
-                          )}
-                          {matchedPattern &&
-                            matchedPatternLinkType === 'fuzzy' &&
-                            normalizeLookupValue(matchedPattern.leakType) !== normalizeLookupValue(leak.title) && (
-                              <div className="flex flex-wrap gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => syncLeakTitleWithPattern(leak, matchedPattern)}
-                                  disabled={updatingLeakId === leak.id}
-                                  className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
-                                >
-                                  {updatingLeakId === leak.id
-                                    ? 'Синхронизирую...'
-                                    : 'Синхронизировать название с паттерном'}
-                                </Button>
-                              </div>
-                            )}
-                          {matchedPattern?.workedExamples && matchedPattern.workedExamples.length > 0 ? (
-                            <div className="space-y-2">
-                              {matchedPattern.workedExamples.map((item) => (
-                                <div
-                                  key={`${item.text}-${item.updatedAt || 'na'}`}
-                                  className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2"
-                                >
-                                  <div className="text-sm text-emerald-100">{item.text}</div>
-                                  <div className="mt-1 flex flex-wrap gap-2">
-                                    {item.sourcePlanMode && (
-                                      <Badge className="bg-white/10 text-white/70 border-white/10">
-                                        Режим:{' '}
-                                        {item.sourcePlanMode in PLAN_MODE_LABELS
-                                          ? PLAN_MODE_LABELS[item.sourcePlanMode as LeakSolutionPlan['mode']]
-                                          : item.sourcePlanMode}
-                                      </Badge>
-                                    )}
-                                    {item.linkedEntityLabel && item.linkedEntityType && (
-                                      <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
-                                        Сущность: {getActionLabel(item.linkedEntityType as LeakActionLink['entityType'])} • {item.linkedEntityLabel}
-                                      </Badge>
-                                    )}
-                                    {item.updatedAt && (
-                                      <Badge className="bg-white/10 text-white/65 border-white/10">
-                                        Feedback: {formatDate(item.updatedAt)}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  {item.comment && <div className="mt-1 text-xs text-emerald-100/80">{item.comment}</div>}
-                                </div>
-                              ))}
-                            </div>
-                          ) : matchedPattern?.whatWorked?.length ? (
-                            <div className="flex flex-wrap gap-2">
-                              {matchedPattern.whatWorked.map((item) => (
-                                <Badge
-                                  key={item}
-                                  className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20 whitespace-normal text-left"
-                                >
-                                  {item}
-                                </Badge>
-                              ))}
-                            </div>
-                          ) : matchedPattern ? (
-                            <p className="text-sm text-white/55">
-                              После первых feedback тут появятся решения, которые стабильно работают именно для этого leak.
-                            </p>
-                          ) : null}
-                        </div>
-                      )}
-
-                      {selectedPlan && (
-                        <div className="space-y-2">
-                          <div className="text-xs uppercase tracking-wide text-white/40">
-                            Цепочка выполнения
-                          </div>
-                          <div className="rounded-xl border border-white/10 bg-black/10 px-3 py-2">
-                            <div className="flex flex-wrap items-center gap-2 text-xs text-white/70">
-                              <Badge variant="outline" className="border-white/10 text-white/70">
-                                Leak: {leak.title}
-                              </Badge>
-                              <span className="text-white/35">→</span>
-                              <Badge className={PLAN_MODE_STYLES[selectedPlan.mode]}>
-                                Режим: {PLAN_MODE_LABELS[selectedPlan.mode]}
-                              </Badge>
-                              <span className="text-white/35">→</span>
-                              <Badge className="bg-white/10 text-white/75 border-white/10">
-                                Создано: {guidance.createdActions}/{guidance.totalActions}
-                              </Badge>
-                              <span className="text-white/35">→</span>
-                              <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
-                                Feedback: {guidance.feedbackActions}/{guidance.totalActions}
-                              </Badge>
-                            </div>
-                          </div>
-                          <div className="rounded-xl border border-white/10 bg-black/10 px-3 py-2 space-y-2">
-                            <div className="flex flex-wrap gap-2">
-                              <Badge className={PLAN_MODE_STYLES[selectedPlan.mode]}>
-                                Режим: {PLAN_MODE_LABELS[selectedPlan.mode]}
-                              </Badge>
-                              {selectedModeFromSnapshot && (
-                                <Badge variant="outline" className="border-white/15 text-white/70">
-                                  Последний выбор: {PLAN_MODE_LABELS[selectedModeFromSnapshot]}
-                                </Badge>
-                              )}
-                              {lastStableMode && (
-                                <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
-                                  Стабильный режим: {PLAN_MODE_LABELS[lastStableMode]}
-                                </Badge>
-                              )}
-                              <Badge className={PLAN_CONFIDENCE_STYLES[selectedPlan.confidenceLabel]}>
-                                Уверенность: {getConfidenceLabelText(selectedPlan.confidenceLabel)}
-                              </Badge>
-                            </div>
-                            {selectedPlan.confidenceReason && (
-                              <p className="text-xs text-white/60">{selectedPlan.confidenceReason}</p>
-                            )}
-                          </div>
-                          {(() => {
-                            const pendingCreatedNoFeedback = selectedPlan.actions.filter(
-                              (action) => isPlanActionConverted(action) && !getLatestPlanFeedback(action),
-                            )
-                            if (pendingCreatedNoFeedback.length < 2) return null
-                            const sampleComment = getFeedbackCommentDraft(pendingCreatedNoFeedback[0])
-                            return (
-                              <div className="rounded-xl border border-white/10 bg-black/10 px-3 py-2 space-y-2">
-                                <div className="text-xs text-white/60">
-                                  Быстрый feedback: {pendingCreatedNoFeedback.length} созданных шагов пока без оценки.
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                  {(['worked', 'partially', 'not_worked'] as LeakPlanFeedback['result'][]).map((result) => (
-                                    <Button
-                                      key={`bulk-feedback-${leak.id}-${result}`}
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => applyBulkFeedbackForPendingCreated(leak, selectedPlan, result)}
-                                      disabled={savingFeedbackLeakId === leak.id}
-                                      className={
-                                        result === 'worked'
-                                          ? 'border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-200'
-                                          : result === 'partially'
-                                            ? 'border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200'
-                                            : 'border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/15 text-rose-200'
-                                      }
-                                    >
-                                      {savingFeedbackLeakId === leak.id
-                                        ? 'Сохраняю...'
-                                        : result === 'worked'
-                                          ? 'Отметить все как сработало'
-                                          : result === 'partially'
-                                            ? 'Отметить все как частично'
-                                            : 'Отметить все как не помогло'}
-                                    </Button>
-                                  ))}
-                                </div>
-                                {sampleComment && (
-                                  <div className="text-xs text-white/45">
-                                    Комментарий для bulk возьмётся из первого шага: «{sampleComment}»
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })()}
-                          <div className="space-y-2">
-                            {selectedPlan.actions.map((planAction, index) => {
-                              const linkedEntity = getLinkedEntityForPlanAction(leak, planAction)
-                              const feedback = feedbackByActionId.get(planAction.id)
-                              const actionStage: 'plan' | 'entity' | 'feedback_worked' | 'feedback_partial' | 'feedback_failed' =
-                                !linkedEntity
-                                  ? 'plan'
-                                  : !feedback
-                                    ? 'entity'
-                                    : feedback.result === 'worked'
-                                      ? 'feedback_worked'
-                                      : feedback.result === 'partially'
-                                        ? 'feedback_partial'
-                                        : 'feedback_failed'
-
-                              return (
-                                <div
-                                  key={planAction.id}
-                                  id={getPlanActionAnchorId(leak.id, planAction.id)}
-                                  className={`rounded-xl border bg-white/[0.03] px-3 py-2 transition-colors ${
-                                    focusedPlanActionId === planAction.id
-                                      ? 'border-indigo-400/40 shadow-[0_0_0_1px_rgba(99,102,241,0.35)]'
-                                      : 'border-white/10'
-                                  }`}
-                                >
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <Badge variant="outline" className="border-white/10 text-white/55">
-                                      {index + 1}
-                                    </Badge>
-                                    <Badge variant="outline" className="border-white/10 text-white/55">
-                                      {PLAN_KIND_LABELS[planAction.kind]}
-                                    </Badge>
-                                    <div className="text-sm text-white">{planAction.title}</div>
-                                  </div>
-                                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
-                                    <Badge
-                                      className={
-                                        actionStage === 'plan'
-                                          ? 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20'
-                                          : 'bg-white/10 text-white/50 border-white/10'
-                                      }
-                                    >
-                                      1. План
-                                    </Badge>
-                                    <span className="text-white/25">→</span>
-                                    <Badge
-                                      className={
-                                        actionStage === 'entity' || actionStage.startsWith('feedback')
-                                          ? 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20'
-                                          : 'bg-white/10 text-white/50 border-white/10'
-                                      }
-                                    >
-                                      2. Сущность
-                                    </Badge>
-                                    <span className="text-white/25">→</span>
-                                    <Badge
-                                      className={
-                                        actionStage === 'feedback_worked'
-                                          ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
-                                          : actionStage === 'feedback_partial'
-                                            ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
-                                            : actionStage === 'feedback_failed'
-                                              ? 'bg-rose-500/10 text-rose-200 border-rose-500/20'
-                                              : 'bg-white/10 text-white/50 border-white/10'
-                                      }
-                                    >
-                                      3. Feedback
-                                    </Badge>
-                                  </div>
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    <Badge className={PLAN_MODE_STYLES[selectedPlan.mode]}>
-                                      {PLAN_MODE_LABELS[selectedPlan.mode]}
-                                    </Badge>
-                                    {linkedEntity ? (
-                                      <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
-                                        Сущность: {getActionLabel(linkedEntity.entityType)} • {linkedEntity.label}
-                                      </Badge>
-                                    ) : (
-                                      <Badge className="bg-white/10 text-white/60 border-white/10">
-                                        Сущность ещё не создана
-                                      </Badge>
-                                    )}
-                                    {feedback ? (
-                                      <Badge
-                                        className={
-                                          feedback.result === 'worked'
-                                            ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
-                                            : feedback.result === 'partially'
-                                              ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
-                                              : 'bg-rose-500/10 text-rose-200 border-rose-500/20'
-                                        }
-                                      >
-                                        Feedback: {getFeedbackResultLabel(feedback.result)}
-                                      </Badge>
-                                    ) : (
-                                      <Badge className="bg-white/10 text-white/60 border-white/10">
-                                        Feedback ещё не получен
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {!linkedEntity ? (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => applySinglePlanAction(leak, selectedPlan.mode, planAction)}
-                                        disabled={applyingPlanActionId === planAction.id || applyingPlanLeakId === leak.id}
-                                        className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
-                                      >
-                                        {applyingPlanActionId === planAction.id ? 'Создаю...' : 'Создать шаг'}
-                                      </Button>
-                                    ) : (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => setScreen(getActionScreen(linkedEntity.entityType))}
-                                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                                      >
-                                        Открыть сущность
-                                      </Button>
-                                    )}
-                                    {linkedEntity && !feedback && (
-                                      <>
-                                        {(['worked', 'partially', 'not_worked'] as const).map((result) => (
-                                          <Button
-                                            key={result}
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() =>
-                                              sendPlanActionFeedback(
-                                                leak.id,
-                                                planAction.id,
-                                                result,
-                                                getFeedbackCommentDraft(planAction),
-                                              )
-                                            }
-                                            disabled={savingFeedbackActionId === planAction.id}
-                                            className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                                          >
-                                            {result === 'worked'
-                                              ? 'Сработало'
-                                              : result === 'partially'
-                                                ? 'Частично'
-                                                : 'Не помогло'}
-                                          </Button>
-                                        ))}
-                                      </>
-                                    )}
-                                    {feedback && feedback.result !== 'worked' && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() =>
-                                          retryLeakPlanning(leak, {
-                                            action: planAction,
-                                            failureReason: feedback.comment || null,
-                                          })
-                                        }
-                                        disabled={retryingLeakId === leak.id}
-                                        className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
-                                      >
-                                        {retryingLeakId === leak.id
-                                          ? 'Обновляю...'
-                                          : leak.status === 'resolved' || leak.status === 'archived'
-                                            ? 'Reopen и retry'
-                                            : 'Retry по шагу'}
-                                      </Button>
-                                    )}
-                                  </div>
-                                </div>
-                              )
+                              );
                             })}
                           </div>
-                        </div>
-                      )}
-
-                      {feedbackByAction.length > 0 && (
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="text-xs uppercase tracking-wide text-white/40">
-                              История feedback
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setFeedbackHistoryFilterByLeak((current) => ({
-                                    ...current,
-                                    [leak.id]: 'all',
-                                  }))
-                                }
-                                className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
-                                  feedbackHistoryFilter === 'all'
-                                    ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
-                                    : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
-                                }`}
-                              >
-                                Все
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setFeedbackHistoryFilterByLeak((current) => ({
-                                    ...current,
-                                    [leak.id]: 'problem',
-                                  }))
-                                }
-                                className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
-                                  feedbackHistoryFilter === 'problem'
-                                    ? 'border-amber-400/30 bg-amber-500/10 text-amber-200'
-                                    : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
-                                }`}
-                              >
-                                Проблемные
-                              </button>
-                            </div>
+                        )}
+                        {policyStuckOverview.totalFunnels > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <Badge className="border-white/10 bg-white/10 text-white/70">
+                              Funnels: {policyStuckOverview.totalFunnels}
+                            </Badge>
+                            <Badge className="border-rose-500/20 bg-rose-500/10 text-rose-200">
+                              High: {policyStuckOverview.high}
+                            </Badge>
+                            <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-200">
+                              Medium: {policyStuckOverview.medium}
+                            </Badge>
+                            <Badge className="border-white/10 bg-white/10 text-white/65">
+                              Low: {policyStuckOverview.low}
+                            </Badge>
+                            <Badge className="border-white/10 bg-white/10 text-white/65">
+                              Blocked: {policyStuckOverview.blockedFunnels}
+                            </Badge>
+                            <Badge className="border-white/10 bg-white/10 text-white/65">
+                              Max score: {policyStuckOverview.maxStuckScore}
+                            </Badge>
                           </div>
-                          <div className="flex flex-wrap gap-2">
-                            {(() => {
-                              const recent = feedbackByAction.slice(0, 6)
-                              const worked = recent.filter((item) => item.result === 'worked').length
-                              const partial = recent.filter((item) => item.result === 'partially').length
-                              const failed = recent.filter((item) => item.result === 'not_worked').length
-                              const latestProblem = recent.find((item) => item.result !== 'worked') || null
-                              return (
-                                <>
-                                  <Badge className="bg-white/10 text-white/70 border-white/10">
-                                    Последние: {recent.length}
+                        )}
+                        {SHOW_PRIORITY_PENDING_QUEUE && priorityPendingQueue.length > 0 && (
+                          <div className="mt-2 space-y-1 rounded-xl border border-white/10 bg-black/10 px-2 py-2">
+                            <div className="text-[11px] text-white/55">Priority pending queue</div>
+                            {priorityPendingQueue.slice(0, 3).map((item) => (
+                              <div
+                                key={`priority-${item.correlationId}`}
+                                className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5"
+                              >
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge className="border-white/10 bg-white/10 text-white/65">
+                                    {item.correlationId}
                                   </Badge>
-                                  <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
-                                    Сработало: {worked}
+                                  <Badge
+                                    className={
+                                      item.urgency === "high"
+                                        ? "border-rose-500/20 bg-rose-500/10 text-rose-200"
+                                        : item.urgency === "medium"
+                                          ? "border-amber-500/20 bg-amber-500/10 text-amber-200"
+                                          : "border-white/10 bg-white/10 text-white/60"
+                                    }
+                                  >
+                                    {getPolicyUrgencyLabel(item.urgency)} • {item.stuckScore}
                                   </Badge>
-                                  <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
-                                    Частично: {partial}
-                                  </Badge>
-                                  <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
-                                    Не помогло: {failed}
-                                  </Badge>
-                                  {latestProblem && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() =>
-                                        retryLeakPlanning(leak, {
-                                          action: latestProblem.actionId ? planActionsById.get(latestProblem.actionId) || null : null,
-                                          failureReason: latestProblem.comment || null,
-                                        })
-                                      }
-                                      disabled={retryingLeakId === leak.id}
-                                      className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
-                                    >
-                                      {retryingLeakId === leak.id ? 'Обновляю...' : 'Retry по последнему проблемному'}
-                                    </Button>
+                                  {item.maxPendingOutcomeAgeMinutes !== null && (
+                                    <Badge className="border-white/10 bg-white/10 text-white/60">
+                                      {item.maxPendingOutcomeAgeMinutes}m
+                                    </Badge>
                                   )}
-                                </>
-                              )
-                            })()}
-                          </div>
-                          <div className="space-y-2">
-                            {visibleFeedbackTimeline.length === 0 ? (
-                              <div className="rounded-xl border border-white/10 bg-black/10 px-3 py-2 text-xs text-white/55">
-                                По текущему фильтру пока нет событий.
+                                  <Badge className="border-white/10 bg-white/10 text-white/60">
+                                    {getPolicyStuckSignalLabel(item.primaryStuckSignal)}
+                                  </Badge>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      focusPlanAction(
+                                        leak.id,
+                                        item.oldestPendingOutcomeActionId ||
+                                          item.nextPendingOutcomeActionId ||
+                                          ""
+                                      )
+                                    }
+                                    className="h-6 border-amber-500/20 bg-amber-500/10 px-2 text-[11px] text-amber-200 hover:bg-amber-500/15"
+                                  >
+                                    Фокус
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      const targetActionId =
+                                        item.oldestPendingOutcomeActionId ||
+                                        item.nextPendingOutcomeActionId ||
+                                        "";
+                                      sendPlanActionFeedback(
+                                        leak.id,
+                                        targetActionId,
+                                        "partially",
+                                        getFeedbackCommentDraft(
+                                          planActionsById.get(targetActionId) || null
+                                        )
+                                      );
+                                    }}
+                                    disabled={
+                                      savingFeedbackActionId ===
+                                      (item.oldestPendingOutcomeActionId ||
+                                        item.nextPendingOutcomeActionId)
+                                    }
+                                    className="h-6 border-indigo-500/20 bg-indigo-500/10 px-2 text-[11px] text-indigo-200 hover:bg-indigo-500/15"
+                                  >
+                                    Outcome
+                                  </Button>
+                                </div>
+                                <div className="mt-1 text-[11px] text-white/55">
+                                  {item.urgencyReason}. {item.recommendedNudgeReason}.
+                                </div>
                               </div>
-                            ) : visibleFeedbackTimeline.slice(0, 6).map((item) => {
-                              const historyAction = item.actionId ? planActionsById.get(item.actionId) || null : null
-
-                              return (
-                                <div
-                                  key={`${item.actionId || item.actionTitle}-${item.updatedAt}`}
-                                  className="rounded-xl border border-white/10 bg-black/10 px-3 py-2"
-                                >
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    {item.mode ? (
-                                      <Badge className={PLAN_MODE_STYLES[item.mode]}>
-                                        {PLAN_MODE_LABELS[item.mode]}
+                            ))}
+                          </div>
+                        )}
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200">
+                            Принято: {policyAcceptedCount}
+                          </Badge>
+                          <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-200">
+                            Отклонено: {policyRejectedCount}
+                          </Badge>
+                          <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
+                            Outcome: {policyOutcomeCount}
+                          </Badge>
+                          <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200">
+                            Worked: {policyOutcomeWorked}
+                          </Badge>
+                          <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-200">
+                            Partial: {policyOutcomePartial}
+                          </Badge>
+                          <Badge className="border-rose-500/20 bg-rose-500/10 text-rose-200">
+                            Failed: {policyOutcomeFailed}
+                          </Badge>
+                          <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
+                            Created by policy: {policyLinkedCreatedCount}
+                          </Badge>
+                          {policyAcceptRate !== null && (
+                            <Badge className="border-white/10 bg-white/10 text-white/75">
+                              Accept rate: {policyAcceptRate}%
+                            </Badge>
+                          )}
+                          {policyWorkedRate !== null && (
+                            <Badge className="border-white/10 bg-white/10 text-white/75">
+                              Worked rate: {policyWorkedRate}%
+                            </Badge>
+                          )}
+                        </div>
+                        {learningSignals.recentFeedbackCount > 0 && (
+                          <div className="mt-2 space-y-2 rounded-xl border border-white/10 bg-black/10 px-2 py-2">
+                            <div className="flex flex-wrap gap-2">
+                              <Badge
+                                className={
+                                  learningSignals.loopHealth >= 70
+                                    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
+                                    : learningSignals.loopHealth >= 45
+                                      ? "border-amber-500/20 bg-amber-500/10 text-amber-200"
+                                      : "border-rose-500/20 bg-rose-500/10 text-rose-200"
+                                }
+                              >
+                                Loop health: {learningSignals.loopHealth}
+                              </Badge>
+                              <Badge className="border-white/10 bg-white/10 text-white/70">
+                                Recent feedback: {learningSignals.recentFeedbackCount}
+                              </Badge>
+                              <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200">
+                                Worked {learningSignals.recentWorkedCount}
+                              </Badge>
+                              <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-200">
+                                Partial {learningSignals.recentPartialCount}
+                              </Badge>
+                              <Badge className="border-rose-500/20 bg-rose-500/10 text-rose-200">
+                                Failed {learningSignals.recentFailedCount}
+                              </Badge>
+                            </div>
+                            {learningSignals.topFailureReasons.length > 0 && (
+                              <div className="flex flex-wrap gap-2">
+                                {learningSignals.topFailureReasons.map((item) => (
+                                  <Badge
+                                    key={`failure-reason-${item.text}`}
+                                    className="border-amber-500/20 bg-amber-500/10 text-amber-200"
+                                  >
+                                    {item.text} ({item.count})
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                            <div className="flex flex-wrap gap-2">
+                              <Badge className="border-white/10 bg-white/10 text-white/70">
+                                Bucket: time {learningSignals.failureBuckets.time}
+                              </Badge>
+                              <Badge className="border-white/10 bg-white/10 text-white/70">
+                                energy {learningSignals.failureBuckets.energy}
+                              </Badge>
+                              <Badge className="border-white/10 bg-white/10 text-white/70">
+                                context {learningSignals.failureBuckets.context}
+                              </Badge>
+                              <Badge className="border-white/10 bg-white/10 text-white/70">
+                                complexity {learningSignals.failureBuckets.complexity}
+                              </Badge>
+                              <Badge className="border-white/10 bg-white/10 text-white/70">
+                                unknown {learningSignals.failureBuckets.unknown}
+                              </Badge>
+                              <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-200">
+                                Dominant: {learningSignals.dominantFailureBucket}
+                              </Badge>
+                            </div>
+                            {learningSignals.repeatedActions.length > 0 && (
+                              <div className="flex flex-wrap gap-2">
+                                {learningSignals.repeatedActions.slice(0, 3).map((item) => (
+                                  <Badge
+                                    key={`repeat-action-${item.actionId}`}
+                                    className="border-white/10 bg-white/10 text-white/70"
+                                  >
+                                    Retry: {item.actionTitle} ({item.attempt})
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                            {learningSignals.unstableActions.length > 0 && (
+                              <div className="space-y-1">
+                                {learningSignals.unstableActions.slice(0, 3).map((item) => (
+                                  <div
+                                    key={`unstable-action-${item.actionId}`}
+                                    className="rounded-lg border border-white/10 bg-black/10 px-2 py-1.5"
+                                  >
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge className="border-white/10 bg-white/10 text-white/70">
+                                        {item.actionTitle}
                                       </Badge>
-                                    ) : (
-                                      <Badge variant="outline" className="border-white/10 text-white/55">
-                                        Режим не задан
+                                      <Badge className="border-rose-500/20 bg-rose-500/10 text-rose-200">
+                                        Fail {item.failures}
                                       </Badge>
-                                    )}
-                                    <Badge variant="outline" className="border-white/10 text-white/55">
-                                      {PLAN_KIND_LABELS[item.actionKind]}
-                                    </Badge>
-                                    <Badge className="bg-white/10 text-white/70 border-white/10">
-                                      Попытки: {item.attempts}
-                                    </Badge>
-                                    <Badge
-                                      className={
-                                        item.result === 'worked'
-                                          ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
-                                          : item.result === 'partially'
-                                            ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
-                                            : 'bg-rose-500/10 text-rose-200 border-rose-500/20'
-                                      }
-                                    >
-                                      {getFeedbackResultLabel(item.result)}
-                                    </Badge>
-                                    {item.feedbackSource === 'policy' && (
-                                      <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
-                                        Policy outcome
+                                      <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-200">
+                                        Partial {item.partials}
                                       </Badge>
-                                    )}
-                                    {item.policyCorrelationId && (
-                                      <Badge className="bg-white/10 text-white/60 border-white/10">
-                                        Corr: {item.policyCorrelationId.slice(0, 18)}
+                                      <Badge className="border-white/10 bg-white/10 text-white/70">
+                                        Attempts {item.attempts}
                                       </Badge>
-                                    )}
-                                    <div className="text-xs text-white/40">{formatDate(item.updatedAt)}</div>
-                                  </div>
-                                  <div className="mt-1 text-sm text-white">{item.actionTitle}</div>
-                                  {item.linkedEntity && (
-                                    <div className="mt-1">
-                                      <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20 whitespace-normal text-left">
-                                        Сущность: {getActionLabel(item.linkedEntity.entityType)} • {item.linkedEntity.label}
-                                      </Badge>
-                                    </div>
-                                  )}
-                                  {item.comment && <div className="mt-1 text-xs text-white/60">{item.comment}</div>}
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {item.actionId && (
                                       <Button
                                         size="sm"
                                         variant="outline"
                                         onClick={() => focusPlanAction(leak.id, item.actionId)}
-                                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                        className="h-6 border-white/15 bg-white/5 px-2 text-[11px] text-white hover:bg-white/10"
                                       >
                                         К шагу
                                       </Button>
-                                    )}
-                                    {item.linkedEntity && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => setScreen(getActionScreen(item.linkedEntity.entityType))}
-                                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                                      >
-                                        Открыть сущность
-                                      </Button>
-                                    )}
-                                    {item.result !== 'worked' && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() =>
-                                          retryLeakPlanning(leak, {
-                                            action: historyAction,
-                                            failureReason: item.comment || null,
-                                          })
-                                        }
-                                        disabled={retryingLeakId === leak.id}
-                                        className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
-                                      >
-                                        {retryingLeakId === leak.id ? 'Обновляю...' : 'Retry этого шага'}
-                                      </Button>
-                                    )}
+                                    </div>
                                   </div>
-                                </div>
-                              )
-                            })}
+                                ))}
+                              </div>
+                            )}
+                            <div className="flex flex-wrap gap-2">
+                              {learningSignals.loopHealth < 45 && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    executePolicyAction(leak, {
+                                      actionType: "regenerate_context",
+                                      reason: "low_loop_health",
+                                    })
+                                  }
+                                  disabled={policyActionBusy}
+                                  className="border-rose-500/20 bg-rose-500/10 text-rose-200 hover:bg-rose-500/15"
+                                >
+                                  Обновить контекст
+                                </Button>
+                              )}
+                              {learningSignals.dominantFailureBucket === "complexity" &&
+                                selectedPlan &&
+                                selectedPlan.mode !== "minimum" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      executePolicyAction(leak, {
+                                        actionType: "switch_mode",
+                                        targetMode: "minimum",
+                                        reason: "dominant_complexity_failure",
+                                      })
+                                    }
+                                    disabled={policyActionBusy}
+                                    className="border-amber-500/20 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15"
+                                  >
+                                    Упростить режим
+                                  </Button>
+                                )}
+                              {learningSignals.dominantFailureBucket === "context" && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    executePolicyAction(leak, {
+                                      actionType: "regenerate_context",
+                                      reason: "dominant_context_failure",
+                                    })
+                                  }
+                                  disabled={policyActionBusy}
+                                  className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200 hover:bg-indigo-500/15"
+                                >
+                                  Пересобрать с новым контекстом
+                                </Button>
+                              )}
+                              {learningSignals.repeatedActions.length > 0 &&
+                                selectedPlan &&
+                                selectedPlan.mode !== "minimum" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      executePolicyAction(leak, {
+                                        actionType: "switch_mode",
+                                        targetMode: "minimum",
+                                        reason: "repeat_action_pressure",
+                                      })
+                                    }
+                                    disabled={policyActionBusy}
+                                    className="border-amber-500/20 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15"
+                                  >
+                                    Переключить на minimum
+                                  </Button>
+                                )}
+                            </div>
+                          </div>
+                        )}
+                        {Object.keys(policyRejectReasonCounts).length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {Object.entries(policyRejectReasonCounts).map(([reason, count]) => (
+                              <Badge
+                                key={`reject-reason-${reason}`}
+                                className="border-white/10 bg-white/10 text-white/70"
+                              >
+                                reject:{" "}
+                                {reason === "not_now"
+                                  ? "не сейчас"
+                                  : reason === "too_hard"
+                                    ? "сложно сейчас"
+                                    : reason === "not_relevant"
+                                      ? "не по контексту"
+                                      : reason}{" "}
+                                ({count})
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                        {policyEvents.length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            {policyEvents.slice(0, 4).map((event) => (
+                              <div
+                                key={`${event.type}-${event.at}-${event.policyCorrelationId || ""}`}
+                                className="flex flex-wrap items-center gap-2 text-xs text-white/65"
+                              >
+                                <span>
+                                  {getPolicyEventLabel(event.type)} • {formatDate(event.at)}
+                                  {event.policyActionType
+                                    ? ` • ${getPolicyActionLabel(event.policyActionType)}`
+                                    : ""}
+                                  {event.result ? ` • ${getPolicyResultLabel(event.result)}` : ""}
+                                  {event.attempt ? ` • attempt ${event.attempt}` : ""}
+                                  {event.actor ? ` • ${event.actor}` : ""}
+                                  {event.note ? ` • ${event.note}` : ""}
+                                  {event.actionTitle ? ` • ${event.actionTitle}` : ""}
+                                  {event.factors && event.factors.length > 0
+                                    ? ` • factors: ${event.factors
+                                        .slice(0, 2)
+                                        .map((item) => item.key)
+                                        .join(", ")}`
+                                    : ""}
+                                </span>
+                                {event.actionId && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => focusPlanAction(leak.id, event.actionId || "")}
+                                    className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                                  >
+                                    К шагу
+                                  </Button>
+                                )}
+                                {event.type === "policy_outcome" &&
+                                  event.result === "not_worked" &&
+                                  event.actionId && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={async () => {
+                                        const action =
+                                          planActionsById.get(event.actionId || "") || null;
+                                        await executePolicyAction(leak, {
+                                          actionType: "retry",
+                                          correlationId: event.policyCorrelationId || null,
+                                          actionId: action?.id || event.actionId || null,
+                                          actionTitle: action?.title || event.actionTitle || null,
+                                          actionKind: action?.kind || event.actionKind || null,
+                                          reason: event.note || "policy_outcome_failed",
+                                        });
+                                        await retryLeakPlanning(leak, {
+                                          action,
+                                          failureReason: event.note || null,
+                                        });
+                                      }}
+                                      disabled={policyActionBusy || retryingLeakId === leak.id}
+                                      className="border-amber-500/20 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15"
+                                    >
+                                      Retry
+                                    </Button>
+                                  )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {guidance.action && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => runGuidanceAction(leak, guidance.action)}
+                          disabled={
+                            retryingLeakId === leak.id ||
+                            updatingLeakId === leak.id ||
+                            generatingPlansLeakId === leak.id
+                          }
+                          className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                        >
+                          {retryingLeakId === leak.id && guidance.action === "retry"
+                            ? "Обновляю..."
+                            : guidance.actionLabel}
+                        </Button>
+                      </div>
+                    )}
+                    {adaptiveModeSuggestion &&
+                      selectedPlan &&
+                      adaptiveModeSuggestion.targetMode !== selectedPlan.mode && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              executePolicyAction(leak, {
+                                actionType: "switch_mode",
+                                reason: "adaptive_mode_suggestion",
+                                targetMode: adaptiveModeSuggestion.targetMode,
+                              })
+                            }
+                            disabled={selectingPlanLeakId === leak.id || policyActionBusy}
+                            className="border-indigo-400/25 bg-indigo-500/10 text-indigo-100 hover:bg-indigo-500/15"
+                          >
+                            {selectingPlanLeakId === leak.id || policyActionBusy
+                              ? "Переключаю..."
+                              : `Adaptive: ${PLAN_MODE_LABELS[adaptiveModeSuggestion.targetMode]}`}
+                          </Button>
+                          <div className="self-center text-xs text-white/60">
+                            {adaptiveModeSuggestion.reason}
                           </div>
                         </div>
                       )}
+                    {guidance.bottleneckActionId && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => focusPlanAction(leak.id, guidance.bottleneckActionId)}
+                          className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                        >
+                          Перейти к узкому шагу
+                        </Button>
+                        {selectedPlan && bottleneckPlanAction && !bottleneckLinkedEntity && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              applySinglePlanAction(leak, selectedPlan.mode, bottleneckPlanAction)
+                            }
+                            disabled={
+                              applyingPlanActionId === bottleneckPlanAction.id ||
+                              applyingPlanLeakId === leak.id
+                            }
+                            className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200 hover:bg-indigo-500/15"
+                          >
+                            {applyingPlanActionId === bottleneckPlanAction.id
+                              ? "Создаю..."
+                              : "Создать узкий шаг"}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : null;
 
-                      <div className="space-y-2">
-                        <div className="text-xs uppercase tracking-wide text-white/40">
-                          Что уже создано из лика
+              return (
+                <div key={leak.id} className="space-y-2">
+                  {showGroupHeader && (
+                    <div className="px-1">
+                      <div className="text-[11px] tracking-wide text-white/35 uppercase">
+                        {getLeakGroupLabel(groupKey, groupBy)} ({groupCounts[groupKey] || 0})
+                      </div>
+                    </div>
+                  )}
+                  <Card
+                    style={{
+                      background: "rgba(15,23,42,0.82)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    <CardContent className="space-y-3 pt-4">
+                      {mainActionBlock}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium text-white">{leak.title}</div>
+                          <div className="mt-1 text-xs text-white/35">
+                            Создан: {formatDate(leak.createdAt)}
+                            {leak.resolvedAt ? ` • Решён: ${formatDate(leak.resolvedAt)}` : ""}
+                          </div>
                         </div>
-                        {leak.actions.length === 0 ? (
-                          <p className="text-sm text-white/55">
-                            Пока ничего. Можно превратить лик в задачу, ритуал или AI-челлендж.
-                          </p>
-                        ) : (
-                          <div className="space-y-2">
-                            {leak.actions.map((action) => (
-                              (() => {
-                                const metadata = getLeakActionMetadata(action)
-                                const sourceActionId =
-                                  typeof metadata?.sourceActionId === 'string' ? metadata.sourceActionId : null
-                                const sourceActionTitle =
-                                  typeof metadata?.sourceActionTitle === 'string'
-                                    ? metadata.sourceActionTitle
-                                    : null
-                                const sourcePlanMode =
-                                  typeof metadata?.sourcePlanMode === 'string'
-                                    ? metadata.sourcePlanMode
-                                    : null
-                                const sourcePlanConfidenceLabel =
-                                  typeof metadata?.sourcePlanConfidenceLabel === 'string'
-                                    ? metadata.sourcePlanConfidenceLabel
-                                    : null
-                                const sourcePlanConfidenceReason =
-                                  typeof metadata?.sourcePlanConfidenceReason === 'string'
-                                    ? metadata.sourcePlanConfidenceReason
-                                    : null
-                                const sourcePlanSummary =
-                                  typeof metadata?.sourcePlanSummary === 'string'
-                                    ? metadata.sourcePlanSummary
-                                    : null
-                                const sourcePolicyCorrelationId =
-                                  typeof metadata?.policyCorrelationId === 'string'
-                                    ? metadata.policyCorrelationId
-                                    : null
-                                const feedback = sourceActionId ? feedbackByActionId.get(sourceActionId) : null
-                                const sourcePlanAction = sourceActionId ? planActionsById.get(sourceActionId) || null : null
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {isFocusLeak(leak) && (
+                            <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
+                              Фокус
+                            </Badge>
+                          )}
+                          <Badge className={STATUS_STYLES[leak.status]}>
+                            {STATUS_LABELS[leak.status]}
+                          </Badge>
+                          <Badge className={SEVERITY_STYLES[leak.severity]}>{leak.severity}</Badge>
+                          {leak.actions.length > 0 && (
+                            <Badge className="border-white/10 bg-white/10 text-white/75">
+                              Действий: {leak.actions.length}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
 
-                                return (
-                                  <div
-                                    key={action.id}
-                                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"
+                      {leak.description && (
+                        <p className="text-sm whitespace-pre-wrap text-white/72">
+                          {leak.description}
+                        </p>
+                      )}
+
+                      {leak.actions.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {leak.actions.map((action) => (
+                            <button
+                              key={action.id}
+                              type="button"
+                              onClick={() => setScreen(getActionScreen(action.entityType))}
+                              className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70 hover:bg-white/10"
+                            >
+                              {getActionLabel(action.entityType)}: {action.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap gap-2">
+                        {leak.status === "new" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateLeakStatus(leak.id, "in_progress")}
+                            disabled={updatingLeakId === leak.id}
+                            className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                          >
+                            В работу
+                          </Button>
+                        )}
+                        {leak.status !== "resolved" && leak.status !== "archived" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateLeakStatus(leak.id, "resolved")}
+                            disabled={updatingLeakId === leak.id}
+                            className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/15"
+                          >
+                            Решено
+                          </Button>
+                        )}
+                        {leak.status !== "archived" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateLeakStatus(leak.id, "archived")}
+                            disabled={updatingLeakId === leak.id}
+                            className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                          >
+                            В архив
+                          </Button>
+                        )}
+                        {(leak.status === "resolved" || leak.status === "archived") && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateLeakStatus(leak.id, "in_progress")}
+                            disabled={updatingLeakId === leak.id}
+                            className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                          >
+                            Вернуть в работу
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => toggleLeakFocus(leak)}
+                          disabled={updatingLeakId === leak.id}
+                          className={
+                            isFocusLeak(leak)
+                              ? "border-indigo-500/20 bg-indigo-500/10 text-indigo-200 hover:bg-indigo-500/15"
+                              : "border-white/15 bg-white/5 text-white hover:bg-white/10"
+                          }
+                        >
+                          {isFocusLeak(leak) ? "Убрать из фокуса" : "В фокус"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => toggleLeakDetails(leak.id)}
+                          className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                        >
+                          {expandedLeakId === leak.id ? "Скрыть детали" : "Детали"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setSelectedDraft({
+                              leakType: leak.title,
+                              leakMessage: buildLeakMessage(leak),
+                              severity: leak.severity,
+                            })
+                          }
+                          className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200 hover:bg-indigo-500/15"
+                        >
+                          Разобрать
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => startEditingLeak(leak)}
+                          className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                        >
+                          Редактировать
+                        </Button>
+                      </div>
+
+                      {expandedLeakId === leak.id && (
+                        <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                          <div className="flex flex-wrap gap-2">
+                            <Badge className="border-white/10 bg-white/10 text-white/75">
+                              Источник: {getSourceLabel(leak.source)}
+                            </Badge>
+                            {leak.sphere && (
+                              <Badge className="border-white/10 bg-white/10 text-white/75">
+                                Сфера: {getSphereLabel(leak.sphere)}
+                              </Badge>
+                            )}
+                          </div>
+
+                          {editingLeakId === leak.id && (
+                            <div className="space-y-3 rounded-2xl border border-white/10 bg-black/10 p-3">
+                              <Input
+                                value={editingLeakTitle}
+                                onChange={(event) => setEditingLeakTitle(event.target.value)}
+                                placeholder="Название лика"
+                                className="border-white/10 bg-white/5 text-white placeholder:text-white/30"
+                              />
+                              <Textarea
+                                value={editingLeakDescription}
+                                onChange={(event) => setEditingLeakDescription(event.target.value)}
+                                placeholder="Уточни, что именно происходит и что хочешь исправить"
+                                className="min-h-24 border-white/10 bg-white/5 text-white placeholder:text-white/30"
+                              />
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => saveLeakEdits(leak.id)}
+                                  disabled={!editingLeakTitle.trim() || updatingLeakId === leak.id}
+                                  className="bg-indigo-600 text-white hover:bg-indigo-500"
+                                >
+                                  {updatingLeakId === leak.id ? "Сохраняю..." : "Сохранить"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={cancelEditingLeak}
+                                  className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                                >
+                                  Отмена
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="space-y-2">
+                            <div className="text-xs tracking-wide text-white/40 uppercase">
+                              Сфера
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => updateLeakSphere(leak.id, null)}
+                                disabled={updatingLeakId === leak.id}
+                                className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                                  !leak.sphere
+                                    ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                                    : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
+                                }`}
+                              >
+                                Без сферы
+                              </button>
+                              {SPHERE_OPTIONS.map((option) => (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  onClick={() => updateLeakSphere(leak.id, option.id)}
+                                  disabled={updatingLeakId === leak.id}
+                                  className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                                    leak.sphere === option.id
+                                      ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                                      : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
+                                  }`}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {getContextSnapshotItems(leak.contextSnapshot).length > 0 && (
+                            <div className="space-y-2">
+                              <div className="text-xs tracking-wide text-white/40 uppercase">
+                                Контекст
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {getContextSnapshotItems(leak.contextSnapshot).map((item) => (
+                                  <Badge
+                                    key={item}
+                                    variant="outline"
+                                    className="border-white/10 text-left whitespace-normal text-white/60"
                                   >
-                                    <div className="space-y-1">
-                                      <div className="text-sm text-white">
-                                        {getActionLabel(action.entityType)}: {action.label}
+                                    {item}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {(contextPulse.energyAvg !== null ||
+                            contextPulse.stressAvg !== null ||
+                            contextPulse.sleepHoursAvg !== null ||
+                            contextPulse.openTasks !== null) && (
+                            <div className="space-y-2">
+                              <div className="text-xs tracking-wide text-white/40 uppercase">
+                                Контекстный пульс
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <Badge
+                                  className={
+                                    contextPulseRisk === "high"
+                                      ? "border-rose-500/20 bg-rose-500/10 text-rose-200"
+                                      : "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
+                                  }
+                                >
+                                  Риск контекста:{" "}
+                                  {contextPulseRisk === "high" ? "высокий" : "нормальный"}
+                                </Badge>
+                                {contextPulse.energyAvg !== null && (
+                                  <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
+                                    Энергия: {contextPulse.energyAvg}
+                                  </Badge>
+                                )}
+                                {contextPulse.stressAvg !== null && (
+                                  <Badge className="border-rose-500/20 bg-rose-500/10 text-rose-200">
+                                    Стресс: {contextPulse.stressAvg}
+                                  </Badge>
+                                )}
+                                {contextPulse.sleepHoursAvg !== null && (
+                                  <Badge className="border-sky-500/20 bg-sky-500/10 text-sky-200">
+                                    Сон: {contextPulse.sleepHoursAvg}ч
+                                  </Badge>
+                                )}
+                                {contextPulse.openTasks !== null && (
+                                  <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-200">
+                                    Открытые задачи: {contextPulse.openTasks}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {contextHypotheses.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="text-xs tracking-wide text-white/40 uppercase">
+                                Контекстные гипотезы
+                              </div>
+                              <div className="space-y-2">
+                                {contextHypotheses.map((item) => (
+                                  <div
+                                    key={item}
+                                    className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
+                                  >
+                                    {item}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {(snapshotHistory.linkedEntities.length > 0 ||
+                            snapshotHistory.actionFeedback.length > 0) && (
+                            <div className="space-y-2">
+                              <div className="text-xs tracking-wide text-white/40 uppercase">
+                                Learning memory (snapshot)
+                              </div>
+                              <div className="grid gap-2 md:grid-cols-2">
+                                <div className="space-y-1 rounded-xl border border-white/10 bg-black/10 px-3 py-2">
+                                  <div className="text-xs text-white/55">
+                                    Последние созданные сущности
+                                  </div>
+                                  {snapshotHistory.linkedEntities.slice(0, 4).map((item) => (
+                                    <div
+                                      key={`${item.entityType}-${item.label}-${item.createdAt}`}
+                                      className="text-xs text-white/70"
+                                    >
+                                      <div>
+                                        {item.sourcePlanMode &&
+                                        item.sourcePlanMode in PLAN_MODE_LABELS
+                                          ? `[${PLAN_MODE_LABELS[item.sourcePlanMode as LeakSolutionPlan["mode"]]}] `
+                                          : ""}
+                                        {item.label} • {formatDate(item.createdAt)}
                                       </div>
-                                      <div className="text-xs text-white/40">
-                                        Создано: {formatDate(action.createdAt)}
+                                      <div className="mt-1 flex flex-wrap gap-1">
+                                        {item.reused && (
+                                          <Badge className="border-white/10 bg-white/10 text-white/65">
+                                            Reused
+                                          </Badge>
+                                        )}
+                                        {item.policyCorrelationId && (
+                                          <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
+                                            Corr: {item.policyCorrelationId.slice(0, 18)}
+                                          </Badge>
+                                        )}
                                       </div>
-                                      {(sourceActionTitle || sourcePlanMode || feedback) && (
-                                        <div className="flex flex-wrap gap-2">
-                                          {sourcePlanMode && (
-                                            <Badge className="bg-white/10 text-white/65 border-white/10">
-                                              Режим:{' '}
-                                              {sourcePlanMode in PLAN_MODE_LABELS
-                                                ? PLAN_MODE_LABELS[sourcePlanMode as LeakSolutionPlan['mode']]
-                                                : sourcePlanMode}
-                                            </Badge>
-                                          )}
-                                          {sourcePlanConfidenceLabel &&
-                                            (sourcePlanConfidenceLabel === 'low' ||
-                                              sourcePlanConfidenceLabel === 'medium' ||
-                                              sourcePlanConfidenceLabel === 'high') && (
-                                              <Badge className={PLAN_CONFIDENCE_STYLES[sourcePlanConfidenceLabel]}>
-                                                Уверенность: {getConfidenceLabelText(sourcePlanConfidenceLabel)}
-                                              </Badge>
-                                            )}
-                                          {sourceActionTitle && (
-                                            <Badge className="bg-white/10 text-white/65 border-white/10">
-                                              Действие: {sourceActionTitle}
-                                            </Badge>
-                                          )}
-                                          {sourcePolicyCorrelationId && (
-                                            <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
-                                              Policy-linked
-                                            </Badge>
-                                          )}
-                                          {sourcePolicyCorrelationId && !feedback && (
-                                            <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
-                                              Без feedback
-                                            </Badge>
-                                          )}
-                                          {feedback && (
-                                            <Badge
-                                              className={
-                                                feedback.result === 'worked'
-                                                  ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
-                                                  : feedback.result === 'partially'
-                                                    ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
-                                                    : 'bg-rose-500/10 text-rose-200 border-rose-500/20'
-                                              }
-                                            >
-                                              Feedback: {getFeedbackResultLabel(feedback.result)}
-                                            </Badge>
-                                          )}
-                                        </div>
-                                      )}
-                                      {feedback?.comment && (
-                                        <div className="text-xs text-white/55">{feedback.comment}</div>
-                                      )}
-                                      {sourcePlanConfidenceReason && (
-                                        <div className="text-xs text-white/55">{sourcePlanConfidenceReason}</div>
-                                      )}
-                                      {sourcePlanSummary && (
-                                        <div className="text-xs text-white/55">План: {sourcePlanSummary}</div>
-                                      )}
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => setScreen(getActionScreen(action.entityType))}
-                                        className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                                      >
-                                        Открыть
-                                      </Button>
-                                      {sourceActionId && (
+                                      {isLeakEntityType(item.entityType) && (
                                         <Button
                                           size="sm"
                                           variant="outline"
-                                          onClick={() => focusPlanAction(leak.id, sourceActionId)}
-                                          className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                          onClick={() =>
+                                            setScreen(getActionScreen(item.entityType))
+                                          }
+                                          className="mt-1 border-white/15 bg-white/5 text-white hover:bg-white/10"
                                         >
-                                          К шагу
+                                          Открыть {getActionLabel(item.entityType)}
                                         </Button>
                                       )}
-                                      {sourceActionId && !feedback && (
-                                        <>
-                                          {(['worked', 'partially', 'not_worked'] as const).map((result) => (
-                                            <Button
-                                              key={`${action.id}-${result}`}
-                                              size="sm"
-                                              variant="outline"
-                                              onClick={() =>
-                                                sendPlanActionFeedback(
-                                                  leak.id,
-                                                  sourceActionId,
-                                                  result,
-                                                  getFeedbackCommentDraftByActionId(sourceActionId),
-                                                )
-                                              }
-                                              disabled={savingFeedbackActionId === sourceActionId}
-                                              className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                                            >
-                                              {result === 'worked'
-                                                ? 'Сработало'
-                                                : result === 'partially'
-                                                  ? 'Частично'
-                                                  : 'Не помогло'}
-                                            </Button>
-                                          ))}
-                                        </>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="space-y-1 rounded-xl border border-white/10 bg-black/10 px-3 py-2">
+                                  <div className="text-xs text-white/55">
+                                    Последние feedback из истории
+                                  </div>
+                                  {snapshotHistory.actionFeedback.slice(0, 4).map((item) => (
+                                    <div
+                                      key={`${item.actionTitle}-${item.updatedAt}`}
+                                      className="text-xs text-white/70"
+                                    >
+                                      <div>
+                                        {item.actionTitle} • {item.result} •{" "}
+                                        {formatDate(item.updatedAt)}
+                                      </div>
+                                      <div className="mt-1 flex flex-wrap gap-1">
+                                        {item.feedbackSource === "policy" && (
+                                          <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
+                                            Policy outcome
+                                          </Badge>
+                                        )}
+                                        {item.attempt && (
+                                          <Badge className="border-white/10 bg-white/10 text-white/65">
+                                            Attempt {item.attempt}
+                                          </Badge>
+                                        )}
+                                        {item.policyCorrelationId && (
+                                          <Badge className="border-white/10 bg-white/10 text-white/65">
+                                            Corr: {item.policyCorrelationId.slice(0, 18)}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          {recentFeedbackWindow.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="text-xs tracking-wide text-white/40 uppercase">
+                                Learning summary
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <Badge className="border-white/10 bg-white/10 text-white/70">
+                                  Recent: {recentFeedbackWindow.length}
+                                </Badge>
+                                <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200">
+                                  Worked: {recentWorkedCount}
+                                </Badge>
+                                <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-200">
+                                  Partial: {recentPartialCount}
+                                </Badge>
+                                <Badge className="border-rose-500/20 bg-rose-500/10 text-rose-200">
+                                  Failed: {recentFailedCount}
+                                </Badge>
+                                <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
+                                  Без feedback по policy-created:{" "}
+                                  {policyLinkedCreatedWithoutFeedback}
+                                </Badge>
+                              </div>
+                            </div>
+                          )}
+
+                          {SHOW_PATTERN_ANALYTICS && (matchedPattern || selectedPlan) && (
+                            <div className="space-y-2">
+                              <div className="text-xs tracking-wide text-white/40 uppercase">
+                                Learning слой
+                              </div>
+                              {matchedPattern && (
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge className="border-white/10 bg-white/10 text-white/70">
+                                    Паттерн: {matchedPattern.leakType}
+                                  </Badge>
+                                  <Badge className="border-white/10 bg-white/10 text-white/70">
+                                    Анализов: {matchedPattern.analysisCount}
+                                  </Badge>
+                                  <Badge
+                                    className={
+                                      matchedPatternLinkType === "exact"
+                                        ? "border-indigo-500/20 bg-indigo-500/10 text-indigo-200"
+                                        : matchedPatternLinkType === "fuzzy"
+                                          ? "border-amber-500/20 bg-amber-500/10 text-amber-200"
+                                          : "border-white/10 bg-white/10 text-white/70"
+                                    }
+                                  >
+                                    Связь:{" "}
+                                    {matchedPatternLinkType === "exact"
+                                      ? "точное совпадение"
+                                      : matchedPatternLinkType === "fuzzy"
+                                        ? "похожее название"
+                                        : "не определена"}
+                                  </Badge>
+                                  <Badge className="border-white/10 bg-white/10 text-white/70">
+                                    Обновлено: {formatDate(matchedPattern.updatedAt)}
+                                  </Badge>
+                                  {(matchedPattern.workedCount || 0) > 0 && (
+                                    <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200">
+                                      Сработало: {matchedPattern.workedCount}
+                                    </Badge>
+                                  )}
+                                  {(matchedPattern.partialCount || 0) > 0 && (
+                                    <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-200">
+                                      Частично: {matchedPattern.partialCount}
+                                    </Badge>
+                                  )}
+                                  {(matchedPattern.failedCount || 0) > 0 && (
+                                    <Badge className="border-rose-500/20 bg-rose-500/10 text-rose-200">
+                                      Не помогло: {matchedPattern.failedCount}
+                                    </Badge>
+                                  )}
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setActiveTab("patterns")}
+                                    className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                                  >
+                                    Открыть Patterns
+                                  </Button>
+                                </div>
+                              )}
+                              {matchedPattern && (
+                                <div className="text-xs text-white/55">
+                                  {matchedPatternLinkType === "exact"
+                                    ? "Связь построена по точному совпадению названия leak и pattern."
+                                    : matchedPatternLinkType === "fuzzy"
+                                      ? "Связь построена по похожему названию. Проверь формулировку leak для более точного обучения."
+                                      : "Тип связи не определён автоматически."}
+                                </div>
+                              )}
+                              {matchedPattern &&
+                                matchedPatternLinkType === "fuzzy" &&
+                                normalizeLookupValue(matchedPattern.leakType) !==
+                                  normalizeLookupValue(leak.title) && (
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => syncLeakTitleWithPattern(leak, matchedPattern)}
+                                      disabled={updatingLeakId === leak.id}
+                                      className="border-amber-500/20 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15"
+                                    >
+                                      {updatingLeakId === leak.id
+                                        ? "Синхронизирую..."
+                                        : "Синхронизировать название с паттерном"}
+                                    </Button>
+                                  </div>
+                                )}
+                              {matchedPattern?.workedExamples &&
+                              matchedPattern.workedExamples.length > 0 ? (
+                                <div className="space-y-2">
+                                  {matchedPattern.workedExamples.map((item) => (
+                                    <div
+                                      key={`${item.text}-${item.updatedAt || "na"}`}
+                                      className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2"
+                                    >
+                                      <div className="text-sm text-emerald-100">{item.text}</div>
+                                      <div className="mt-1 flex flex-wrap gap-2">
+                                        {item.sourcePlanMode && (
+                                          <Badge className="border-white/10 bg-white/10 text-white/70">
+                                            Режим:{" "}
+                                            {item.sourcePlanMode in PLAN_MODE_LABELS
+                                              ? PLAN_MODE_LABELS[
+                                                  item.sourcePlanMode as LeakSolutionPlan["mode"]
+                                                ]
+                                              : item.sourcePlanMode}
+                                          </Badge>
+                                        )}
+                                        {item.linkedEntityLabel && item.linkedEntityType && (
+                                          <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
+                                            Сущность:{" "}
+                                            {getActionLabel(
+                                              item.linkedEntityType as LeakActionLink["entityType"]
+                                            )}{" "}
+                                            • {item.linkedEntityLabel}
+                                          </Badge>
+                                        )}
+                                        {item.updatedAt && (
+                                          <Badge className="border-white/10 bg-white/10 text-white/65">
+                                            Feedback: {formatDate(item.updatedAt)}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      {item.comment && (
+                                        <div className="mt-1 text-xs text-emerald-100/80">
+                                          {item.comment}
+                                        </div>
                                       )}
-                                      {feedback && feedback.result !== 'worked' && (
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : matchedPattern?.whatWorked?.length ? (
+                                <div className="flex flex-wrap gap-2">
+                                  {matchedPattern.whatWorked.map((item) => (
+                                    <Badge
+                                      key={item}
+                                      className="border-emerald-500/20 bg-emerald-500/10 text-left whitespace-normal text-emerald-200"
+                                    >
+                                      {item}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : matchedPattern ? (
+                                <p className="text-sm text-white/55">
+                                  После первых feedback тут появятся решения, которые стабильно
+                                  работают именно для этого leak.
+                                </p>
+                              ) : null}
+                            </div>
+                          )}
+
+                          {selectedPlan && (
+                            <div className="space-y-2">
+                              <div className="text-xs tracking-wide text-white/40 uppercase">
+                                Цепочка выполнения
+                              </div>
+                              <div className="rounded-xl border border-white/10 bg-black/10 px-3 py-2">
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-white/70">
+                                  <Badge
+                                    variant="outline"
+                                    className="border-white/10 text-white/70"
+                                  >
+                                    Leak: {leak.title}
+                                  </Badge>
+                                  <span className="text-white/35">→</span>
+                                  <Badge className={PLAN_MODE_STYLES[selectedPlan.mode]}>
+                                    Режим: {PLAN_MODE_LABELS[selectedPlan.mode]}
+                                  </Badge>
+                                  <span className="text-white/35">→</span>
+                                  <Badge className="border-white/10 bg-white/10 text-white/75">
+                                    Создано: {guidance.createdActions}/{guidance.totalActions}
+                                  </Badge>
+                                  <span className="text-white/35">→</span>
+                                  <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200">
+                                    Feedback: {guidance.feedbackActions}/{guidance.totalActions}
+                                  </Badge>
+                                </div>
+                              </div>
+                              <div className="space-y-2 rounded-xl border border-white/10 bg-black/10 px-3 py-2">
+                                <div className="flex flex-wrap gap-2">
+                                  <Badge className={PLAN_MODE_STYLES[selectedPlan.mode]}>
+                                    Режим: {PLAN_MODE_LABELS[selectedPlan.mode]}
+                                  </Badge>
+                                  {selectedModeFromSnapshot && (
+                                    <Badge
+                                      variant="outline"
+                                      className="border-white/15 text-white/70"
+                                    >
+                                      Последний выбор: {PLAN_MODE_LABELS[selectedModeFromSnapshot]}
+                                    </Badge>
+                                  )}
+                                  {lastStableMode && (
+                                    <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200">
+                                      Стабильный режим: {PLAN_MODE_LABELS[lastStableMode]}
+                                    </Badge>
+                                  )}
+                                  <Badge
+                                    className={PLAN_CONFIDENCE_STYLES[selectedPlan.confidenceLabel]}
+                                  >
+                                    Уверенность:{" "}
+                                    {getConfidenceLabelText(selectedPlan.confidenceLabel)}
+                                  </Badge>
+                                </div>
+                                {selectedPlan.confidenceReason && (
+                                  <p className="text-xs text-white/60">
+                                    {selectedPlan.confidenceReason}
+                                  </p>
+                                )}
+                              </div>
+                              {(() => {
+                                const pendingCreatedNoFeedback = selectedPlan.actions.filter(
+                                  (action) =>
+                                    isPlanActionConverted(action) && !getLatestPlanFeedback(action)
+                                );
+                                if (pendingCreatedNoFeedback.length < 2) return null;
+                                const sampleComment = getFeedbackCommentDraft(
+                                  pendingCreatedNoFeedback[0]
+                                );
+                                return (
+                                  <div className="space-y-2 rounded-xl border border-white/10 bg-black/10 px-3 py-2">
+                                    <div className="text-xs text-white/60">
+                                      Быстрый feedback: {pendingCreatedNoFeedback.length} созданных
+                                      шагов пока без оценки.
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      {(
+                                        [
+                                          "worked",
+                                          "partially",
+                                          "not_worked",
+                                        ] as LeakPlanFeedback["result"][]
+                                      ).map((result) => (
+                                        <Button
+                                          key={`bulk-feedback-${leak.id}-${result}`}
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() =>
+                                            applyBulkFeedbackForPendingCreated(
+                                              leak,
+                                              selectedPlan,
+                                              result
+                                            )
+                                          }
+                                          disabled={savingFeedbackLeakId === leak.id}
+                                          className={
+                                            result === "worked"
+                                              ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/15"
+                                              : result === "partially"
+                                                ? "border-amber-500/20 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15"
+                                                : "border-rose-500/20 bg-rose-500/10 text-rose-200 hover:bg-rose-500/15"
+                                          }
+                                        >
+                                          {savingFeedbackLeakId === leak.id
+                                            ? "Сохраняю..."
+                                            : result === "worked"
+                                              ? "Отметить все как сработало"
+                                              : result === "partially"
+                                                ? "Отметить все как частично"
+                                                : "Отметить все как не помогло"}
+                                        </Button>
+                                      ))}
+                                    </div>
+                                    {sampleComment && (
+                                      <div className="text-xs text-white/45">
+                                        Комментарий для bulk возьмётся из первого шага: «
+                                        {sampleComment}»
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                              <div className="space-y-2">
+                                {selectedPlan.actions.map((planAction, index) => {
+                                  const linkedEntity = getLinkedEntityForPlanAction(
+                                    leak,
+                                    planAction
+                                  );
+                                  const feedback = feedbackByActionId.get(planAction.id);
+                                  const actionStage:
+                                    | "plan"
+                                    | "entity"
+                                    | "feedback_worked"
+                                    | "feedback_partial"
+                                    | "feedback_failed" = !linkedEntity
+                                    ? "plan"
+                                    : !feedback
+                                      ? "entity"
+                                      : feedback.result === "worked"
+                                        ? "feedback_worked"
+                                        : feedback.result === "partially"
+                                          ? "feedback_partial"
+                                          : "feedback_failed";
+
+                                  return (
+                                    <div
+                                      key={planAction.id}
+                                      id={getPlanActionAnchorId(leak.id, planAction.id)}
+                                      className={`rounded-xl border bg-white/[0.03] px-3 py-2 transition-colors ${
+                                        focusedPlanActionId === planAction.id
+                                          ? "border-indigo-400/40 shadow-[0_0_0_1px_rgba(99,102,241,0.35)]"
+                                          : "border-white/10"
+                                      }`}
+                                    >
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <Badge
+                                          variant="outline"
+                                          className="border-white/10 text-white/55"
+                                        >
+                                          {index + 1}
+                                        </Badge>
+                                        <Badge
+                                          variant="outline"
+                                          className="border-white/10 text-white/55"
+                                        >
+                                          {PLAN_KIND_LABELS[planAction.kind]}
+                                        </Badge>
+                                        <div className="text-sm text-white">{planAction.title}</div>
+                                      </div>
+                                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                                        <Badge
+                                          className={
+                                            actionStage === "plan"
+                                              ? "border-indigo-500/20 bg-indigo-500/10 text-indigo-200"
+                                              : "border-white/10 bg-white/10 text-white/50"
+                                          }
+                                        >
+                                          1. План
+                                        </Badge>
+                                        <span className="text-white/25">→</span>
+                                        <Badge
+                                          className={
+                                            actionStage === "entity" ||
+                                            actionStage.startsWith("feedback")
+                                              ? "border-indigo-500/20 bg-indigo-500/10 text-indigo-200"
+                                              : "border-white/10 bg-white/10 text-white/50"
+                                          }
+                                        >
+                                          2. Сущность
+                                        </Badge>
+                                        <span className="text-white/25">→</span>
+                                        <Badge
+                                          className={
+                                            actionStage === "feedback_worked"
+                                              ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
+                                              : actionStage === "feedback_partial"
+                                                ? "border-amber-500/20 bg-amber-500/10 text-amber-200"
+                                                : actionStage === "feedback_failed"
+                                                  ? "border-rose-500/20 bg-rose-500/10 text-rose-200"
+                                                  : "border-white/10 bg-white/10 text-white/50"
+                                          }
+                                        >
+                                          3. Feedback
+                                        </Badge>
+                                      </div>
+                                      <div className="mt-2 flex flex-wrap gap-2">
+                                        <Badge className={PLAN_MODE_STYLES[selectedPlan.mode]}>
+                                          {PLAN_MODE_LABELS[selectedPlan.mode]}
+                                        </Badge>
+                                        {linkedEntity ? (
+                                          <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
+                                            Сущность: {getActionLabel(linkedEntity.entityType)} •{" "}
+                                            {linkedEntity.label}
+                                          </Badge>
+                                        ) : (
+                                          <Badge className="border-white/10 bg-white/10 text-white/60">
+                                            Сущность ещё не создана
+                                          </Badge>
+                                        )}
+                                        {feedback ? (
+                                          <Badge
+                                            className={
+                                              feedback.result === "worked"
+                                                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
+                                                : feedback.result === "partially"
+                                                  ? "border-amber-500/20 bg-amber-500/10 text-amber-200"
+                                                  : "border-rose-500/20 bg-rose-500/10 text-rose-200"
+                                            }
+                                          >
+                                            Feedback: {getFeedbackResultLabel(feedback.result)}
+                                          </Badge>
+                                        ) : (
+                                          <Badge className="border-white/10 bg-white/10 text-white/60">
+                                            Feedback ещё не получен
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <div className="mt-2 flex flex-wrap gap-2">
+                                        {!linkedEntity ? (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() =>
+                                              applySinglePlanAction(
+                                                leak,
+                                                selectedPlan.mode,
+                                                planAction
+                                              )
+                                            }
+                                            disabled={
+                                              applyingPlanActionId === planAction.id ||
+                                              applyingPlanLeakId === leak.id
+                                            }
+                                            className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200 hover:bg-indigo-500/15"
+                                          >
+                                            {applyingPlanActionId === planAction.id
+                                              ? "Создаю..."
+                                              : "Создать шаг"}
+                                          </Button>
+                                        ) : (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() =>
+                                              setScreen(getActionScreen(linkedEntity.entityType))
+                                            }
+                                            className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                                          >
+                                            Открыть сущность
+                                          </Button>
+                                        )}
+                                        {linkedEntity && !feedback && (
+                                          <>
+                                            {(["worked", "partially", "not_worked"] as const).map(
+                                              (result) => (
+                                                <Button
+                                                  key={result}
+                                                  size="sm"
+                                                  variant="outline"
+                                                  onClick={() =>
+                                                    sendPlanActionFeedback(
+                                                      leak.id,
+                                                      planAction.id,
+                                                      result,
+                                                      getFeedbackCommentDraft(planAction)
+                                                    )
+                                                  }
+                                                  disabled={
+                                                    savingFeedbackActionId === planAction.id
+                                                  }
+                                                  className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                                                >
+                                                  {result === "worked"
+                                                    ? "Сработало"
+                                                    : result === "partially"
+                                                      ? "Частично"
+                                                      : "Не помогло"}
+                                                </Button>
+                                              )
+                                            )}
+                                          </>
+                                        )}
+                                        {feedback && feedback.result !== "worked" && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() =>
+                                              retryLeakPlanning(leak, {
+                                                action: planAction,
+                                                failureReason: feedback.comment || null,
+                                              })
+                                            }
+                                            disabled={retryingLeakId === leak.id}
+                                            className="border-amber-500/20 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15"
+                                          >
+                                            {retryingLeakId === leak.id
+                                              ? "Обновляю..."
+                                              : leak.status === "resolved" ||
+                                                  leak.status === "archived"
+                                                ? "Reopen и retry"
+                                                : "Retry по шагу"}
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {feedbackByAction.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="text-xs tracking-wide text-white/40 uppercase">
+                                  История feedback
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setFeedbackHistoryFilterByLeak((current) => ({
+                                        ...current,
+                                        [leak.id]: "all",
+                                      }))
+                                    }
+                                    className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+                                      feedbackHistoryFilter === "all"
+                                        ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                                        : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
+                                    }`}
+                                  >
+                                    Все
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setFeedbackHistoryFilterByLeak((current) => ({
+                                        ...current,
+                                        [leak.id]: "problem",
+                                      }))
+                                    }
+                                    className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+                                      feedbackHistoryFilter === "problem"
+                                        ? "border-amber-400/30 bg-amber-500/10 text-amber-200"
+                                        : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
+                                    }`}
+                                  >
+                                    Проблемные
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {(() => {
+                                  const recent = feedbackByAction.slice(0, 6);
+                                  const worked = recent.filter(
+                                    (item) => item.result === "worked"
+                                  ).length;
+                                  const partial = recent.filter(
+                                    (item) => item.result === "partially"
+                                  ).length;
+                                  const failed = recent.filter(
+                                    (item) => item.result === "not_worked"
+                                  ).length;
+                                  const latestProblem =
+                                    recent.find((item) => item.result !== "worked") || null;
+                                  return (
+                                    <>
+                                      <Badge className="border-white/10 bg-white/10 text-white/70">
+                                        Последние: {recent.length}
+                                      </Badge>
+                                      <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200">
+                                        Сработало: {worked}
+                                      </Badge>
+                                      <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-200">
+                                        Частично: {partial}
+                                      </Badge>
+                                      <Badge className="border-rose-500/20 bg-rose-500/10 text-rose-200">
+                                        Не помогло: {failed}
+                                      </Badge>
+                                      {latestProblem && (
                                         <Button
                                           size="sm"
                                           variant="outline"
                                           onClick={() =>
                                             retryLeakPlanning(leak, {
-                                              action: sourcePlanAction,
-                                              failureReason: feedback.comment || null,
+                                              action: latestProblem.actionId
+                                                ? planActionsById.get(latestProblem.actionId) ||
+                                                  null
+                                                : null,
+                                              failureReason: latestProblem.comment || null,
                                             })
                                           }
                                           disabled={retryingLeakId === leak.id}
-                                          className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
+                                          className="border-amber-500/20 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15"
                                         >
-                                          {retryingLeakId === leak.id ? 'Обновляю...' : 'Retry'}
+                                          {retryingLeakId === leak.id
+                                            ? "Обновляю..."
+                                            : "Retry по последнему проблемному"}
                                         </Button>
                                       )}
-                                    </div>
-                                  </div>
-                                )
-                              })()
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="text-xs uppercase tracking-wide text-white/40">
-                          Быстрый перевод без плана
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => convertLeakToTask(leak)}
-                            disabled={actionLeakId === leak.id || hasActionType(leak, 'task')}
-                            className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                          >
-                            В задачу
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => convertLeakToRitual(leak)}
-                            disabled={actionLeakId === leak.id || hasActionType(leak, 'ritual')}
-                            className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                          >
-                            В ритуал
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => convertLeakToChallenge(leak)}
-                            disabled={actionLeakId === leak.id || hasActionType(leak, 'challenge')}
-                            className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
-                          >
-                            AI-челлендж
-                          </Button>
-                        </div>
-                        <p className="text-xs text-white/45">
-                          Если не нужен целый режим, leak можно сразу превратить в одну понятную сущность.
-                        </p>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="text-xs uppercase tracking-wide text-white/40">
-                            Планы решения
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => generatePlansForLeak(leak.id, false)}
-                              disabled={generatingPlansLeakId === leak.id}
-                              className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
-                            >
-                              {generatingPlansLeakId === leak.id ? 'Собираю...' : 'Сделать 3 плана'}
-                            </Button>
-                            {plansByLeak[leak.id]?.length > 0 && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => generatePlansForLeak(leak.id, true)}
-                                disabled={generatingPlansLeakId === leak.id}
-                                className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                              >
-                                Пересобрать
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-
-                        {loadingPlansLeakId === leak.id ? (
-                          <div className="space-y-2">
-                            <Skeleton className="h-20 w-full rounded-2xl" />
-                            <Skeleton className="h-20 w-full rounded-2xl" />
-                          </div>
-                        ) : plansByLeak[leak.id]?.length ? (
-                          <div className="space-y-3">
-                            <div className="rounded-xl border border-white/10 bg-black/10 p-3 space-y-2">
-                              <div className="text-xs uppercase tracking-wide text-white/40">
-                                Сравнение режимов
+                                    </>
+                                  );
+                                })()}
                               </div>
-                              <div className="grid gap-2 md:grid-cols-3">
-                                {plansByLeak[leak.id].map((plan) => (
-                                  <div
-                                    key={`compare-${plan.id}`}
-                                    className={`rounded-lg border p-2 ${
-                                      plan.isSelected
-                                        ? 'border-indigo-500/30 bg-indigo-500/10'
-                                        : 'border-white/10 bg-white/[0.03]'
-                                    }`}
-                                  >
-                                    <div className="flex items-center justify-between gap-2">
-                                      <Badge className={PLAN_MODE_STYLES[plan.mode]}>
-                                        {PLAN_MODE_LABELS[plan.mode]}
-                                      </Badge>
-                                      <Badge className={PLAN_CONFIDENCE_STYLES[plan.confidenceLabel]}>
-                                        {getConfidenceLabelText(plan.confidenceLabel)}
-                                      </Badge>
-                                    </div>
-                                    <div className="mt-2 text-xs text-white/60 line-clamp-3">{plan.summary}</div>
-                                    <div className="mt-2 text-xs text-white/40">
-                                      Действий: {plan.actions.length}
-                                    </div>
+                              <div className="space-y-2">
+                                {visibleFeedbackTimeline.length === 0 ? (
+                                  <div className="rounded-xl border border-white/10 bg-black/10 px-3 py-2 text-xs text-white/55">
+                                    По текущему фильтру пока нет событий.
                                   </div>
-                                ))}
-                              </div>
-                            </div>
+                                ) : (
+                                  visibleFeedbackTimeline.slice(0, 6).map((item) => {
+                                    const historyAction = item.actionId
+                                      ? planActionsById.get(item.actionId) || null
+                                      : null;
 
-                            {plansByLeak[leak.id].map((plan) => (
-                              <div
-                                key={plan.id}
-                                className={`rounded-2xl border p-3 ${
-                                  plan.isSelected
-                                    ? 'border-emerald-500/30 bg-emerald-500/10'
-                                    : 'border-white/10 bg-white/[0.03]'
-                                }`}
-                              >
-                                <div className="flex flex-wrap items-start justify-between gap-2">
-                                  <div className="space-y-2">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <Badge className={PLAN_MODE_STYLES[plan.mode]}>
-                                        {PLAN_MODE_LABELS[plan.mode]}
-                                      </Badge>
-                                      <Badge className={PLAN_CONFIDENCE_STYLES[plan.confidenceLabel]}>
-                                        Шанс: {plan.confidenceLabel}
-                                      </Badge>
-                                      {plan.isSelected && (
-                                        <Badge className="bg-emerald-500/15 text-emerald-200 border-emerald-500/20">
-                                          Выбран
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    <p className="text-sm text-white/85">{plan.summary}</p>
-                                    {plan.confidenceReason && (
-                                      <p className="text-xs text-white/50">{plan.confidenceReason}</p>
-                                    )}
-                                  </div>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => selectPlanMode(leak.id, plan.mode)}
-                                    disabled={selectingPlanLeakId === leak.id || plan.isSelected}
-                                    className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
-                                  >
-                                    {plan.isSelected ? 'Текущий режим' : 'Выбрать'}
-                                  </Button>
-                                </div>
-
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => applySelectedPlan(leak, plan.mode)}
-                                    disabled={
-                                      applyingPlanLeakId === leak.id ||
-                                      plan.actions.every((action) => isPlanActionConverted(action))
-                                    }
-                                    className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
-                                  >
-                                    {applyingPlanLeakId === leak.id
-                                      ? 'Применяю...'
-                                      : plan.actions.every((action) => isPlanActionConverted(action))
-                                        ? 'Режим уже применён'
-                                        : 'Применить режим'}
-                                  </Button>
-                                  {plan.isSelected && (
-                                    <Badge className="bg-white/10 text-white/70 border-white/10">
-                                      Активный режим для этого лика
-                                    </Badge>
-                                  )}
-                                </div>
-
-                                <div className="mt-3 space-y-2">
-                                  {plan.actions.map((action) => (
-                                    <div
-                                      key={action.id}
-                                      className="rounded-xl border border-white/10 bg-black/10 px-3 py-2"
-                                    >
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <Badge variant="outline" className="border-white/10 text-white/55">
-                                          {PLAN_KIND_LABELS[action.kind]}
-                                        </Badge>
-                                        <div className="text-sm text-white">{action.title}</div>
-                                        {isPlanActionConverted(action) && (
-                                          <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
-                                            Создано
-                                          </Badge>
-                                        )}
-                                      </div>
-                                      {action.description && (
-                                        <p className="mt-1 text-xs text-white/55">{action.description}</p>
-                                      )}
-                                      {isPlanActionConverted(action) && (
-                                        <div className="mt-2 flex flex-wrap gap-2">
-                                          <Button
-                                            size="sm"
+                                    return (
+                                      <div
+                                        key={`${item.actionId || item.actionTitle}-${item.updatedAt}`}
+                                        className="rounded-xl border border-white/10 bg-black/10 px-3 py-2"
+                                      >
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          {item.mode ? (
+                                            <Badge className={PLAN_MODE_STYLES[item.mode]}>
+                                              {PLAN_MODE_LABELS[item.mode]}
+                                            </Badge>
+                                          ) : (
+                                            <Badge
+                                              variant="outline"
+                                              className="border-white/10 text-white/55"
+                                            >
+                                              Режим не задан
+                                            </Badge>
+                                          )}
+                                          <Badge
                                             variant="outline"
-                                            onClick={() =>
-                                              setScreen(
-                                                getActionScreen(
-                                                  action.payload?.convertedEntityType as LeakActionLink['entityType'],
-                                                ),
-                                              )
-                                            }
-                                            className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                            className="border-white/10 text-white/55"
                                           >
-                                            Открыть созданное
-                                          </Button>
-                                          <div className="text-xs text-white/40 self-center">
-                                            {String(action.payload?.convertedEntityLabel || '')}
+                                            {PLAN_KIND_LABELS[item.actionKind]}
+                                          </Badge>
+                                          <Badge className="border-white/10 bg-white/10 text-white/70">
+                                            Попытки: {item.attempts}
+                                          </Badge>
+                                          <Badge
+                                            className={
+                                              item.result === "worked"
+                                                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
+                                                : item.result === "partially"
+                                                  ? "border-amber-500/20 bg-amber-500/10 text-amber-200"
+                                                  : "border-rose-500/20 bg-rose-500/10 text-rose-200"
+                                            }
+                                          >
+                                            {getFeedbackResultLabel(item.result)}
+                                          </Badge>
+                                          {item.feedbackSource === "policy" && (
+                                            <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
+                                              Policy outcome
+                                            </Badge>
+                                          )}
+                                          {item.policyCorrelationId && (
+                                            <Badge className="border-white/10 bg-white/10 text-white/60">
+                                              Corr: {item.policyCorrelationId.slice(0, 18)}
+                                            </Badge>
+                                          )}
+                                          <div className="text-xs text-white/40">
+                                            {formatDate(item.updatedAt)}
                                           </div>
                                         </div>
-                                      )}
-                                      {!isPlanActionConverted(action) && (
-                                        <div className="mt-2 flex flex-wrap gap-2">
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => applySinglePlanAction(leak, plan.mode, action)}
-                                            disabled={applyingPlanActionId === action.id || applyingPlanLeakId === leak.id}
-                                            className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
-                                          >
-                                            {applyingPlanActionId === action.id ? 'Создаю...' : 'Создать отдельно'}
-                                          </Button>
+                                        <div className="mt-1 text-sm text-white">
+                                          {item.actionTitle}
                                         </div>
-                                      )}
-                                      {isPlanActionConverted(action) && (
+                                        {item.linkedEntity && (
+                                          <div className="mt-1">
+                                            <Badge className="border-indigo-500/20 bg-indigo-500/10 text-left whitespace-normal text-indigo-200">
+                                              Сущность:{" "}
+                                              {getActionLabel(item.linkedEntity.entityType)} •{" "}
+                                              {item.linkedEntity.label}
+                                            </Badge>
+                                          </div>
+                                        )}
+                                        {item.comment && (
+                                          <div className="mt-1 text-xs text-white/60">
+                                            {item.comment}
+                                          </div>
+                                        )}
                                         <div className="mt-2 flex flex-wrap gap-2">
-                                          <Input
-                                            value={getFeedbackCommentDraft(action)}
-                                            onChange={(event) =>
-                                              setFeedbackCommentByAction((current) => ({
-                                                ...current,
-                                                [action.id]: event.target.value,
-                                              }))
-                                            }
-                                            placeholder="Почему это сработало или не помогло"
-                                            className="h-9 min-w-[240px] bg-white/5 border-white/10 text-white placeholder:text-white/30"
-                                          />
-                                          {(['worked', 'partially', 'not_worked'] as const).map((result) => {
-                                            const feedback = getActionFeedback(action)
-                                            const isActive = feedback?.result === result
-                                            const label =
-                                              result === 'worked'
-                                                ? 'Сработало'
-                                                : result === 'partially'
-                                                  ? 'Частично'
-                                                  : 'Не помогло'
-
-                                            return (
-                                              <Button
-                                                key={result}
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() =>
-                                                  sendPlanActionFeedback(
-                                                    leak.id,
-                                                    action.id,
-                                                    result,
-                                                    getFeedbackCommentDraft(action),
-                                                  )
-                                                }
-                                                disabled={savingFeedbackActionId === action.id}
-                                                className={
-                                                  isActive
-                                                    ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
-                                                    : 'border-white/15 bg-white/5 hover:bg-white/10 text-white'
-                                                }
-                                              >
-                                                {label}
-                                              </Button>
-                                            )
-                                          })}
-                                          {getActionFeedback(action) && (
-                                            <div className="text-xs text-white/40 self-center">
-                                              Последний фидбек: {formatDate(getActionFeedback(action)!.updatedAt)}
-                                            </div>
+                                          {item.actionId && (
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              onClick={() =>
+                                                focusPlanAction(leak.id, item.actionId)
+                                              }
+                                              className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                                            >
+                                              К шагу
+                                            </Button>
                                           )}
-                                          {getActionFeedback(action)?.result !== 'worked' && (
+                                          {item.linkedEntity && (
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              onClick={() =>
+                                                setScreen(
+                                                  getActionScreen(item.linkedEntity.entityType)
+                                                )
+                                              }
+                                              className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                                            >
+                                              Открыть сущность
+                                            </Button>
+                                          )}
+                                          {item.result !== "worked" && (
                                             <Button
                                               size="sm"
                                               variant="outline"
                                               onClick={() =>
                                                 retryLeakPlanning(leak, {
-                                                  action,
-                                                  failureReason: getActionFeedback(action)?.comment || null,
+                                                  action: historyAction,
+                                                  failureReason: item.comment || null,
                                                 })
                                               }
                                               disabled={retryingLeakId === leak.id}
-                                              className="border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 text-amber-200"
+                                              className="border-amber-500/20 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15"
                                             >
-                                              {retryingLeakId === leak.id ? 'Обновляю...' : 'Нужен другой подход'}
-                                            </Button>
-                                          )}
-                                          {getActionFeedback(action)?.result === 'worked' && leak.status !== 'resolved' && (
-                                            <Button
-                                              size="sm"
-                                              variant="outline"
-                                              onClick={() => updateLeakStatus(leak.id, 'resolved')}
-                                              disabled={updatingLeakId === leak.id}
-                                              className="border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-200"
-                                            >
-                                              Закрыть leak
+                                              {retryingLeakId === leak.id
+                                                ? "Обновляю..."
+                                                : "Retry этого шага"}
                                             </Button>
                                           )}
                                         </div>
+                                      </div>
+                                    );
+                                  })
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="space-y-2">
+                            <div className="text-xs tracking-wide text-white/40 uppercase">
+                              Что уже создано из лика
+                            </div>
+                            {leak.actions.length === 0 ? (
+                              <p className="text-sm text-white/55">
+                                Пока ничего. Можно превратить лик в задачу, ритуал или AI-челлендж.
+                              </p>
+                            ) : (
+                              <div className="space-y-2">
+                                {leak.actions.map((action) =>
+                                  (() => {
+                                    const metadata = getLeakActionMetadata(action);
+                                    const sourceActionId =
+                                      typeof metadata?.sourceActionId === "string"
+                                        ? metadata.sourceActionId
+                                        : null;
+                                    const sourceActionTitle =
+                                      typeof metadata?.sourceActionTitle === "string"
+                                        ? metadata.sourceActionTitle
+                                        : null;
+                                    const sourcePlanMode =
+                                      typeof metadata?.sourcePlanMode === "string"
+                                        ? metadata.sourcePlanMode
+                                        : null;
+                                    const sourcePlanConfidenceLabel =
+                                      typeof metadata?.sourcePlanConfidenceLabel === "string"
+                                        ? metadata.sourcePlanConfidenceLabel
+                                        : null;
+                                    const sourcePlanConfidenceReason =
+                                      typeof metadata?.sourcePlanConfidenceReason === "string"
+                                        ? metadata.sourcePlanConfidenceReason
+                                        : null;
+                                    const sourcePlanSummary =
+                                      typeof metadata?.sourcePlanSummary === "string"
+                                        ? metadata.sourcePlanSummary
+                                        : null;
+                                    const sourcePolicyCorrelationId =
+                                      typeof metadata?.policyCorrelationId === "string"
+                                        ? metadata.policyCorrelationId
+                                        : null;
+                                    const feedback = sourceActionId
+                                      ? feedbackByActionId.get(sourceActionId)
+                                      : null;
+                                    const sourcePlanAction = sourceActionId
+                                      ? planActionsById.get(sourceActionId) || null
+                                      : null;
+
+                                    return (
+                                      <div
+                                        key={action.id}
+                                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"
+                                      >
+                                        <div className="space-y-1">
+                                          <div className="text-sm text-white">
+                                            {getActionLabel(action.entityType)}: {action.label}
+                                          </div>
+                                          <div className="text-xs text-white/40">
+                                            Создано: {formatDate(action.createdAt)}
+                                          </div>
+                                          {(sourceActionTitle || sourcePlanMode || feedback) && (
+                                            <div className="flex flex-wrap gap-2">
+                                              {sourcePlanMode && (
+                                                <Badge className="border-white/10 bg-white/10 text-white/65">
+                                                  Режим:{" "}
+                                                  {sourcePlanMode in PLAN_MODE_LABELS
+                                                    ? PLAN_MODE_LABELS[
+                                                        sourcePlanMode as LeakSolutionPlan["mode"]
+                                                      ]
+                                                    : sourcePlanMode}
+                                                </Badge>
+                                              )}
+                                              {sourcePlanConfidenceLabel &&
+                                                (sourcePlanConfidenceLabel === "low" ||
+                                                  sourcePlanConfidenceLabel === "medium" ||
+                                                  sourcePlanConfidenceLabel === "high") && (
+                                                  <Badge
+                                                    className={
+                                                      PLAN_CONFIDENCE_STYLES[
+                                                        sourcePlanConfidenceLabel
+                                                      ]
+                                                    }
+                                                  >
+                                                    Уверенность:{" "}
+                                                    {getConfidenceLabelText(
+                                                      sourcePlanConfidenceLabel
+                                                    )}
+                                                  </Badge>
+                                                )}
+                                              {sourceActionTitle && (
+                                                <Badge className="border-white/10 bg-white/10 text-white/65">
+                                                  Действие: {sourceActionTitle}
+                                                </Badge>
+                                              )}
+                                              {sourcePolicyCorrelationId && (
+                                                <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
+                                                  Policy-linked
+                                                </Badge>
+                                              )}
+                                              {sourcePolicyCorrelationId && !feedback && (
+                                                <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-200">
+                                                  Без feedback
+                                                </Badge>
+                                              )}
+                                              {feedback && (
+                                                <Badge
+                                                  className={
+                                                    feedback.result === "worked"
+                                                      ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
+                                                      : feedback.result === "partially"
+                                                        ? "border-amber-500/20 bg-amber-500/10 text-amber-200"
+                                                        : "border-rose-500/20 bg-rose-500/10 text-rose-200"
+                                                  }
+                                                >
+                                                  Feedback:{" "}
+                                                  {getFeedbackResultLabel(feedback.result)}
+                                                </Badge>
+                                              )}
+                                            </div>
+                                          )}
+                                          {feedback?.comment && (
+                                            <div className="text-xs text-white/55">
+                                              {feedback.comment}
+                                            </div>
+                                          )}
+                                          {sourcePlanConfidenceReason && (
+                                            <div className="text-xs text-white/55">
+                                              {sourcePlanConfidenceReason}
+                                            </div>
+                                          )}
+                                          {sourcePlanSummary && (
+                                            <div className="text-xs text-white/55">
+                                              План: {sourcePlanSummary}
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() =>
+                                              setScreen(getActionScreen(action.entityType))
+                                            }
+                                            className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                                          >
+                                            Открыть
+                                          </Button>
+                                          {sourceActionId && (
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              onClick={() =>
+                                                focusPlanAction(leak.id, sourceActionId)
+                                              }
+                                              className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                                            >
+                                              К шагу
+                                            </Button>
+                                          )}
+                                          {sourceActionId && !feedback && (
+                                            <>
+                                              {(["worked", "partially", "not_worked"] as const).map(
+                                                (result) => (
+                                                  <Button
+                                                    key={`${action.id}-${result}`}
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() =>
+                                                      sendPlanActionFeedback(
+                                                        leak.id,
+                                                        sourceActionId,
+                                                        result,
+                                                        getFeedbackCommentDraftByActionId(
+                                                          sourceActionId
+                                                        )
+                                                      )
+                                                    }
+                                                    disabled={
+                                                      savingFeedbackActionId === sourceActionId
+                                                    }
+                                                    className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                                                  >
+                                                    {result === "worked"
+                                                      ? "Сработало"
+                                                      : result === "partially"
+                                                        ? "Частично"
+                                                        : "Не помогло"}
+                                                  </Button>
+                                                )
+                                              )}
+                                            </>
+                                          )}
+                                          {feedback && feedback.result !== "worked" && (
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              onClick={() =>
+                                                retryLeakPlanning(leak, {
+                                                  action: sourcePlanAction,
+                                                  failureReason: feedback.comment || null,
+                                                })
+                                              }
+                                              disabled={retryingLeakId === leak.id}
+                                              className="border-amber-500/20 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15"
+                                            >
+                                              {retryingLeakId === leak.id ? "Обновляю..." : "Retry"}
+                                            </Button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })()
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="text-xs tracking-wide text-white/40 uppercase">
+                              Быстрый перевод без плана
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => convertLeakToTask(leak)}
+                                disabled={actionLeakId === leak.id || hasActionType(leak, "task")}
+                                className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                              >
+                                В задачу
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => convertLeakToRitual(leak)}
+                                disabled={actionLeakId === leak.id || hasActionType(leak, "ritual")}
+                                className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                              >
+                                В ритуал
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => convertLeakToChallenge(leak)}
+                                disabled={
+                                  actionLeakId === leak.id || hasActionType(leak, "challenge")
+                                }
+                                className="border-amber-500/20 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15"
+                              >
+                                AI-челлендж
+                              </Button>
+                            </div>
+                            <p className="text-xs text-white/45">
+                              Если не нужен целый режим, leak можно сразу превратить в одну понятную
+                              сущность.
+                            </p>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="text-xs tracking-wide text-white/40 uppercase">
+                                Планы решения
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => generatePlansForLeak(leak.id, false)}
+                                  disabled={generatingPlansLeakId === leak.id}
+                                  className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200 hover:bg-indigo-500/15"
+                                >
+                                  {generatingPlansLeakId === leak.id
+                                    ? "Собираю..."
+                                    : "Сделать 3 плана"}
+                                </Button>
+                                {plansByLeak[leak.id]?.length > 0 && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => generatePlansForLeak(leak.id, true)}
+                                    disabled={generatingPlansLeakId === leak.id}
+                                    className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                                  >
+                                    Пересобрать
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+
+                            {loadingPlansLeakId === leak.id ? (
+                              <div className="space-y-2">
+                                <Skeleton className="h-20 w-full rounded-2xl" />
+                                <Skeleton className="h-20 w-full rounded-2xl" />
+                              </div>
+                            ) : plansByLeak[leak.id]?.length ? (
+                              <div className="space-y-3">
+                                <div className="space-y-2 rounded-xl border border-white/10 bg-black/10 p-3">
+                                  <div className="text-xs tracking-wide text-white/40 uppercase">
+                                    Сравнение режимов
+                                  </div>
+                                  <div className="grid gap-2 md:grid-cols-3">
+                                    {plansByLeak[leak.id].map((plan) => (
+                                      <div
+                                        key={`compare-${plan.id}`}
+                                        className={`rounded-lg border p-2 ${
+                                          plan.isSelected
+                                            ? "border-indigo-500/30 bg-indigo-500/10"
+                                            : "border-white/10 bg-white/[0.03]"
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between gap-2">
+                                          <Badge className={PLAN_MODE_STYLES[plan.mode]}>
+                                            {PLAN_MODE_LABELS[plan.mode]}
+                                          </Badge>
+                                          <Badge
+                                            className={PLAN_CONFIDENCE_STYLES[plan.confidenceLabel]}
+                                          >
+                                            {getConfidenceLabelText(plan.confidenceLabel)}
+                                          </Badge>
+                                        </div>
+                                        <div className="mt-2 line-clamp-3 text-xs text-white/60">
+                                          {plan.summary}
+                                        </div>
+                                        <div className="mt-2 text-xs text-white/40">
+                                          Действий: {plan.actions.length}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                {plansByLeak[leak.id].map((plan) => (
+                                  <div
+                                    key={plan.id}
+                                    className={`rounded-2xl border p-3 ${
+                                      plan.isSelected
+                                        ? "border-emerald-500/30 bg-emerald-500/10"
+                                        : "border-white/10 bg-white/[0.03]"
+                                    }`}
+                                  >
+                                    <div className="flex flex-wrap items-start justify-between gap-2">
+                                      <div className="space-y-2">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <Badge className={PLAN_MODE_STYLES[plan.mode]}>
+                                            {PLAN_MODE_LABELS[plan.mode]}
+                                          </Badge>
+                                          <Badge
+                                            className={PLAN_CONFIDENCE_STYLES[plan.confidenceLabel]}
+                                          >
+                                            Шанс: {plan.confidenceLabel}
+                                          </Badge>
+                                          {plan.isSelected && (
+                                            <Badge className="border-emerald-500/20 bg-emerald-500/15 text-emerald-200">
+                                              Выбран
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        <p className="text-sm text-white/85">{plan.summary}</p>
+                                        {plan.confidenceReason && (
+                                          <p className="text-xs text-white/50">
+                                            {plan.confidenceReason}
+                                          </p>
+                                        )}
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => selectPlanMode(leak.id, plan.mode)}
+                                        disabled={
+                                          selectingPlanLeakId === leak.id || plan.isSelected
+                                        }
+                                        className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                                      >
+                                        {plan.isSelected ? "Текущий режим" : "Выбрать"}
+                                      </Button>
+                                    </div>
+
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => applySelectedPlan(leak, plan.mode)}
+                                        disabled={
+                                          applyingPlanLeakId === leak.id ||
+                                          plan.actions.every((action) =>
+                                            isPlanActionConverted(action)
+                                          )
+                                        }
+                                        className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200 hover:bg-indigo-500/15"
+                                      >
+                                        {applyingPlanLeakId === leak.id
+                                          ? "Применяю..."
+                                          : plan.actions.every((action) =>
+                                                isPlanActionConverted(action)
+                                              )
+                                            ? "Режим уже применён"
+                                            : "Применить режим"}
+                                      </Button>
+                                      {plan.isSelected && (
+                                        <Badge className="border-white/10 bg-white/10 text-white/70">
+                                          Активный режим для этого лика
+                                        </Badge>
                                       )}
                                     </div>
-                                  ))}
-                                </div>
+
+                                    <div className="mt-3 space-y-2">
+                                      {plan.actions.map((action) => (
+                                        <div
+                                          key={action.id}
+                                          className="rounded-xl border border-white/10 bg-black/10 px-3 py-2"
+                                        >
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <Badge
+                                              variant="outline"
+                                              className="border-white/10 text-white/55"
+                                            >
+                                              {PLAN_KIND_LABELS[action.kind]}
+                                            </Badge>
+                                            <div className="text-sm text-white">{action.title}</div>
+                                            {isPlanActionConverted(action) && (
+                                              <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200">
+                                                Создано
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          {action.description && (
+                                            <p className="mt-1 text-xs text-white/55">
+                                              {action.description}
+                                            </p>
+                                          )}
+                                          {isPlanActionConverted(action) && (
+                                            <div className="mt-2 flex flex-wrap gap-2">
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() =>
+                                                  setScreen(
+                                                    getActionScreen(
+                                                      action.payload
+                                                        ?.convertedEntityType as LeakActionLink["entityType"]
+                                                    )
+                                                  )
+                                                }
+                                                className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                                              >
+                                                Открыть созданное
+                                              </Button>
+                                              <div className="self-center text-xs text-white/40">
+                                                {String(action.payload?.convertedEntityLabel || "")}
+                                              </div>
+                                            </div>
+                                          )}
+                                          {!isPlanActionConverted(action) && (
+                                            <div className="mt-2 flex flex-wrap gap-2">
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() =>
+                                                  applySinglePlanAction(leak, plan.mode, action)
+                                                }
+                                                disabled={
+                                                  applyingPlanActionId === action.id ||
+                                                  applyingPlanLeakId === leak.id
+                                                }
+                                                className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200 hover:bg-indigo-500/15"
+                                              >
+                                                {applyingPlanActionId === action.id
+                                                  ? "Создаю..."
+                                                  : "Создать отдельно"}
+                                              </Button>
+                                            </div>
+                                          )}
+                                          {isPlanActionConverted(action) && (
+                                            <div className="mt-2 flex flex-wrap gap-2">
+                                              <Input
+                                                value={getFeedbackCommentDraft(action)}
+                                                onChange={(event) =>
+                                                  setFeedbackCommentByAction((current) => ({
+                                                    ...current,
+                                                    [action.id]: event.target.value,
+                                                  }))
+                                                }
+                                                placeholder="Почему это сработало или не помогло"
+                                                className="h-9 min-w-[240px] border-white/10 bg-white/5 text-white placeholder:text-white/30"
+                                              />
+                                              {(["worked", "partially", "not_worked"] as const).map(
+                                                (result) => {
+                                                  const feedback = getActionFeedback(action);
+                                                  const isActive = feedback?.result === result;
+                                                  const label =
+                                                    result === "worked"
+                                                      ? "Сработало"
+                                                      : result === "partially"
+                                                        ? "Частично"
+                                                        : "Не помогло";
+
+                                                  return (
+                                                    <Button
+                                                      key={result}
+                                                      size="sm"
+                                                      variant="outline"
+                                                      onClick={() =>
+                                                        sendPlanActionFeedback(
+                                                          leak.id,
+                                                          action.id,
+                                                          result,
+                                                          getFeedbackCommentDraft(action)
+                                                        )
+                                                      }
+                                                      disabled={
+                                                        savingFeedbackActionId === action.id
+                                                      }
+                                                      className={
+                                                        isActive
+                                                          ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
+                                                          : "border-white/15 bg-white/5 text-white hover:bg-white/10"
+                                                      }
+                                                    >
+                                                      {label}
+                                                    </Button>
+                                                  );
+                                                }
+                                              )}
+                                              {getActionFeedback(action) && (
+                                                <div className="self-center text-xs text-white/40">
+                                                  Последний фидбек:{" "}
+                                                  {formatDate(getActionFeedback(action)!.updatedAt)}
+                                                </div>
+                                              )}
+                                              {getActionFeedback(action)?.result !== "worked" && (
+                                                <Button
+                                                  size="sm"
+                                                  variant="outline"
+                                                  onClick={() =>
+                                                    retryLeakPlanning(leak, {
+                                                      action,
+                                                      failureReason:
+                                                        getActionFeedback(action)?.comment || null,
+                                                    })
+                                                  }
+                                                  disabled={retryingLeakId === leak.id}
+                                                  className="border-amber-500/20 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15"
+                                                >
+                                                  {retryingLeakId === leak.id
+                                                    ? "Обновляю..."
+                                                    : "Нужен другой подход"}
+                                                </Button>
+                                              )}
+                                              {getActionFeedback(action)?.result === "worked" &&
+                                                leak.status !== "resolved" && (
+                                                  <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() =>
+                                                      updateLeakStatus(leak.id, "resolved")
+                                                    }
+                                                    disabled={updatingLeakId === leak.id}
+                                                    className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/15"
+                                                  >
+                                                    Закрыть leak
+                                                  </Button>
+                                                )}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
+                            ) : (
+                              <p className="text-sm text-white/55">
+                                Здесь появятся режимы `minimum / base / maximum`, чтобы выбрать
+                                реалистичный план под текущую жизнь.
+                              </p>
+                            )}
                           </div>
-                        ) : (
-                          <p className="text-sm text-white/55">
-                            Здесь появятся режимы `minimum / base / maximum`, чтобы выбрать реалистичный план под текущую жизнь.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-              </div>
-              )
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              );
             })
           )}
         </TabsContent>
@@ -6977,15 +7590,20 @@ export function LeaksScreen() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setScreen('weekly-report')}
-              className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+              onClick={() => setScreen("weekly-report")}
+              className="border-white/15 bg-white/5 text-white hover:bg-white/10"
             >
               В недельный отчёт
             </Button>
           </div>
 
           {signals.length === 0 ? (
-            <Card style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <Card
+              style={{
+                background: "rgba(15,23,42,0.82)",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
               <CardContent className="pt-6">
                 <p className="text-sm text-white/60">
                   Пока мало данных для автосигналов. Здесь появятся найденные паттерны недели.
@@ -6997,30 +7615,36 @@ export function LeaksScreen() {
               <Card
                 key={`${signal.type}-${index}`}
                 style={{
-                  background: 'rgba(15,23,42,0.82)',
-                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: "rgba(15,23,42,0.82)",
+                  border: "1px solid rgba(255,255,255,0.08)",
                 }}
               >
                 <CardContent className="pt-4">
                   <div className="flex gap-3">
                     <div className="text-2xl">{signal.emoji}</div>
                     <div className="flex-1">
-                      <div className="flex flex-wrap items-center gap-2 mb-2">
-                        <Badge className={SEVERITY_STYLES[signal.severity]}>{signal.severity}</Badge>
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <Badge className={SEVERITY_STYLES[signal.severity]}>
+                          {signal.severity}
+                        </Badge>
                         {signal.days?.map((day) => (
-                          <Badge key={day} variant="outline" className="border-white/10 text-white/55">
+                          <Badge
+                            key={day}
+                            variant="outline"
+                            className="border-white/10 text-white/55"
+                          >
                             {day}
                           </Badge>
                         ))}
                       </div>
                       <p className="text-sm text-white/75">{signal.message}</p>
-                      <div className="flex flex-wrap gap-2 mt-3">
+                      <div className="mt-3 flex flex-wrap gap-2">
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => createLeakFromSignal(signal)}
                           disabled={savingSignalKey === `${signal.type}:${signal.message}`}
-                          className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                          className="border-white/15 bg-white/5 text-white hover:bg-white/10"
                         >
                           Сохранить как leak
                         </Button>
@@ -7047,40 +7671,46 @@ export function LeaksScreen() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setPatternFilter('all')}
+              onClick={() => setPatternFilter("all")}
               className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                patternFilter === 'all'
-                  ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
-                  : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                patternFilter === "all"
+                  ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                  : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
               }`}
             >
               Все ({patterns.length})
             </button>
             <button
               type="button"
-              onClick={() => setPatternFilter('linked')}
+              onClick={() => setPatternFilter("linked")}
               className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                patternFilter === 'linked'
-                  ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
-                  : 'border-white/10 bg-white/5 text-white/55 hover:bg-white/10'
+                patternFilter === "linked"
+                  ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                  : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
               }`}
             >
-              С активными leaks ({patterns.filter((item) => (item.activeLeakCount || 0) > 0).length})
+              С активными leaks ({patterns.filter((item) => (item.activeLeakCount || 0) > 0).length}
+              )
             </button>
           </div>
 
           {visiblePatterns.length === 0 ? (
-            <Card style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <Card
+              style={{
+                background: "rgba(15,23,42,0.82)",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
               <CardContent className="pt-6">
                 <p className="text-sm text-white/60">
-                  {patternFilter === 'linked'
-                    ? 'Пока нет паттернов, у которых есть активные leaks в работе.'
-                    : 'AI-паттерны появятся после первых разборов сигналов или ручных ликов.'}
+                  {patternFilter === "linked"
+                    ? "Пока нет паттернов, у которых есть активные leaks в работе."
+                    : "AI-паттерны появятся после первых разборов сигналов или ручных ликов."}
                 </p>
               </CardContent>
             </Card>
           ) : (
-            visiblePatterns.map((pattern) => (
+            visiblePatterns.map((pattern) =>
               (() => {
                 const activeLinkedLeaks =
                   Array.isArray(pattern.activeLeaks) && pattern.activeLeaks.length > 0
@@ -7088,93 +7718,111 @@ export function LeaksScreen() {
                     : leaks
                         .filter(
                           (leak) =>
-                            leak.status !== 'resolved' &&
-                            leak.status !== 'archived' &&
-                            normalizeLookupValue(leak.title) === normalizeLookupValue(pattern.leakType),
+                            leak.status !== "resolved" &&
+                            leak.status !== "archived" &&
+                            normalizeLookupValue(leak.title) ===
+                              normalizeLookupValue(pattern.leakType)
                         )
                         .map((leak) => ({
                           id: leak.id,
                           title: leak.title,
                           status: leak.status,
                           updatedAt: leak.updatedAt,
-                          matchType: normalizeLookupValue(leak.title) === normalizeLookupValue(pattern.leakType)
-                            ? 'exact'
-                            : 'fuzzy',
-                        }))
-                const exactLinkedCount = activeLinkedLeaks.filter((leak) => leak.matchType === 'exact').length
-                const fuzzyLinkedCount = activeLinkedLeaks.filter((leak) => leak.matchType === 'fuzzy').length
+                          matchType:
+                            normalizeLookupValue(leak.title) ===
+                            normalizeLookupValue(pattern.leakType)
+                              ? "exact"
+                              : "fuzzy",
+                        }));
+                const exactLinkedCount = activeLinkedLeaks.filter(
+                  (leak) => leak.matchType === "exact"
+                ).length;
+                const fuzzyLinkedCount = activeLinkedLeaks.filter(
+                  (leak) => leak.matchType === "fuzzy"
+                ).length;
 
                 return (
-                  <Card key={pattern.leakType} style={{ background: 'rgba(15,23,42,0.82)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                    <CardContent className="pt-4 space-y-3">
+                  <Card
+                    key={pattern.leakType}
+                    style={{
+                      background: "rgba(15,23,42,0.82)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    <CardContent className="space-y-3 pt-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div className="text-white font-medium">{pattern.leakType}</div>
-                          <div className="text-xs text-white/35 mt-1">
+                          <div className="font-medium text-white">{pattern.leakType}</div>
+                          <div className="mt-1 text-xs text-white/35">
                             Последнее обновление: {formatDate(pattern.updatedAt)}
                           </div>
                         </div>
-                        <Badge className="bg-white/10 text-white/75 border-white/10">
+                        <Badge className="border-white/10 bg-white/10 text-white/75">
                           Анализов: {pattern.analysisCount}
                         </Badge>
                         {(pattern.workedCount || 0) > 0 && (
-                          <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
+                          <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200">
                             Сработало: {pattern.workedCount}
                           </Badge>
                         )}
-                        {typeof pattern.activeLeakCount === 'number' && pattern.activeLeakCount > 0 && (
-                          <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
-                            Активных leaks: {pattern.activeLeakCount}
-                          </Badge>
-                        )}
-                        {typeof pattern.clusterSize === 'number' && pattern.clusterSize > 1 && (
-                          <Badge className="bg-fuchsia-500/10 text-fuchsia-200 border-fuchsia-500/20">
+                        {typeof pattern.activeLeakCount === "number" &&
+                          pattern.activeLeakCount > 0 && (
+                            <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
+                              Активных leaks: {pattern.activeLeakCount}
+                            </Badge>
+                          )}
+                        {typeof pattern.clusterSize === "number" && pattern.clusterSize > 1 && (
+                          <Badge className="border-fuchsia-500/20 bg-fuchsia-500/10 text-fuchsia-200">
                             Кластер: {pattern.clusterSize}
                           </Badge>
                         )}
-                        {typeof pattern.clusterConfidence === 'number' && pattern.clusterSize && pattern.clusterSize > 1 && (
+                        {typeof pattern.clusterConfidence === "number" &&
+                          pattern.clusterSize &&
+                          pattern.clusterSize > 1 && (
+                            <Badge
+                              className={
+                                pattern.clusterConfidence >= 0.6
+                                  ? "border-indigo-500/20 bg-indigo-500/10 text-indigo-200"
+                                  : "border-amber-500/20 bg-amber-500/10 text-amber-200"
+                              }
+                            >
+                              {pattern.clusterConfidence >= 0.6
+                                ? `Cluster confidence: ${Math.round(pattern.clusterConfidence * 100)}%`
+                                : `Низкая уверенность: ${Math.round(pattern.clusterConfidence * 100)}%`}
+                            </Badge>
+                          )}
+                        {pattern.clusterConflict && pattern.clusterConflict !== "none" && (
                           <Badge
                             className={
-                              pattern.clusterConfidence >= 0.6
-                                ? 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20'
-                                : 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                              pattern.clusterConflict === "high"
+                                ? "border-rose-500/20 bg-rose-500/10 text-rose-200"
+                                : "border-amber-500/20 bg-amber-500/10 text-amber-200"
                             }
                           >
-                            {pattern.clusterConfidence >= 0.6
-                              ? `Cluster confidence: ${Math.round(pattern.clusterConfidence * 100)}%`
-                              : `Низкая уверенность: ${Math.round(pattern.clusterConfidence * 100)}%`}
-                          </Badge>
-                        )}
-                        {pattern.clusterConflict && pattern.clusterConflict !== 'none' && (
-                          <Badge
-                            className={
-                              pattern.clusterConflict === 'high'
-                                ? 'bg-rose-500/10 text-rose-200 border-rose-500/20'
-                                : 'bg-amber-500/10 text-amber-200 border-amber-500/20'
-                            }
-                          >
-                            {pattern.clusterConflict === 'high'
+                            {pattern.clusterConflict === "high"
                               ? `Сильный конфликт: ${Math.round((pattern.clusterConflictRatio || 0) * 100)}%`
                               : `Смешанный конфликт: ${Math.round((pattern.clusterConflictRatio || 0) * 100)}%`}
                           </Badge>
                         )}
-                        {typeof pattern.clusterWorkedCount === 'number' && pattern.clusterWorkedCount > 0 && (
-                          <Badge className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20">
-                            Кластер worked: {pattern.clusterWorkedCount}
-                          </Badge>
-                        )}
-                        {typeof pattern.clusterFailedCount === 'number' && pattern.clusterFailedCount > 0 && (
-                          <Badge className="bg-rose-500/10 text-rose-200 border-rose-500/20">
-                            Кластер failed: {pattern.clusterFailedCount}
-                          </Badge>
-                        )}
+                        {typeof pattern.clusterWorkedCount === "number" &&
+                          pattern.clusterWorkedCount > 0 && (
+                            <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200">
+                              Кластер worked: {pattern.clusterWorkedCount}
+                            </Badge>
+                          )}
+                        {typeof pattern.clusterFailedCount === "number" &&
+                          pattern.clusterFailedCount > 0 && (
+                            <Badge className="border-rose-500/20 bg-rose-500/10 text-rose-200">
+                              Кластер failed: {pattern.clusterFailedCount}
+                            </Badge>
+                          )}
                         {exactLinkedCount > 0 && (
-                          <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
+                          <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
                             Exact: {exactLinkedCount}
                           </Badge>
                         )}
                         {fuzzyLinkedCount > 0 && (
-                          <Badge className="bg-amber-500/10 text-amber-200 border-amber-500/20">
+                          <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-200">
                             Fuzzy: {fuzzyLinkedCount}
                           </Badge>
                         )}
@@ -7186,47 +7834,54 @@ export function LeaksScreen() {
                           variant="outline"
                           onClick={() => createLeakFromPattern(pattern)}
                           disabled={savingPatternLeakType === pattern.leakType}
-                          className="border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-200"
+                          className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200 hover:bg-indigo-500/15"
                         >
-                          {savingPatternLeakType === pattern.leakType ? 'Сохраняю...' : 'В leak'}
+                          {savingPatternLeakType === pattern.leakType ? "Сохраняю..." : "В leak"}
                         </Button>
                       </div>
-                      {pattern.clusterLeakTypes && pattern.clusterLeakTypes.length > 1 && (pattern.clusterSize || 0) >= 2 && (
-                        <div className="rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/10 px-3 py-2">
-                          <div className="text-xs uppercase tracking-wide text-fuchsia-100/80">
-                            Learning cluster
+                      {pattern.clusterLeakTypes &&
+                        pattern.clusterLeakTypes.length > 1 &&
+                        (pattern.clusterSize || 0) >= 2 && (
+                          <div className="rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/10 px-3 py-2">
+                            <div className="text-xs tracking-wide text-fuchsia-100/80 uppercase">
+                              Learning cluster
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-2">
+                              {pattern.clusterLeakTypes.slice(0, 6).map((item) => (
+                                <Badge
+                                  key={`${pattern.leakType}-cluster-${item}`}
+                                  className="border-white/10 bg-white/10 text-white/80"
+                                >
+                                  {item}
+                                </Badge>
+                              ))}
+                            </div>
+                            {pattern.clusterWorkedExamples &&
+                              pattern.clusterWorkedExamples.length > 0 && (
+                                <div className="mt-2 text-xs text-emerald-100/90">
+                                  Worked в кластере:{" "}
+                                  {pattern.clusterWorkedExamples.slice(0, 3).join(" • ")}
+                                </div>
+                              )}
+                            {pattern.clusterFailedExamples &&
+                              pattern.clusterFailedExamples.length > 0 && (
+                                <div className="mt-1 text-xs text-rose-100/90">
+                                  Failed в кластере:{" "}
+                                  {pattern.clusterFailedExamples.slice(0, 3).join(" • ")}
+                                </div>
+                              )}
+                            {pattern.clusterConflict && pattern.clusterConflict !== "none" && (
+                              <div className="mt-1 text-xs text-amber-100/90">
+                                Кластер даёт конфликтные сигналы: есть и worked, и failed. Подбирай
+                                режим аккуратно.
+                              </div>
+                            )}
                           </div>
-                          <div className="mt-1 flex flex-wrap gap-2">
-                            {pattern.clusterLeakTypes.slice(0, 6).map((item) => (
-                              <Badge
-                                key={`${pattern.leakType}-cluster-${item}`}
-                                className="bg-white/10 text-white/80 border-white/10"
-                              >
-                                {item}
-                              </Badge>
-                            ))}
-                          </div>
-                          {pattern.clusterWorkedExamples && pattern.clusterWorkedExamples.length > 0 && (
-                            <div className="mt-2 text-xs text-emerald-100/90">
-                              Worked в кластере: {pattern.clusterWorkedExamples.slice(0, 3).join(' • ')}
-                            </div>
-                          )}
-                          {pattern.clusterFailedExamples && pattern.clusterFailedExamples.length > 0 && (
-                            <div className="mt-1 text-xs text-rose-100/90">
-                              Failed в кластере: {pattern.clusterFailedExamples.slice(0, 3).join(' • ')}
-                            </div>
-                          )}
-                          {pattern.clusterConflict && pattern.clusterConflict !== 'none' && (
-                            <div className="mt-1 text-xs text-amber-100/90">
-                              Кластер даёт конфликтные сигналы: есть и worked, и failed. Подбирай режим аккуратно.
-                            </div>
-                          )}
-                        </div>
-                      )}
+                        )}
 
                       {activeLinkedLeaks.length > 0 && (
                         <div className="space-y-2">
-                          <div className="text-xs uppercase tracking-wide text-white/40">
+                          <div className="text-xs tracking-wide text-white/40 uppercase">
                             Активные leaks по этому паттерну
                           </div>
                           <div className="flex flex-wrap gap-2">
@@ -7236,14 +7891,14 @@ export function LeaksScreen() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => {
-                                  setActiveTab('inbox')
-                                  setStatusFilter('all')
-                                  setExpandedLeakId(leak.id)
+                                  setActiveTab("inbox");
+                                  setStatusFilter("all");
+                                  setExpandedLeakId(leak.id);
                                 }}
-                                className="border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                                className="border-white/15 bg-white/5 text-white hover:bg-white/10"
                               >
                                 {leak.title}
-                                {leak.matchType === 'fuzzy' ? ' (fuzzy)' : ''}
+                                {leak.matchType === "fuzzy" ? " (fuzzy)" : ""}
                               </Button>
                             ))}
                           </div>
@@ -7252,53 +7907,63 @@ export function LeaksScreen() {
 
                       {pattern.workedExamples && pattern.workedExamples.length > 0 ? (
                         <div className="space-y-2">
-                          <div className="text-xs uppercase tracking-wide text-white/40 flex items-center gap-2">
-                            <Lightbulb className="w-3.5 h-3.5" />
+                          <div className="flex items-center gap-2 text-xs tracking-wide text-white/40 uppercase">
+                            <Lightbulb className="h-3.5 w-3.5" />
                             Что уже сработало
                           </div>
                           <div className="space-y-2">
                             {pattern.workedExamples.map((item) => (
                               <div
-                                key={`${pattern.leakType}-${item.text}-${item.updatedAt || 'na'}`}
+                                key={`${pattern.leakType}-${item.text}-${item.updatedAt || "na"}`}
                                 className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2"
                               >
                                 <div className="text-sm text-emerald-100">{item.text}</div>
                                 <div className="mt-1 flex flex-wrap gap-2">
                                   {item.sourcePlanMode && (
-                                    <Badge className="bg-white/10 text-white/70 border-white/10">
-                                      Режим:{' '}
+                                    <Badge className="border-white/10 bg-white/10 text-white/70">
+                                      Режим:{" "}
                                       {item.sourcePlanMode in PLAN_MODE_LABELS
-                                        ? PLAN_MODE_LABELS[item.sourcePlanMode as LeakSolutionPlan['mode']]
+                                        ? PLAN_MODE_LABELS[
+                                            item.sourcePlanMode as LeakSolutionPlan["mode"]
+                                          ]
                                         : item.sourcePlanMode}
                                     </Badge>
                                   )}
                                   {item.linkedEntityLabel && item.linkedEntityType && (
-                                    <Badge className="bg-indigo-500/10 text-indigo-200 border-indigo-500/20">
-                                      Сущность: {getActionLabel(item.linkedEntityType as LeakActionLink['entityType'])} • {item.linkedEntityLabel}
+                                    <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
+                                      Сущность:{" "}
+                                      {getActionLabel(
+                                        item.linkedEntityType as LeakActionLink["entityType"]
+                                      )}{" "}
+                                      • {item.linkedEntityLabel}
                                     </Badge>
                                   )}
                                   {item.updatedAt && (
-                                    <Badge className="bg-white/10 text-white/65 border-white/10">
+                                    <Badge className="border-white/10 bg-white/10 text-white/65">
                                       Обновлено: {formatDate(item.updatedAt)}
                                     </Badge>
                                   )}
                                 </div>
-                                {item.comment && <div className="mt-1 text-xs text-emerald-100/80">{item.comment}</div>}
+                                {item.comment && (
+                                  <div className="mt-1 text-xs text-emerald-100/80">
+                                    {item.comment}
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>
                         </div>
                       ) : pattern.whatWorked.length > 0 ? (
                         <div className="space-y-2">
-                          <div className="text-xs uppercase tracking-wide text-white/40 flex items-center gap-2">
-                            <Lightbulb className="w-3.5 h-3.5" />
+                          <div className="flex items-center gap-2 text-xs tracking-wide text-white/40 uppercase">
+                            <Lightbulb className="h-3.5 w-3.5" />
                             Что уже сработало
                           </div>
                           <div className="flex flex-wrap gap-2">
                             {pattern.whatWorked.map((item) => (
                               <Badge
                                 key={item}
-                                className="bg-emerald-500/10 text-emerald-200 border-emerald-500/20 whitespace-normal text-left"
+                                className="border-emerald-500/20 bg-emerald-500/10 text-left whitespace-normal text-emerald-200"
                               >
                                 {item}
                               </Badge>
@@ -7312,13 +7977,12 @@ export function LeaksScreen() {
                       )}
                     </CardContent>
                   </Card>
-                )
+                );
               })()
-            ))
+            )
           )}
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }
-

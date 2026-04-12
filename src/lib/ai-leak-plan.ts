@@ -1,87 +1,94 @@
-import { db } from '@/lib/db'
-import { callAI } from '@/lib/ai-provider'
+import { db } from "@/lib/db";
+import { callAI } from "@/lib/ai-provider";
 
-export type LeakPlanMode = 'minimum' | 'base' | 'maximum'
-export type LeakPlanConfidence = 'low' | 'medium' | 'high'
-export type LeakPlanActionKind = 'task' | 'ritual' | 'skill' | 'trait' | 'challenge' | 'content'
+export type LeakPlanMode = "minimum" | "base" | "maximum";
+export type LeakPlanConfidence = "low" | "medium" | "high";
+export type LeakPlanActionKind = "task" | "ritual" | "skill" | "trait" | "challenge" | "content";
 
 export interface LeakPlanActionDraft {
-  kind: LeakPlanActionKind
-  title: string
-  description?: string | null
-  payload?: Record<string, unknown> | null
+  kind: LeakPlanActionKind;
+  title: string;
+  description?: string | null;
+  payload?: Record<string, unknown> | null;
 }
 
 export interface LeakPlanDraft {
-  mode: LeakPlanMode
-  summary: string
-  confidenceLabel: LeakPlanConfidence
-  confidenceReason: string
-  actions: LeakPlanActionDraft[]
+  mode: LeakPlanMode;
+  summary: string;
+  confidenceLabel: LeakPlanConfidence;
+  confidenceReason: string;
+  actions: LeakPlanActionDraft[];
 }
 
 interface LeakPlanInput {
-  userId: string
+  userId: string;
   leak: {
-    id: string
-    title: string
-    description: string | null
-    severity: string
-    sphere: string | null
-    contextSnapshot?: unknown
-  }
+    id: string;
+    title: string;
+    description: string | null;
+    severity: string;
+    sphere: string | null;
+    contextSnapshot?: unknown;
+  };
   retryFocus?: {
-    actionId?: string | null
-    actionTitle: string
-    actionKind?: string | null
-    failureReason?: string | null
-  } | null
+    actionId?: string | null;
+    actionTitle: string;
+    actionKind?: string | null;
+    failureReason?: string | null;
+  } | null;
 }
 
 interface LeakHistoryContext {
   linkedEntities: Array<{
-    entityType: string
-    label: string
-    sourceActionTitle: string | null
-    sourceActionKind: string | null
-    sourcePlanMode: string | null
-    createdAt: string
-  }>
+    entityType: string;
+    label: string;
+    sourceActionTitle: string | null;
+    sourceActionKind: string | null;
+    sourcePlanMode: string | null;
+    createdAt: string;
+  }>;
   actionFeedback: Array<{
-    actionTitle: string
-    actionKind: string
-    result: string
-    comment: string | null
-    updatedAt: string
-  }>
+    actionTitle: string;
+    actionKind: string;
+    result: string;
+    comment: string | null;
+    updatedAt: string;
+  }>;
 }
 
-const PLAN_MODES: LeakPlanMode[] = ['minimum', 'base', 'maximum']
-const ACTION_KINDS: LeakPlanActionKind[] = ['task', 'ritual', 'skill', 'trait', 'challenge', 'content']
-const CONFIDENCE_LABELS: LeakPlanConfidence[] = ['low', 'medium', 'high']
+const PLAN_MODES: LeakPlanMode[] = ["minimum", "base", "maximum"];
+const ACTION_KINDS: LeakPlanActionKind[] = [
+  "task",
+  "ritual",
+  "skill",
+  "trait",
+  "challenge",
+  "content",
+];
+const CONFIDENCE_LABELS: LeakPlanConfidence[] = ["low", "medium", "high"];
 
 function normalizePatternKey(value: string) {
   return value
     .trim()
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ");
 }
 
 function isRelatedLeakType(base: string, candidate: string) {
-  const a = normalizePatternKey(base)
-  const b = normalizePatternKey(candidate)
-  if (!a || !b) return false
-  if (a === b) return false
-  if (a.includes(b) || b.includes(a)) return true
-  const aTokens = a.split(' ').filter((item) => item.length >= 3)
-  const bTokens = b.split(' ').filter((item) => item.length >= 3)
-  if (!aTokens.length || !bTokens.length) return false
-  const aSet = new Set(aTokens)
-  const bSet = new Set(bTokens)
-  const intersection = Array.from(aSet).filter((item) => bSet.has(item)).length
-  const union = new Set([...aSet, ...bSet]).size
-  return union > 0 ? intersection / union >= 0.45 : false
+  const a = normalizePatternKey(base);
+  const b = normalizePatternKey(candidate);
+  if (!a || !b) return false;
+  if (a === b) return false;
+  if (a.includes(b) || b.includes(a)) return true;
+  const aTokens = a.split(" ").filter((item) => item.length >= 3);
+  const bTokens = b.split(" ").filter((item) => item.length >= 3);
+  if (!aTokens.length || !bTokens.length) return false;
+  const aSet = new Set(aTokens);
+  const bSet = new Set(bTokens);
+  const intersection = Array.from(aSet).filter((item) => bSet.has(item)).length;
+  const union = new Set([...aSet, ...bSet]).size;
+  return union > 0 ? intersection / union >= 0.45 : false;
 }
 
 const SYSTEM_PROMPT = `Ты строишь 3 реалистичных плана решения лика для LeakFixer Buddy.
@@ -115,246 +122,247 @@ const SYSTEM_PROMPT = `Ты строишь 3 реалистичных плана
 - kind используй только из списка: task, ritual, skill, trait, challenge, content.
 - Пиши по-русски.
 - Не обещай 100% результат.
-- Учитывай контекст пользователя и уже сработавшие решения, если они есть.`
+- Учитывай контекст пользователя и уже сработавшие решения, если они есть.`;
 
 function parseJsonBlock(raw: string): unknown {
-  const match = raw.match(/```json\s*([\s\S]+?)\s*```/) ?? raw.match(/(\{[\s\S]+\})/)
-  if (!match) return null
+  const match = raw.match(/```json\s*([\s\S]+?)\s*```/) ?? raw.match(/(\{[\s\S]+\})/);
+  if (!match) return null;
 
   try {
-    return JSON.parse(match[1]) as unknown
+    return JSON.parse(match[1]) as unknown;
   } catch {
-    return null
+    return null;
   }
 }
 
 function normalizeAction(rawAction: unknown): LeakPlanActionDraft | null {
-  if (!rawAction || typeof rawAction !== 'object') return null
+  if (!rawAction || typeof rawAction !== "object") return null;
 
-  const candidate = rawAction as Record<string, unknown>
-  const rawKind = typeof candidate.kind === 'string' ? candidate.kind : 'task'
+  const candidate = rawAction as Record<string, unknown>;
+  const rawKind = typeof candidate.kind === "string" ? candidate.kind : "task";
   const kind = ACTION_KINDS.includes(rawKind as LeakPlanActionKind)
     ? (rawKind as LeakPlanActionKind)
-    : 'task'
+    : "task";
 
-  const title = typeof candidate.title === 'string' ? candidate.title.trim() : ''
-  if (!title) return null
+  const title = typeof candidate.title === "string" ? candidate.title.trim() : "";
+  if (!title) return null;
 
-  const description = typeof candidate.description === 'string'
-    ? candidate.description.trim()
-    : null
+  const description =
+    typeof candidate.description === "string" ? candidate.description.trim() : null;
 
   const payload =
-    candidate.payload && typeof candidate.payload === 'object' && !Array.isArray(candidate.payload)
+    candidate.payload && typeof candidate.payload === "object" && !Array.isArray(candidate.payload)
       ? (candidate.payload as Record<string, unknown>)
-      : null
+      : null;
 
   return {
     kind,
     title,
     description,
     payload,
-  }
+  };
 }
 
 function normalizePlan(rawPlan: unknown, fallbackMode: LeakPlanMode): LeakPlanDraft {
-  const candidate = rawPlan && typeof rawPlan === 'object' ? (rawPlan as Record<string, unknown>) : {}
-  const rawMode = typeof candidate.mode === 'string' ? candidate.mode : fallbackMode
+  const candidate =
+    rawPlan && typeof rawPlan === "object" ? (rawPlan as Record<string, unknown>) : {};
+  const rawMode = typeof candidate.mode === "string" ? candidate.mode : fallbackMode;
   const mode = PLAN_MODES.includes(rawMode as LeakPlanMode)
     ? (rawMode as LeakPlanMode)
-    : fallbackMode
+    : fallbackMode;
 
-  const rawConfidence = typeof candidate.confidenceLabel === 'string'
-    ? candidate.confidenceLabel
-    : 'medium'
+  const rawConfidence =
+    typeof candidate.confidenceLabel === "string" ? candidate.confidenceLabel : "medium";
   const confidenceLabel = CONFIDENCE_LABELS.includes(rawConfidence as LeakPlanConfidence)
     ? (rawConfidence as LeakPlanConfidence)
-    : 'medium'
+    : "medium";
 
   const actions = Array.isArray(candidate.actions)
     ? candidate.actions
         .map(normalizeAction)
         .filter((item): item is LeakPlanActionDraft => Boolean(item))
         .slice(0, 5)
-    : []
+    : [];
 
   return {
     mode,
     summary:
-      typeof candidate.summary === 'string' && candidate.summary.trim().length > 0
+      typeof candidate.summary === "string" && candidate.summary.trim().length > 0
         ? candidate.summary.trim()
         : `Режим ${mode}`,
     confidenceLabel,
     confidenceReason:
-      typeof candidate.confidenceReason === 'string' && candidate.confidenceReason.trim().length > 0
+      typeof candidate.confidenceReason === "string" && candidate.confidenceReason.trim().length > 0
         ? candidate.confidenceReason.trim()
-        : 'Гипотеза: оценка основана на текущем контексте пользователя и типичных триггерах этого leak.',
+        : "Гипотеза: оценка основана на текущем контексте пользователя и типичных триггерах этого leak.",
     actions,
-  }
+  };
 }
 
-function buildFallbackPlans(leak: LeakPlanInput['leak']): LeakPlanDraft[] {
-  const title = leak.title.trim()
-  const detail = leak.description?.trim() || `Наблюдение: ${title}`
-  const sphere = leak.sphere ? `Сфера: ${leak.sphere}.` : ''
+function buildFallbackPlans(leak: LeakPlanInput["leak"]): LeakPlanDraft[] {
+  const title = leak.title.trim();
+  const detail = leak.description?.trim() || `Наблюдение: ${title}`;
+  const sphere = leak.sphere ? `Сфера: ${leak.sphere}.` : "";
 
   return [
     {
-      mode: 'minimum',
-      summary: 'Минимальный режим, чтобы начать исправление без перегруза.',
-      confidenceLabel: 'medium',
-      confidenceReason: 'Подходит, когда нужна очень лёгкая точка входа и важна стабильность.',
+      mode: "minimum",
+      summary: "Минимальный режим, чтобы начать исправление без перегруза.",
+      confidenceLabel: "medium",
+      confidenceReason: "Подходит, когда нужна очень лёгкая точка входа и важна стабильность.",
       actions: [
         {
-          kind: 'task',
+          kind: "task",
           title: `Зафиксировать один триггер для "${title}"`,
           description: `${detail}. ${sphere}`.trim(),
-          payload: { suggestedDeadline: 'today' },
+          payload: { suggestedDeadline: "today" },
         },
         {
-          kind: 'task',
+          kind: "task",
           title: `Сделать одно маленькое действие против "${title}"`,
-          description: 'Выбери действие, которое займёт до 10 минут и не требует идеальных условий.',
-          payload: { suggestedDeadline: 'this_week' },
+          description:
+            "Выбери действие, которое займёт до 10 минут и не требует идеальных условий.",
+          payload: { suggestedDeadline: "this_week" },
         },
       ],
     },
     {
-      mode: 'base',
-      summary: 'Рабочий режим с регулярным действием и одним контролем результата.',
-      confidenceLabel: 'high',
-      confidenceReason: 'Хороший баланс между реалистичностью и шансом увидеть заметный сдвиг.',
+      mode: "base",
+      summary: "Рабочий режим с регулярным действием и одним контролем результата.",
+      confidenceLabel: "high",
+      confidenceReason: "Хороший баланс между реалистичностью и шансом увидеть заметный сдвиг.",
       actions: [
         {
-          kind: 'task',
+          kind: "task",
           title: `Разобрать причину "${title}" и записать 2 наблюдения`,
           description: detail,
-          payload: { suggestedDeadline: 'today' },
+          payload: { suggestedDeadline: "today" },
         },
         {
-          kind: 'ritual',
+          kind: "ritual",
           title: `Добавить короткий ритуал против "${title}"`,
-          description: 'Повторяй ежедневно или в ключевые дни, когда риск лика выше.',
+          description: "Повторяй ежедневно или в ключевые дни, когда риск лика выше.",
           payload: { days: [1, 2, 3, 4, 5, 6, 7] },
         },
         {
-          kind: 'task',
+          kind: "task",
           title: `Проверить прогресс по "${title}" через 7 дней`,
-          description: 'Сравни, стало ли меньше повторений и что реально помогло.',
-          payload: { suggestedDeadline: 'next_week' },
+          description: "Сравни, стало ли меньше повторений и что реально помогло.",
+          payload: { suggestedDeadline: "next_week" },
         },
       ],
     },
     {
-      mode: 'maximum',
-      summary: 'Сильный режим с ритуалом, контролем среды и дополнительным вызовом.',
-      confidenceLabel: 'medium',
-      confidenceReason: 'Может дать лучший эффект, если у пользователя есть ресурс удерживать более насыщенный план.',
+      mode: "maximum",
+      summary: "Сильный режим с ритуалом, контролем среды и дополнительным вызовом.",
+      confidenceLabel: "medium",
+      confidenceReason:
+        "Может дать лучший эффект, если у пользователя есть ресурс удерживать более насыщенный план.",
       actions: [
         {
-          kind: 'task',
+          kind: "task",
           title: `Убрать 1 главный триггер для "${title}"`,
-          description: 'Измени окружение или расписание так, чтобы лик запускался реже.',
-          payload: { suggestedDeadline: 'this_week' },
+          description: "Измени окружение или расписание так, чтобы лик запускался реже.",
+          payload: { suggestedDeadline: "this_week" },
         },
         {
-          kind: 'ritual',
+          kind: "ritual",
           title: `Сделать ежедневный ритуал поддержки против "${title}"`,
-          description: 'Ритуал должен быть конкретным и легко отмечаться в приложении.',
+          description: "Ритуал должен быть конкретным и легко отмечаться в приложении.",
           payload: { days: [1, 2, 3, 4, 5, 6, 7] },
         },
         {
-          kind: 'challenge',
+          kind: "challenge",
           title: `Запустить челлендж по теме "${title}"`,
-          description: 'Нужен короткий период с понятным критерием победы.',
+          description: "Нужен короткий период с понятным критерием победы.",
           payload: { suggestedDurationDays: 14 },
         },
         {
-          kind: 'content',
+          kind: "content",
           title: `Подобрать один материал по теме "${title}"`,
-          description: 'Что прочитать или посмотреть, чтобы усилить план действия.',
-          payload: { contentType: 'article' },
+          description: "Что прочитать или посмотреть, чтобы усилить план действия.",
+          payload: { contentType: "article" },
         },
       ],
     },
-  ]
+  ];
 }
 
 function normalizeHistoryContext(raw: unknown): LeakHistoryContext {
-  if (!raw || typeof raw !== 'object') {
-    return { linkedEntities: [], actionFeedback: [] }
+  if (!raw || typeof raw !== "object") {
+    return { linkedEntities: [], actionFeedback: [] };
   }
 
-  const candidate = raw as Record<string, unknown>
+  const candidate = raw as Record<string, unknown>;
   const linkedEntities = Array.isArray(candidate.linkedEntities)
     ? candidate.linkedEntities
         .map((item) => {
-          if (!item || typeof item !== 'object') return null
-          const entity = item as Record<string, unknown>
-          const entityType = typeof entity.entityType === 'string' ? entity.entityType : ''
-          const label = typeof entity.label === 'string' ? entity.label : ''
-          const createdAt = typeof entity.createdAt === 'string' ? entity.createdAt : ''
-          if (!entityType || !label || !createdAt) return null
+          if (!item || typeof item !== "object") return null;
+          const entity = item as Record<string, unknown>;
+          const entityType = typeof entity.entityType === "string" ? entity.entityType : "";
+          const label = typeof entity.label === "string" ? entity.label : "";
+          const createdAt = typeof entity.createdAt === "string" ? entity.createdAt : "";
+          if (!entityType || !label || !createdAt) return null;
 
           return {
             entityType,
             label,
             sourceActionTitle:
-              typeof entity.sourceActionTitle === 'string' ? entity.sourceActionTitle : null,
+              typeof entity.sourceActionTitle === "string" ? entity.sourceActionTitle : null,
             sourceActionKind:
-              typeof entity.sourceActionKind === 'string' ? entity.sourceActionKind : null,
+              typeof entity.sourceActionKind === "string" ? entity.sourceActionKind : null,
             sourcePlanMode:
-              typeof entity.sourcePlanMode === 'string' ? entity.sourcePlanMode : null,
+              typeof entity.sourcePlanMode === "string" ? entity.sourcePlanMode : null,
             createdAt,
-          }
+          };
         })
         .filter(
           (
-            item,
+            item
           ): item is {
-            entityType: string
-            label: string
-            sourceActionTitle: string | null
-            sourceActionKind: string | null
-            sourcePlanMode: string | null
-            createdAt: string
-          } => Boolean(item),
+            entityType: string;
+            label: string;
+            sourceActionTitle: string | null;
+            sourceActionKind: string | null;
+            sourcePlanMode: string | null;
+            createdAt: string;
+          } => Boolean(item)
         )
-    : []
+    : [];
 
   const actionFeedback = Array.isArray(candidate.actionFeedback)
     ? candidate.actionFeedback
         .map((item) => {
-          if (!item || typeof item !== 'object') return null
-          const feedback = item as Record<string, unknown>
-          const actionTitle = typeof feedback.actionTitle === 'string' ? feedback.actionTitle : ''
-          const actionKind = typeof feedback.actionKind === 'string' ? feedback.actionKind : ''
-          const result = typeof feedback.result === 'string' ? feedback.result : ''
-          const updatedAt = typeof feedback.updatedAt === 'string' ? feedback.updatedAt : ''
-          if (!actionTitle || !actionKind || !result || !updatedAt) return null
+          if (!item || typeof item !== "object") return null;
+          const feedback = item as Record<string, unknown>;
+          const actionTitle = typeof feedback.actionTitle === "string" ? feedback.actionTitle : "";
+          const actionKind = typeof feedback.actionKind === "string" ? feedback.actionKind : "";
+          const result = typeof feedback.result === "string" ? feedback.result : "";
+          const updatedAt = typeof feedback.updatedAt === "string" ? feedback.updatedAt : "";
+          if (!actionTitle || !actionKind || !result || !updatedAt) return null;
 
           return {
             actionTitle,
             actionKind,
             result,
-            comment: typeof feedback.comment === 'string' ? feedback.comment : null,
+            comment: typeof feedback.comment === "string" ? feedback.comment : null,
             updatedAt,
-          }
+          };
         })
         .filter(
           (
-            item,
+            item
           ): item is {
-            actionTitle: string
-            actionKind: string
-            result: string
-            comment: string | null
-            updatedAt: string
-          } => Boolean(item),
+            actionTitle: string;
+            actionKind: string;
+            result: string;
+            comment: string | null;
+            updatedAt: string;
+          } => Boolean(item)
         )
-    : []
+    : [];
 
-  return { linkedEntities, actionFeedback }
+  return { linkedEntities, actionFeedback };
 }
 
 async function loadLeakHistoryContext(userId: string, leakId: string): Promise<LeakHistoryContext> {
@@ -373,7 +381,7 @@ async function loadLeakHistoryContext(userId: string, leakId: string): Promise<L
         createdAt: true,
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
       take: 24,
     }),
@@ -396,30 +404,30 @@ async function loadLeakHistoryContext(userId: string, leakId: string): Promise<L
         },
       },
       orderBy: {
-        updatedAt: 'desc',
+        updatedAt: "desc",
       },
       take: 24,
     }),
-  ])
+  ]);
 
   return {
     linkedEntities: linkedEntities.map((link) => {
       const metadata =
-        link.metadata && typeof link.metadata === 'object' && !Array.isArray(link.metadata)
+        link.metadata && typeof link.metadata === "object" && !Array.isArray(link.metadata)
           ? (link.metadata as Record<string, unknown>)
-          : {}
+          : {};
 
       return {
         entityType: link.entityType,
         label: link.label,
         sourceActionTitle:
-          typeof metadata.sourceActionTitle === 'string' ? metadata.sourceActionTitle : null,
+          typeof metadata.sourceActionTitle === "string" ? metadata.sourceActionTitle : null,
         sourceActionKind:
-          typeof metadata.sourceActionKind === 'string' ? metadata.sourceActionKind : null,
+          typeof metadata.sourceActionKind === "string" ? metadata.sourceActionKind : null,
         sourcePlanMode:
-          typeof metadata.sourcePlanMode === 'string' ? metadata.sourcePlanMode : null,
+          typeof metadata.sourcePlanMode === "string" ? metadata.sourcePlanMode : null,
         createdAt: link.createdAt.toISOString(),
-      }
+      };
     }),
     actionFeedback: feedbackRows.map((row) => ({
       actionTitle: row.solutionAction.title,
@@ -428,14 +436,14 @@ async function loadLeakHistoryContext(userId: string, leakId: string): Promise<L
       comment: row.comment,
       updatedAt: row.updatedAt.toISOString(),
     })),
-  }
+  };
 }
 
 export async function generateLeakPlans(input: LeakPlanInput): Promise<{
-  plans: LeakPlanDraft[]
-  provider: 'groq' | 'gemini' | 'fallback'
+  plans: LeakPlanDraft[];
+  provider: "groq" | "gemini" | "fallback";
 }> {
-  const { userId, leak, retryFocus } = input
+  const { userId, leak, retryFocus } = input;
 
   const [existingPattern, leakHistory, userPatterns] = await Promise.all([
     db.userAiPattern.findUnique({
@@ -448,7 +456,7 @@ export async function generateLeakPlans(input: LeakPlanInput): Promise<{
     loadLeakHistoryContext(userId, leak.id),
     db.userAiPattern.findMany({
       where: { userId },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: { updatedAt: "desc" },
       take: 40,
       select: {
         leakType: true,
@@ -457,61 +465,65 @@ export async function generateLeakPlans(input: LeakPlanInput): Promise<{
         updatedAt: true,
       },
     }),
-  ])
+  ]);
 
   const whatWorked = Array.isArray(existingPattern?.whatWorked)
     ? (existingPattern?.whatWorked as string[])
-    : []
+    : [];
   const triedSolutions = Array.isArray(existingPattern?.triedSolutions)
-    ? (existingPattern?.triedSolutions as Array<{ text?: string }>).map((item) => item.text).filter(Boolean)
-    : []
+    ? (existingPattern?.triedSolutions as Array<{ text?: string }>)
+        .map((item) => item.text)
+        .filter(Boolean)
+    : [];
 
   const snapshotContext =
-    leak.contextSnapshot && typeof leak.contextSnapshot === 'object' && !Array.isArray(leak.contextSnapshot)
+    leak.contextSnapshot &&
+    typeof leak.contextSnapshot === "object" &&
+    !Array.isArray(leak.contextSnapshot)
       ? (leak.contextSnapshot as Record<string, unknown>)
-      : null
-  const snapshotHistory = normalizeHistoryContext(snapshotContext?.history)
+      : null;
+  const snapshotHistory = normalizeHistoryContext(snapshotContext?.history);
   const mergedHistory: LeakHistoryContext = {
     linkedEntities: [...leakHistory.linkedEntities, ...snapshotHistory.linkedEntities].slice(0, 30),
     actionFeedback: [...leakHistory.actionFeedback, ...snapshotHistory.actionFeedback].slice(0, 30),
-  }
+  };
   const clusterPatterns = userPatterns
     .filter((item) => isRelatedLeakType(leak.title, item.leakType))
-    .slice(0, 8)
+    .slice(0, 8);
   const clusterWorkedExamples = clusterPatterns
     .flatMap((item) => (Array.isArray(item.whatWorked) ? (item.whatWorked as string[]) : []))
     .map((item) => item.trim())
     .filter(Boolean)
-    .slice(0, 10)
+    .slice(0, 10);
   const clusterFailedExamples = clusterPatterns
     .flatMap((item) =>
       Array.isArray(item.triedSolutions)
         ? (item.triedSolutions as Array<Record<string, unknown>>)
-            .filter((solution) => solution?.result === 'not_worked')
-            .map((solution) => String(solution.text || '').trim())
+            .filter((solution) => solution?.result === "not_worked")
+            .map((solution) => String(solution.text || "").trim())
             .filter(Boolean)
-        : [],
+        : []
     )
-    .slice(0, 10)
+    .slice(0, 10);
 
   const feedbackSummary =
     mergedHistory.actionFeedback.length > 0
       ? mergedHistory.actionFeedback
           .map(
             (item) =>
-              `${item.actionKind}:${item.actionTitle} => ${item.result}${item.comment ? ` (${item.comment})` : ''}`,
+              `${item.actionKind}:${item.actionTitle} => ${item.result}${item.comment ? ` (${item.comment})` : ""}`
           )
-          .join('; ')
-      : null
+          .join("; ")
+      : null;
   const entitySummary =
     mergedHistory.linkedEntities.length > 0
       ? mergedHistory.linkedEntities
           .map(
             (item) =>
-              `${item.entityType}:${item.label}${item.sourceActionTitle ? ` [from ${item.sourceActionTitle}]` : ''}`,
+              `${item.entityType}:${item.label}${item.sourceActionTitle ? ` [from ${item.sourceActionTitle}]` : ""}`
           )
-          .join('; ')
-      : null
+          .join("; ")
+      : null;
 
   const retryFocusLine =
     retryFocus && retryFocus.actionTitle.trim().length > 0
@@ -521,27 +533,26 @@ export async function generateLeakPlans(input: LeakPlanInput): Promise<{
           retryFocus.failureReason ? `reason=${retryFocus.failureReason}` : null,
         ]
           .filter(Boolean)
-          .join(' | ')
-      : null
-  const retryFocusKey = retryFocus?.actionTitle?.trim().toLowerCase() || null
+          .join(" | ")
+      : null;
+  const retryFocusKey = retryFocus?.actionTitle?.trim().toLowerCase() || null;
   const successfulAntiExamples = mergedHistory.actionFeedback
     .filter(
       (item) =>
-        item.result === 'worked' &&
-        (!retryFocusKey || item.actionTitle.trim().toLowerCase() !== retryFocusKey),
+        item.result === "worked" &&
+        (!retryFocusKey || item.actionTitle.trim().toLowerCase() !== retryFocusKey)
     )
     .slice(0, 5)
-    .map((item) => `${item.actionKind}:${item.actionTitle}`)
-  const failedRetryExamples =
-    retryFocusKey
-      ? mergedHistory.actionFeedback
-          .filter(
-            (item) =>
-              item.result === 'not_worked' && item.actionTitle.trim().toLowerCase() === retryFocusKey,
-          )
-          .slice(0, 3)
-          .map((item) => `${item.actionTitle}${item.comment ? ` (${item.comment})` : ''}`)
-      : []
+    .map((item) => `${item.actionKind}:${item.actionTitle}`);
+  const failedRetryExamples = retryFocusKey
+    ? mergedHistory.actionFeedback
+        .filter(
+          (item) =>
+            item.result === "not_worked" && item.actionTitle.trim().toLowerCase() === retryFocusKey
+        )
+        .slice(0, 3)
+        .map((item) => `${item.actionTitle}${item.comment ? ` (${item.comment})` : ""}`)
+    : [];
 
   const userMessage = [
     retryFocusLine,
@@ -550,59 +561,61 @@ export async function generateLeakPlans(input: LeakPlanInput): Promise<{
     `Severity: ${leak.severity}`,
     leak.sphere ? `Сфера: ${leak.sphere}` : null,
     leak.contextSnapshot ? `Контекст: ${JSON.stringify(leak.contextSnapshot)}` : null,
-    whatWorked.length > 0 ? `Что уже срабатывало: ${whatWorked.join('; ')}` : null,
-    triedSolutions.length > 0 ? `Что уже пробовали: ${triedSolutions.join('; ')}` : null,
+    whatWorked.length > 0 ? `Что уже срабатывало: ${whatWorked.join("; ")}` : null,
+    triedSolutions.length > 0 ? `Что уже пробовали: ${triedSolutions.join("; ")}` : null,
     clusterPatterns.length > 0
-      ? `Похожие кластеры ликов: ${clusterPatterns.map((item) => item.leakType).join('; ')}`
+      ? `Похожие кластеры ликов: ${clusterPatterns.map((item) => item.leakType).join("; ")}`
       : null,
     clusterWorkedExamples.length > 0
-      ? `По похожим кластерам сработало: ${clusterWorkedExamples.join('; ')}`
+      ? `По похожим кластерам сработало: ${clusterWorkedExamples.join("; ")}`
       : null,
     clusterFailedExamples.length > 0
-      ? `По похожим кластерам не сработало: ${clusterFailedExamples.join('; ')}`
+      ? `По похожим кластерам не сработало: ${clusterFailedExamples.join("; ")}`
       : null,
     entitySummary ? `Что уже создавали из этого leak: ${entitySummary}` : null,
     feedbackSummary ? `Фидбек по действиям: ${feedbackSummary}` : null,
     successfulAntiExamples.length > 0
-      ? `Успешные анти-примеры (не заменять retry-целью): ${successfulAntiExamples.join('; ')}`
+      ? `Успешные анти-примеры (не заменять retry-целью): ${successfulAntiExamples.join("; ")}`
       : null,
     failedRetryExamples.length > 0
-      ? `Что уже не сработало у retry-цели: ${failedRetryExamples.join('; ')}`
+      ? `Что уже не сработало у retry-цели: ${failedRetryExamples.join("; ")}`
       : null,
-    'Требование к confidenceReason: укажи конкретный фактор из контекста и формулируй это как гипотезу, не как доказанный факт.',
+    "Требование к confidenceReason: укажи конкретный фактор из контекста и формулируй это как гипотезу, не как доказанный факт.",
   ]
     .filter(Boolean)
-    .join('\n')
+    .join("\n");
 
   try {
     const aiResult = await callAI(SYSTEM_PROMPT, userMessage, {
       userId,
-      callType: 'leak-plan',
+      callType: "leak-plan",
       leakType: leak.title,
-    })
+    });
 
-    const parsed = parseJsonBlock(aiResult.text) as { plans?: unknown[] } | null
-    const rawPlans = Array.isArray(parsed?.plans) ? parsed?.plans : []
+    const parsed = parseJsonBlock(aiResult.text) as { plans?: unknown[] } | null;
+    const rawPlans = Array.isArray(parsed?.plans) ? parsed?.plans : [];
 
-    const byMode = new Map<LeakPlanMode, LeakPlanDraft>()
+    const byMode = new Map<LeakPlanMode, LeakPlanDraft>();
     PLAN_MODES.forEach((mode, index) => {
-      const normalized = normalizePlan(rawPlans[index], mode)
+      const normalized = normalizePlan(rawPlans[index], mode);
       if (normalized.actions.length === 0) {
-        const fallback = buildFallbackPlans(leak).find((item) => item.mode === mode)
-        byMode.set(mode, fallback || normalized)
+        const fallback = buildFallbackPlans(leak).find((item) => item.mode === mode);
+        byMode.set(mode, fallback || normalized);
       } else {
-        byMode.set(mode, normalized)
+        byMode.set(mode, normalized);
       }
-    })
+    });
 
     return {
-      plans: PLAN_MODES.map((mode) => byMode.get(mode) || buildFallbackPlans(leak).find((item) => item.mode === mode)!).filter(Boolean),
+      plans: PLAN_MODES.map(
+        (mode) => byMode.get(mode) || buildFallbackPlans(leak).find((item) => item.mode === mode)!
+      ).filter(Boolean),
       provider: aiResult.provider,
-    }
+    };
   } catch {
     return {
       plans: buildFallbackPlans(leak),
-      provider: 'fallback',
-    }
+      provider: "fallback",
+    };
   }
 }
