@@ -15,6 +15,7 @@ export * from "@/features/leaks/components/leak-ai-draft-card";
 export * from "@/features/leaks/components/leak-inbox-tab";
 export * from "@/features/leaks/components/leak-list";
 export * from "@/features/leaks/components/leak-card";
+export * from "@/features/leaks/components/leak-inbox-item";
 export * from "@/features/leaks/components/leak-overview-panel";
 export * from "@/features/leaks/components/leak-learning-panel";
 export * from "@/features/leaks/components/leak-plan-summary-panel";

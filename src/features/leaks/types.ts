@@ -302,6 +302,18 @@ export interface LeakPolicyHint {
   summary?: LeakPolicySummary;
 }
 
+export interface LeakPolicyActionRequest {
+  actionType: "switch_mode" | "retry" | "regenerate_context" | "focus_action";
+  decision?: "accepted" | "rejected";
+  reason?: string | null;
+  correlationId?: string | null;
+  targetMode?: LeakPlanMode;
+  actionId?: string | null;
+  actionTitle?: string | null;
+  actionKind?: string | null;
+  factors?: NextBestActionFactor[];
+}
+
 export interface LeakDraft {
   leakType: string;
   leakMessage: string;
