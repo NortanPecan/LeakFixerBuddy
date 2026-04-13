@@ -11,7 +11,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LeakAiAnalysisCard } from "@/components/LeakAiAnalysisCard";
 import { showErrorToast, showSuccessToast } from "@/lib/network-utils";
-import { Brain, Lightbulb, NotebookPen, RefreshCw, Sparkles } from "lucide-react";
+import {
+  Brain,
+  ChevronDown,
+  ChevronRight,
+  Filter,
+  Lightbulb,
+  NotebookPen,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react";
 
 interface LeakEntity {
   id: string;
@@ -2386,6 +2395,7 @@ export function LeaksScreen() {
   const [focusFilter, setFocusFilter] = useState<LeakFocusFilter>("all");
   const [groupBy, setGroupBy] = useState<LeakGroupOption>("none");
   const [patternFilter, setPatternFilter] = useState<PatternFilter>("all");
+  const [filtersCollapsed, setFiltersCollapsed] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [title, setTitle] = useState("");
   const [details, setDetails] = useState("");
@@ -3820,7 +3830,7 @@ export function LeaksScreen() {
                 Leaks
               </CardTitle>
               <CardDescription className="mt-1 text-white/60">
-                Отдельный контур для захвата ликов, сигналов и AI-паттернов.
+                Находи слабые места и работай над ними с AI.
               </CardDescription>
             </div>
             <Button
@@ -3837,13 +3847,13 @@ export function LeaksScreen() {
         <CardContent className="pt-0">
           <div className="flex flex-wrap gap-2">
             <Badge className="border-white/10 bg-white/10 text-white/80">
-              Inbox: {leakCounts.all}
+              Входящие: {leakCounts.all}
             </Badge>
             <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
-              Signals: {signals.length}
+              Сигналы: {signals.length}
             </Badge>
             <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200">
-              Patterns: {patterns.length}
+              Паттерны: {patterns.length}
             </Badge>
           </div>
         </CardContent>
@@ -3858,7 +3868,7 @@ export function LeaksScreen() {
             Быстрый capture
           </CardTitle>
           <CardDescription className="text-white/55">
-            Теперь это уже отдельная сущность leak-inbox, а не временная заметка.
+            Опиши проблему коротко — AI поможет разобраться.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -3937,16 +3947,16 @@ export function LeaksScreen() {
             </Button>
           </div>
           <p className="text-xs text-white/45">
-            AI-разбор доступен после сохранения внутри карточки leak.
+            AI-разбор доступен после сохранения — внутри карточки лика.
           </p>
         </CardContent>
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-3 bg-white/5">
-          <TabsTrigger value="inbox">Inbox</TabsTrigger>
-          <TabsTrigger value="signals">Signals</TabsTrigger>
-          <TabsTrigger value="patterns">Patterns</TabsTrigger>
+          <TabsTrigger value="inbox">Входящие</TabsTrigger>
+          <TabsTrigger value="signals">Сигналы</TabsTrigger>
+          <TabsTrigger value="patterns">Паттерны</TabsTrigger>
         </TabsList>
 
         <TabsContent value="inbox" className="space-y-4">
@@ -3986,7 +3996,7 @@ export function LeaksScreen() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-base text-white">Приоритетный фокус</CardTitle>
                 <CardDescription className="text-white/60">
-                  Leaks, где сейчас выше риск застрять без следующего шага.
+                  Лики, где сейчас выше риск застрять без следующего шага.
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
@@ -4010,105 +4020,128 @@ export function LeaksScreen() {
             </Card>
           )}
 
-          <div className="flex flex-wrap gap-2">
-            {STATUS_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => setStatusFilter(option.id)}
-                className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                  statusFilter === option.id
-                    ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
-                    : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Поиск по ликам, описанию или сфере"
+                className="flex-1 border-white/10 bg-white/5 text-white placeholder:text-white/30"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setFiltersCollapsed(!filtersCollapsed)}
+                className={`shrink-0 border-white/15 bg-white/5 text-white/70 hover:bg-white/10 ${
+                  !filtersCollapsed ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200" : ""
                 }`}
               >
-                {option.label} ({leakCounts[option.id]})
-              </button>
-            ))}
-          </div>
+                <Filter className="mr-1 h-4 w-4" />
+                {filtersCollapsed ? (
+                  <ChevronRight className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
 
-          <div className="flex flex-wrap gap-2">
-            {SOURCE_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => setSourceFilter(option.id)}
-                className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                  sourceFilter === option.id
-                    ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
-                    : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+            {!filtersCollapsed && (
+              <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                <div className="flex flex-wrap gap-2">
+                  {STATUS_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setStatusFilter(option.id)}
+                      className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                        statusFilter === option.id
+                          ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                          : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
+                      }`}
+                    >
+                      {option.label} ({leakCounts[option.id]})
+                    </button>
+                  ))}
+                </div>
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setFocusFilter("all")}
-              className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                focusFilter === "all"
-                  ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
-                  : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
-              }`}
-            >
-              Все leaks
-            </button>
-            <button
-              type="button"
-              onClick={() => setFocusFilter("focus")}
-              className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                focusFilter === "focus"
-                  ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
-                  : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
-              }`}
-            >
-              Фокус ({focusLeakCount})
-            </button>
-          </div>
+                <div className="flex flex-wrap gap-2">
+                  {SOURCE_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setSourceFilter(option.id)}
+                      className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                        sourceFilter === option.id
+                          ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                          : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
 
-          <div className="flex flex-wrap gap-2">
-            {SORT_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => setSortOption(option.id)}
-                className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                  sortOption === option.id
-                    ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
-                    : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFocusFilter("all")}
+                    className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                      focusFilter === "all"
+                        ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                        : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
+                    }`}
+                  >
+                    Все leaks
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFocusFilter("focus")}
+                    className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                      focusFilter === "focus"
+                        ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                        : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
+                    }`}
+                  >
+                    Фокус ({focusLeakCount})
+                  </button>
+                </div>
 
-          <div className="flex flex-wrap gap-2">
-            {GROUP_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => setGroupBy(option.id)}
-                className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                  groupBy === option.id
-                    ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
-                    : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+                <div className="flex flex-wrap gap-2">
+                  {SORT_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setSortOption(option.id)}
+                      className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                        sortOption === option.id
+                          ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                          : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
 
-          <Input
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Поиск по ликам, описанию или сфере"
-            className="border-white/10 bg-white/5 text-white placeholder:text-white/30"
-          />
+                <div className="flex flex-wrap gap-2">
+                  {GROUP_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setGroupBy(option.id)}
+                      className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                        groupBy === option.id
+                          ? "border-indigo-400/30 bg-indigo-500/10 text-indigo-200"
+                          : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
 
           {filteredLeaks.length === 0 ? (
             <Card
@@ -4121,10 +4154,10 @@ export function LeaksScreen() {
                 {leaks.length === 0 ? (
                   <>
                     <div className="space-y-2">
-                      <div className="font-medium text-white">Здесь появится твой inbox ликов</div>
+                      <div className="font-medium text-white">Здесь появятся твои лики</div>
                       <p className="text-sm text-white/60">
                         Начни с одной короткой фразы в блоке выше, либо забери готовый сигнал из
-                        weekly data и уже потом разбери его с AI.
+                        недельного отчёта и разбери его с AI.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -4153,8 +4186,8 @@ export function LeaksScreen() {
                         По текущим фильтрам ничего не найдено
                       </div>
                       <p className="text-sm text-white/60">
-                        Сбрось фильтры или поиск, чтобы снова увидеть весь inbox и активные
-                        leak-сценарии.
+                        Сбрось фильтры или поиск, чтобы снова увидеть все
+                        лики.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -7593,7 +7626,7 @@ export function LeaksScreen() {
         <TabsContent value="signals" className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-sm text-white/60">
-              Сигналы, которые уже удалось вытащить из weekly data.
+              Автоматические сигналы из недельных данных. Можно превратить в лик.
             </p>
             <Button
               variant="outline"
@@ -7614,7 +7647,7 @@ export function LeaksScreen() {
             >
               <CardContent className="pt-6">
                 <p className="text-sm text-white/60">
-                  Пока мало данных для автосигналов. Здесь появятся найденные паттерны недели.
+                  Пока мало данных для автосигналов. Здесь появятся найденные закономерности.
                 </p>
               </CardContent>
             </Card>
@@ -7673,7 +7706,7 @@ export function LeaksScreen() {
 
         <TabsContent value="patterns" className="space-y-4">
           <p className="text-sm text-white/60">
-            Здесь накапливается история AI-разборов и то, что уже реально помогало.
+            История AI-разборов и то, что уже реально помогало или нет.
           </p>
 
           <div className="flex flex-wrap gap-2">
