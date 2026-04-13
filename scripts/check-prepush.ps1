@@ -54,6 +54,21 @@ function Get-ChangedFilesForPush {
     return @(git diff --name-only --diff-filter=ACM $range)
   }
 
+  $defaultBase = try {
+    $ea = $ErrorActionPreference
+    $ErrorActionPreference = 'SilentlyContinue'
+    $result = git rev-parse --verify "origin/main" 2>$null
+    $ErrorActionPreference = $ea
+    $result
+  } catch { $null }
+
+  if ($LASTEXITCODE -eq 0 -and $defaultBase) {
+    $mergeBase = git merge-base HEAD origin/main
+    if ($LASTEXITCODE -eq 0 -and $mergeBase) {
+      return @(git diff --name-only --diff-filter=ACM "$($mergeBase.Trim())..HEAD")
+    }
+  }
+
   return @(git ls-files)
 }
 
