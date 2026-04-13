@@ -13,6 +13,7 @@ import {
 import type {
   LeakEntity,
   LeakPlanFeedback,
+  LeakPolicyActionRequest,
   LeakPolicyFunnel,
   LeakPolicyHint,
   LeakPolicyJournalEvent,
@@ -27,18 +28,6 @@ type PolicyDecisionState = "accepted" | "rejected" | "pending";
 interface SendPlanActionFeedbackOptions {
   additionalActionIds?: string[];
   silent?: boolean;
-}
-
-interface LeakPolicyActionRequest {
-  actionType: "switch_mode" | "retry" | "regenerate_context" | "focus_action";
-  decision?: "rejected";
-  reason?: string;
-  correlationId?: string | null;
-  targetMode?: LeakSolutionPlan["mode"];
-  actionId?: string | null;
-  actionTitle?: string | null;
-  actionKind?: string | null;
-  factors?: NextBestActionHint["factors"];
 }
 
 interface LeakPolicyPanelProps {
