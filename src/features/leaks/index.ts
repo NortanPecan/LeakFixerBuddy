@@ -7,6 +7,8 @@ export * from "@/features/leaks/lib/leak-context";
 export * from "@/features/leaks/lib/leak-guidance";
 export * from "@/features/leaks/api/leaks-api";
 export * from "@/features/leaks/hooks/use-leaks-screen";
+export * from "@/features/leaks/hooks/use-leak-feature-state";
+export * from "@/features/leaks/hooks/use-leak-feature-actions";
 export * from "@/features/leaks/components/leak-priority-card";
 export * from "@/features/leaks/components/leak-inbox-toolbar";
 export * from "@/features/leaks/components/leak-empty-state";

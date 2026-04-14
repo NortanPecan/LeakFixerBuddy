@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useAppStore } from "@/lib/store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,14 +10,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { showErrorToast, showSuccessToast } from "@/lib/network-utils";
 import { RefreshCw, Sparkles } from "lucide-react";
 import {
-  PLAN_MODE_LABELS,
   buildLeakMessage,
-  buildLeakGuidance,
   getLeakActionMetadata,
   getLeakGroupKey,
   getLatestPlanFeedback,
-  getPlanActionAnchorId,
-  isFocusLeak,
   isConvertedPlanAction,
   LeakInboxTab,
   LeakInboxItem,
@@ -25,25 +21,20 @@ import {
   LeakList,
   PatternsTab,
   normalizeLeak,
-  normalizeLeakPolicy,
-  normalizeLookupValue,
   normalizePattern,
   normalizePlans,
   SignalsTab,
+  useLeakFeatureActions,
+  useLeakFeatureState,
   useLeaksScreen,
 } from "@/features/leaks";
 import type {
   FeedbackHistoryFilter,
   LeakActionLink,
-  LeakDraft,
   LeakEntity,
-  LeakHint,
-  LeakPattern,
   LeakPlanAction,
   LeakPlanFeedback,
   LeakSolutionPlan,
-  LeakStatusFilter,
-  NextBestActionHint,
   LeakGuidanceAction,
 } from "@/features/leaks";
 
@@ -83,287 +74,135 @@ export function LeaksScreenFeature() {
     priorityLeaks,
     loadData,
   } = useLeaksScreen({ userId: user?.id });
-  const [title, setTitle] = useState("");
-  const [details, setDetails] = useState("");
-  const [severity, setSeverity] = useState<"info" | "warning" | "critical">("warning");
-  const [sphere, setSphere] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [selectedDraft, setSelectedDraft] = useState<LeakDraft | null>(null);
-  const [updatingLeakId, setUpdatingLeakId] = useState<string | null>(null);
-  const [editingLeakId, setEditingLeakId] = useState<string | null>(null);
-  const [editingLeakTitle, setEditingLeakTitle] = useState("");
-  const [editingLeakDescription, setEditingLeakDescription] = useState("");
-  const [actionLeakId, setActionLeakId] = useState<string | null>(null);
-  const [savingSignalKey, setSavingSignalKey] = useState<string | null>(null);
-  const [expandedLeakId, setExpandedLeakId] = useState<string | null>(null);
-  const [plansByLeak, setPlansByLeak] = useState<Record<string, LeakSolutionPlan[]>>({});
-  const [loadingPlansLeakId, setLoadingPlansLeakId] = useState<string | null>(null);
-  const [generatingPlansLeakId, setGeneratingPlansLeakId] = useState<string | null>(null);
-  const [selectingPlanLeakId, setSelectingPlanLeakId] = useState<string | null>(null);
-  const [executingPolicyLeakId, setExecutingPolicyLeakId] = useState<string | null>(null);
-  const [applyingPlanLeakId, setApplyingPlanLeakId] = useState<string | null>(null);
-  const [applyingPlanActionId, setApplyingPlanActionId] = useState<string | null>(null);
-  const [savingFeedbackActionId, setSavingFeedbackActionId] = useState<string | null>(null);
-  const [savingFeedbackLeakId, setSavingFeedbackLeakId] = useState<string | null>(null);
-  const [feedbackCommentByAction, setFeedbackCommentByAction] = useState<Record<string, string>>(
-    {}
-  );
-  const [savingPatternLeakType, setSavingPatternLeakType] = useState<string | null>(null);
-  const [retryingLeakId, setRetryingLeakId] = useState<string | null>(null);
-  const [focusedPlanActionId, setFocusedPlanActionId] = useState<string | null>(null);
-  const [feedbackHistoryFilterByLeak, setFeedbackHistoryFilterByLeak] = useState<
-    Record<string, FeedbackHistoryFilter>
-  >({});
+  const {
+    title,
+    setTitle,
+    details,
+    setDetails,
+    severity,
+    setSeverity,
+    sphere,
+    setSphere,
+    submitting,
+    setSubmitting,
+    selectedDraft,
+    setSelectedDraft,
+    updatingLeakId,
+    setUpdatingLeakId,
+    editingLeakId,
+    setEditingLeakId,
+    editingLeakTitle,
+    setEditingLeakTitle,
+    editingLeakDescription,
+    setEditingLeakDescription,
+    actionLeakId,
+    setActionLeakId,
+    savingSignalKey,
+    setSavingSignalKey,
+    expandedLeakId,
+    setExpandedLeakId,
+    plansByLeak,
+    setPlansByLeak,
+    loadingPlansLeakId,
+    setLoadingPlansLeakId,
+    generatingPlansLeakId,
+    setGeneratingPlansLeakId,
+    selectingPlanLeakId,
+    setSelectingPlanLeakId,
+    executingPolicyLeakId,
+    setExecutingPolicyLeakId,
+    applyingPlanLeakId,
+    setApplyingPlanLeakId,
+    applyingPlanActionId,
+    setApplyingPlanActionId,
+    savingFeedbackActionId,
+    setSavingFeedbackActionId,
+    savingFeedbackLeakId,
+    setSavingFeedbackLeakId,
+    setFeedbackCommentByAction,
+    savingPatternLeakType,
+    setSavingPatternLeakType,
+    retryingLeakId,
+    setRetryingLeakId,
+    focusedPlanActionId,
+    feedbackHistoryFilterByLeak,
+    setFeedbackHistoryFilterByLeak,
+    hasDraft,
+    getFeedbackCommentDraft,
+    getFeedbackCommentDraftByActionId,
+    focusPlanAction,
+    clearLeakFilters,
+  } = useLeakFeatureState({
+    leaks,
+    setStatusFilter,
+    setSourceFilter,
+    setSortOption,
+    setFocusFilter,
+    setGroupBy,
+    setSearchQuery,
+  });
 
-  useEffect(() => {
-    if (!focusedPlanActionId) return;
-
-    const timer = window.setTimeout(() => {
-      setFocusedPlanActionId(null);
-    }, 3200);
-
-    return () => window.clearTimeout(timer);
-  }, [focusedPlanActionId]);
-
-  useEffect(() => {
-    if (!expandedLeakId) return;
-    const leakPlans = plansByLeak[expandedLeakId] || [];
-    const expandedLeak = leaks.find((item) => item.id === expandedLeakId);
-    if (!expandedLeak) return;
-    const guidance = buildLeakGuidance(expandedLeak, leakPlans);
-
-    const currentFilter = feedbackHistoryFilterByLeak[expandedLeakId] || "all";
-    if (guidance?.failedActions && guidance.failedActions > 0 && currentFilter !== "problem") {
-      setFeedbackHistoryFilterByLeak((current) => ({
-        ...current,
-        [expandedLeakId]: "problem",
-      }));
-      return;
-    }
-
-    if ((!guidance?.failedActions || guidance.failedActions === 0) && currentFilter === "problem") {
-      setFeedbackHistoryFilterByLeak((current) => ({
-        ...current,
-        [expandedLeakId]: "all",
-      }));
-    }
-  }, [expandedLeakId, plansByLeak, leaks, feedbackHistoryFilterByLeak]);
-
-  const hasDraft = title.trim().length > 0 || details.trim().length > 0;
-
-  const createLeak = async () => {
-    if (!user?.id || !hasDraft) return;
-
-    const nextTitle = title.trim() || details.trim().slice(0, 80) || "Новый лик";
-    const nextDescription = details.trim() || null;
-    const duplicateLeak = findOpenLeak(nextTitle, nextDescription);
-    if (duplicateLeak) {
-      setActiveTab("inbox");
-      setStatusFilter("all");
-      setExpandedLeakId(duplicateLeak.id);
-      showSuccessToast("Похожий активный leak уже есть в inbox, открыл его для продолжения");
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const response = await fetch("/api/leaks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          title: nextTitle,
-          description: nextDescription,
-          severity,
-          source: "manual",
-          sphere,
-        }),
-      });
-
-      if (!response.ok) {
-        throw response;
-      }
-
-      const data = await response.json();
-      const createdLeak = normalizeLeak(data.leak as LeakEntity);
-      if (data.deduped) {
-        setActiveTab("inbox");
-        setStatusFilter("all");
-        setExpandedLeakId(createdLeak.id);
-        showSuccessToast("Похожий активный leak уже есть, открыл его вместо дубля");
-        return;
-      }
-
-      setLeaks((current) => [createdLeak, ...current]);
-      setExpandedLeakId(createdLeak.id);
-      setTitle("");
-      setDetails("");
-      setSeverity("warning");
-      setSphere(null);
-      setActiveTab("inbox");
-      setStatusFilter("all");
-
-      setSelectedDraft(null);
-
-      showSuccessToast("Лик сохранён");
-    } catch (error) {
-      showErrorToast(error, "create leak");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const updateLeakStatus = async (
-    leakId: string,
-    status: Exclude<LeakStatusFilter, "all">,
-    options?: { silent?: boolean }
-  ) => {
-    if (!user?.id || updatingLeakId) return;
-
-    setUpdatingLeakId(leakId);
-    try {
-      const response = await fetch("/api/leaks", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          id: leakId,
-          status,
-        }),
-      });
-
-      if (!response.ok) {
-        throw response;
-      }
-
-      const data = await response.json();
-      const updatedLeak = normalizeLeak(data.leak as LeakEntity);
-
-      setLeaks((current) => current.map((leak) => (leak.id === leakId ? updatedLeak : leak)));
-      if (!options?.silent) {
-        showSuccessToast("Статус лика обновлён");
-      }
-      return true;
-    } catch (error) {
-      showErrorToast(error, "update leak status");
-      return false;
-    } finally {
-      setUpdatingLeakId(null);
-    }
-  };
-
-  const updateLeakSphere = async (leakId: string, nextSphere: string | null) => {
-    if (!user?.id || updatingLeakId) return;
-
-    setUpdatingLeakId(leakId);
-    try {
-      const response = await fetch("/api/leaks", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          id: leakId,
-          sphere: nextSphere,
-        }),
-      });
-
-      if (!response.ok) throw response;
-
-      const data = await response.json();
-      const updatedLeak = normalizeLeak(data.leak as LeakEntity);
-
-      setLeaks((current) => current.map((leak) => (leak.id === leakId ? updatedLeak : leak)));
-      showSuccessToast("Сфера лика обновлена");
-    } catch (error) {
-      showErrorToast(error, "update leak sphere");
-    } finally {
-      setUpdatingLeakId(null);
-    }
-  };
-
-  const toggleLeakFocus = async (leak: LeakEntity) => {
-    if (!user?.id || updatingLeakId) return;
-
-    const currentSnapshot =
-      leak.contextSnapshot &&
-      typeof leak.contextSnapshot === "object" &&
-      !Array.isArray(leak.contextSnapshot)
-        ? (leak.contextSnapshot as Record<string, unknown>)
-        : {};
-    const nextFocusValue = !isFocusLeak(leak);
-
-    setUpdatingLeakId(leak.id);
-    try {
-      const response = await fetch("/api/leaks", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          id: leak.id,
-          contextSnapshot: {
-            ...currentSnapshot,
-            isFocus: nextFocusValue,
-            focusUpdatedAt: new Date().toISOString(),
-          },
-        }),
-      });
-
-      if (!response.ok) throw response;
-
-      const data = await response.json();
-      const updatedLeak = normalizeLeak(data.leak as LeakEntity);
-      setLeaks((current) => current.map((item) => (item.id === leak.id ? updatedLeak : item)));
-      showSuccessToast(nextFocusValue ? "Leak добавлен в фокус" : "Leak убран из фокуса");
-    } catch (error) {
-      showErrorToast(error, "toggle leak focus");
-    } finally {
-      setUpdatingLeakId(null);
-    }
-  };
-
-  const startEditingLeak = (leak: LeakEntity) => {
-    setEditingLeakId(leak.id);
-    setEditingLeakTitle(leak.title);
-    setEditingLeakDescription(leak.description || "");
-    setExpandedLeakId(leak.id);
-  };
-
-  const cancelEditingLeak = () => {
-    setEditingLeakId(null);
-    setEditingLeakTitle("");
-    setEditingLeakDescription("");
-  };
-
-  const saveLeakEdits = async (leakId: string) => {
-    if (!user?.id || updatingLeakId || !editingLeakTitle.trim()) return;
-
-    setUpdatingLeakId(leakId);
-    try {
-      const response = await fetch("/api/leaks", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          id: leakId,
-          title: editingLeakTitle.trim(),
-          description: editingLeakDescription.trim() || null,
-        }),
-      });
-
-      if (!response.ok) throw response;
-
-      const data = await response.json();
-      const updatedLeak = normalizeLeak(data.leak as LeakEntity);
-
-      setLeaks((current) => current.map((leak) => (leak.id === leakId ? updatedLeak : leak)));
-      cancelEditingLeak();
-      showSuccessToast("Лик обновлён");
-    } catch (error) {
-      showErrorToast(error, "save leak edits");
-    } finally {
-      setUpdatingLeakId(null);
-    }
-  };
+  const {
+    createLeak,
+    updateLeakStatus,
+    updateLeakSphere,
+    toggleLeakFocus,
+    startEditingLeak,
+    cancelEditingLeak,
+    saveLeakEdits,
+    hasActionType,
+    loadPlansForLeak,
+    generatePlansForLeak,
+    selectPlanMode,
+    toggleLeakDetails,
+    loadPolicyForLeak,
+    executePolicyAction,
+    executeSuggestedPolicyAction,
+    syncLeakTitleWithPattern,
+    createLeakFromSignal,
+    createLeakFromPattern,
+  } = useLeakFeatureActions({
+    userId: user?.id,
+    leaks,
+    setLeaks,
+    plansByLeak,
+    setPlansByLeak,
+    setPolicyByLeak,
+    setActiveTab,
+    setStatusFilter,
+    title,
+    setTitle,
+    details,
+    setDetails,
+    severity,
+    setSeverity,
+    sphere,
+    setSphere,
+    hasDraft,
+    submitting,
+    setSubmitting,
+    setSelectedDraft,
+    updatingLeakId,
+    setUpdatingLeakId,
+    editingLeakTitle,
+    editingLeakDescription,
+    setEditingLeakId,
+    setEditingLeakTitle,
+    setEditingLeakDescription,
+    expandedLeakId,
+    setExpandedLeakId,
+    loadingPlansLeakId,
+    setLoadingPlansLeakId,
+    setGeneratingPlansLeakId,
+    setSelectingPlanLeakId,
+    executingPolicyLeakId,
+    setExecutingPolicyLeakId,
+    savingSignalKey,
+    setSavingSignalKey,
+    savingPatternLeakType,
+    setSavingPatternLeakType,
+    focusPlanAction,
+  });
 
   const saveLeakAction = async (
     leak: LeakEntity,
@@ -397,387 +236,7 @@ export function LeaksScreenFeature() {
     setExpandedLeakId(leak.id);
   };
 
-  const hasActionType = (leak: LeakEntity, entityType: LeakActionLink["entityType"]) =>
-    leak.actions?.some((action) => action.entityType === entityType);
-
-  const findOpenLeak = (title: string, description?: string | null) =>
-    leaks.find((leak) => {
-      if (leak.status === "resolved" || leak.status === "archived") return false;
-
-      const sameTitle = normalizeLookupValue(leak.title) === normalizeLookupValue(title);
-      if (!sameTitle) return false;
-
-      if (!description) return true;
-      return normalizeLookupValue(leak.description) === normalizeLookupValue(description);
-    });
-
-  const loadPlansForLeak = async (leakId: string) => {
-    if (!user?.id) return;
-
-    setLoadingPlansLeakId(leakId);
-    try {
-      const response = await fetch(`/api/leaks/${leakId}/plans?userId=${user.id}`, {
-        cache: "no-store",
-      });
-
-      if (!response.ok) throw response;
-
-      const data = await response.json();
-      setPlansByLeak((current) => ({
-        ...current,
-        [leakId]: normalizePlans(data.plans || []),
-      }));
-      if (data.policy) {
-        setPolicyByLeak((current) => ({
-          ...current,
-          [leakId]: normalizeLeakPolicy(data.policy),
-        }));
-      }
-    } catch (error) {
-      showErrorToast(error, "load leak plans");
-    } finally {
-      setLoadingPlansLeakId(null);
-    }
-  };
-
-  const generatePlansForLeak = async (
-    leakId: string,
-    regenerate = false,
-    options?: {
-      silent?: boolean;
-      retryFocus?: {
-        actionId?: string | null;
-        actionTitle: string;
-        actionKind?: LeakPlanAction["kind"] | null;
-        failureReason?: string | null;
-      } | null;
-    }
-  ) => {
-    if (!user?.id) return;
-
-    setGeneratingPlansLeakId(leakId);
-    try {
-      const response = await fetch(`/api/leaks/${leakId}/plans`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          regenerate,
-          retryActionId: options?.retryFocus?.actionId || undefined,
-          retryActionTitle: options?.retryFocus?.actionTitle || undefined,
-          retryActionKind: options?.retryFocus?.actionKind || undefined,
-          retryFailureReason: options?.retryFocus?.failureReason || undefined,
-        }),
-      });
-
-      if (!response.ok) throw response;
-
-      const data = await response.json();
-      setPlansByLeak((current) => ({
-        ...current,
-        [leakId]: normalizePlans(data.plans || []),
-      }));
-      if (data.policy) {
-        setPolicyByLeak((current) => ({
-          ...current,
-          [leakId]: normalizeLeakPolicy(data.policy),
-        }));
-      }
-      if (!options?.silent) {
-        showSuccessToast(regenerate ? "Планы пересобраны" : "Планы для лика готовы");
-      }
-      return true;
-    } catch (error) {
-      showErrorToast(error, "generate leak plans");
-      return false;
-    } finally {
-      setGeneratingPlansLeakId(null);
-    }
-  };
-
-  const selectPlanMode = async (leakId: string, mode: LeakSolutionPlan["mode"]) => {
-    if (!user?.id) return;
-
-    setSelectingPlanLeakId(leakId);
-    try {
-      const response = await fetch(`/api/leaks/${leakId}/plans`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          mode,
-        }),
-      });
-
-      if (!response.ok) throw response;
-
-      const data = await response.json();
-      setPlansByLeak((current) => ({
-        ...current,
-        [leakId]: normalizePlans(data.plans || []),
-      }));
-      if (data.policy) {
-        setPolicyByLeak((current) => ({
-          ...current,
-          [leakId]: normalizeLeakPolicy(data.policy),
-        }));
-      }
-      setLeaks((current) =>
-        current.map((leak) => {
-          if (leak.id !== leakId) return leak;
-          const snapshot =
-            leak.contextSnapshot &&
-            typeof leak.contextSnapshot === "object" &&
-            !Array.isArray(leak.contextSnapshot)
-              ? ({ ...leak.contextSnapshot } as Record<string, unknown>)
-              : {};
-          snapshot.selectedPlanMode = mode;
-          snapshot.contextUpdatedAt = new Date().toISOString();
-          return {
-            ...leak,
-            contextSnapshot: snapshot,
-          };
-        })
-      );
-      showSuccessToast(`Выбран режим: ${PLAN_MODE_LABELS[mode]}`);
-    } catch (error) {
-      showErrorToast(error, "select leak plan");
-    } finally {
-      setSelectingPlanLeakId(null);
-    }
-  };
-
-  const toggleLeakDetails = async (leakId: string) => {
-    const willOpen = expandedLeakId !== leakId;
-    setExpandedLeakId(willOpen ? leakId : null);
-
-    if (willOpen && !plansByLeak[leakId] && loadingPlansLeakId !== leakId) {
-      await loadPlansForLeak(leakId);
-      await loadPolicyForLeak(leakId);
-    }
-  };
-
-  const loadPolicyForLeak = async (leakId: string) => {
-    if (!user?.id) return;
-    try {
-      const response = await fetch(`/api/leaks/${leakId}/policy?userId=${user.id}`, {
-        cache: "no-store",
-      });
-      if (!response.ok) throw response;
-      const data = await response.json();
-      setPolicyByLeak((current) => ({
-        ...current,
-        [leakId]: normalizeLeakPolicy({
-          ...(data.policy || {}),
-          summary: data.summary || undefined,
-          runJournal: data.runJournal || undefined,
-        }),
-      }));
-    } catch (error) {
-      showErrorToast(error, "load leak policy");
-    }
-  };
-
-  const executePolicyAction = async (
-    leak: LeakEntity,
-    payload: {
-      actionType: "switch_mode" | "retry" | "regenerate_context" | "focus_action";
-      decision?: "accepted" | "rejected";
-      reason?: string | null;
-      correlationId?: string | null;
-      targetMode?: LeakSolutionPlan["mode"];
-      actionId?: string | null;
-      actionTitle?: string | null;
-      actionKind?: string | null;
-      factors?: Array<{ key: string; weight: number; detail?: string }>;
-    }
-  ) => {
-    if (!user?.id) return false;
-    if (executingPolicyLeakId === leak.id) return false;
-    setExecutingPolicyLeakId(leak.id);
-    try {
-      const response = await fetch(`/api/leaks/${leak.id}/policy/act`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          actionType: payload.actionType,
-          decision: payload.decision || "accepted",
-          reason: payload.reason || null,
-          correlationId: payload.correlationId || undefined,
-          targetMode: payload.targetMode || undefined,
-          actionId: payload.actionId || undefined,
-          actionTitle: payload.actionTitle || undefined,
-          actionKind: payload.actionKind || undefined,
-          factors: payload.factors || undefined,
-        }),
-      });
-      if (!response.ok) throw response;
-      const data = await response.json();
-      if (data.requiresRegenerate) {
-        await generatePlansForLeak(leak.id, true, { silent: true });
-      }
-      await loadPlansForLeak(leak.id);
-      await loadPolicyForLeak(leak.id);
-      return true;
-    } catch (error) {
-      showErrorToast(error, "execute leak policy action");
-      return false;
-    } finally {
-      setExecutingPolicyLeakId(null);
-    }
-  };
-
-  const executeSuggestedPolicyAction = async (
-    leak: LeakEntity,
-    nextBestActionHint: NextBestActionHint,
-    selectedPlan: LeakSolutionPlan | null,
-    planActionsById: Map<string, LeakPlanAction>
-  ) => {
-    if (nextBestActionHint.type === "switch_mode" && nextBestActionHint.targetMode) {
-      await executePolicyAction(leak, {
-        actionType: "switch_mode",
-        correlationId: nextBestActionHint.correlationId || null,
-        targetMode: nextBestActionHint.targetMode,
-        factors: nextBestActionHint.factors || [],
-      });
-      return;
-    }
-
-    if (
-      nextBestActionHint.type === "create_entity" &&
-      nextBestActionHint.actionId &&
-      selectedPlan
-    ) {
-      const action = selectedPlan.actions.find((item) => item.id === nextBestActionHint.actionId);
-      if (!action) return;
-      await executePolicyAction(leak, {
-        actionType: "focus_action",
-        correlationId: nextBestActionHint.correlationId || null,
-        actionId: action.id,
-        actionTitle: action.title,
-        actionKind: action.kind,
-        factors: nextBestActionHint.factors || [],
-      });
-      await applySinglePlanAction(leak, selectedPlan.mode, action);
-      return;
-    }
-
-    if (nextBestActionHint.type === "give_feedback" && nextBestActionHint.actionId) {
-      const action = planActionsById.get(nextBestActionHint.actionId || "");
-      await executePolicyAction(leak, {
-        actionType: "focus_action",
-        correlationId: nextBestActionHint.correlationId || null,
-        actionId: nextBestActionHint.actionId || null,
-        actionTitle: action?.title || null,
-        actionKind: action?.kind || null,
-        factors: nextBestActionHint.factors || [],
-      });
-      focusPlanAction(leak.id, nextBestActionHint.actionId || "");
-      return;
-    }
-
-    if (nextBestActionHint.type === "retry" && nextBestActionHint.actionId) {
-      const action = planActionsById.get(nextBestActionHint.actionId || "") || null;
-      await executePolicyAction(leak, {
-        actionType: "retry",
-        correlationId: nextBestActionHint.correlationId || null,
-        actionId: action?.id || nextBestActionHint.actionId || null,
-        actionTitle: action?.title || null,
-        actionKind: action?.kind || null,
-        factors: nextBestActionHint.factors || [],
-      });
-      await retryLeakPlanning(leak, {
-        action,
-        failureReason: null,
-      });
-      return;
-    }
-
-    if (nextBestActionHint.type === "regenerate_context") {
-      await executePolicyAction(leak, {
-        actionType: "regenerate_context",
-        correlationId: nextBestActionHint.correlationId || null,
-        factors: nextBestActionHint.factors || [],
-      });
-      return;
-    }
-
-    if (nextBestActionHint.type === "generate") {
-      await generatePlansForLeak(leak.id, true);
-    }
-  };
-
-  const syncLeakTitleWithPattern = async (leak: LeakEntity, pattern: LeakPattern) => {
-    if (!user?.id || updatingLeakId) return;
-    const nextTitle = pattern.leakType.trim();
-    if (!nextTitle || normalizeLookupValue(nextTitle) === normalizeLookupValue(leak.title)) return;
-
-    setUpdatingLeakId(leak.id);
-    try {
-      const response = await fetch("/api/leaks", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          id: leak.id,
-          title: nextTitle,
-          description: leak.description || null,
-        }),
-      });
-
-      if (!response.ok) throw response;
-
-      const data = await response.json();
-      const updatedLeak = normalizeLeak(data.leak as LeakEntity);
-      setLeaks((current) => current.map((item) => (item.id === leak.id ? updatedLeak : item)));
-      showSuccessToast("Название leak синхронизировано с паттерном");
-    } catch (error) {
-      showErrorToast(error, "sync leak title with pattern");
-    } finally {
-      setUpdatingLeakId(null);
-    }
-  };
-
-  const focusPlanAction = (leakId: string, actionId: string) => {
-    setExpandedLeakId(leakId);
-    setFocusedPlanActionId(actionId);
-
-    setTimeout(() => {
-      const node = document.getElementById(getPlanActionAnchorId(leakId, actionId));
-      if (node) {
-        node.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-    }, 0);
-  };
-
   const isPlanActionConverted = (action: LeakPlanAction) => isConvertedPlanAction(action);
-
-  const getFeedbackCommentDraft = (action: LeakPlanAction | null | undefined) => {
-    if (!action) return "";
-    if (feedbackCommentByAction[action.id] !== undefined) {
-      return feedbackCommentByAction[action.id];
-    }
-
-    return action.feedbacks?.[0]?.comment || "";
-  };
-
-  const getFeedbackCommentDraftByActionId = (actionId: string) => {
-    if (feedbackCommentByAction[actionId] !== undefined) {
-      return feedbackCommentByAction[actionId];
-    }
-
-    return "";
-  };
-
-  const clearLeakFilters = () => {
-    setStatusFilter("all");
-    setSourceFilter("all");
-    setSortOption("updated_desc");
-    setFocusFilter("all");
-    setGroupBy("none");
-    setSearchQuery("");
-  };
 
   const reopenLeak = async (leak: LeakEntity, options?: { silent?: boolean }) => {
     return updateLeakStatus(leak.id, "in_progress", options);
@@ -1214,109 +673,6 @@ export function LeaksScreenFeature() {
       showErrorToast(error, "create challenge from leak");
     } finally {
       setActionLeakId(null);
-    }
-  };
-
-  const createLeakFromSignal = async (signal: LeakHint) => {
-    if (!user?.id || savingSignalKey) return;
-
-    const existingLeak = findOpenLeak(signal.type, signal.message);
-    if (existingLeak) {
-      setActiveTab("inbox");
-      setStatusFilter("all");
-      setExpandedLeakId(existingLeak.id);
-      showSuccessToast("Этот сигнал уже сохранён в inbox");
-      return;
-    }
-
-    const signalKey = `${signal.type}:${signal.message}`;
-    setSavingSignalKey(signalKey);
-    try {
-      const response = await fetch("/api/leaks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          title: signal.type,
-          description: signal.message,
-          source: "signal",
-          severity: signal.severity,
-          contextSnapshot: signal.days?.length ? { days: signal.days } : null,
-        }),
-      });
-
-      if (!response.ok) throw response;
-
-      const data = await response.json();
-      const createdLeak = normalizeLeak(data.leak as LeakEntity);
-      if (data.deduped) {
-        setActiveTab("inbox");
-        setStatusFilter("all");
-        setExpandedLeakId(createdLeak.id);
-        showSuccessToast("Такой сигнал уже есть в активном leak");
-        return;
-      }
-      setLeaks((current) => [createdLeak, ...current]);
-      setExpandedLeakId(createdLeak.id);
-      showSuccessToast("Сигнал сохранён как leak");
-      setActiveTab("inbox");
-    } catch (error) {
-      showErrorToast(error, "save signal as leak");
-    } finally {
-      setSavingSignalKey(null);
-    }
-  };
-
-  const createLeakFromPattern = async (pattern: LeakPattern) => {
-    if (!user?.id || savingPatternLeakType) return;
-
-    const existingLeak = findOpenLeak(pattern.leakType);
-
-    if (existingLeak) {
-      setActiveTab("inbox");
-      setStatusFilter("all");
-      setExpandedLeakId(existingLeak.id);
-      showSuccessToast("Для этого паттерна уже есть активный leak");
-      return;
-    }
-
-    setSavingPatternLeakType(pattern.leakType);
-    try {
-      const response = await fetch("/api/leaks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          title: pattern.leakType,
-          source: "ai_suggested",
-          severity: "warning",
-          contextSnapshot: {
-            analysisCount: pattern.analysisCount,
-            whatWorked: pattern.whatWorked,
-          },
-        }),
-      });
-
-      if (!response.ok) throw response;
-
-      const data = await response.json();
-      const createdLeak = normalizeLeak(data.leak as LeakEntity);
-      if (data.deduped) {
-        setActiveTab("inbox");
-        setStatusFilter("all");
-        setExpandedLeakId(createdLeak.id);
-        showSuccessToast("Паттерн уже связан с активным leak");
-        return;
-      }
-      setLeaks((current) => [createdLeak, ...current]);
-      setActiveTab("inbox");
-      setStatusFilter("all");
-      setExpandedLeakId(createdLeak.id);
-      showSuccessToast("Паттерн сохранён как leak");
-    } catch (error) {
-      showErrorToast(error, "save pattern as leak");
-    } finally {
-      setSavingPatternLeakType(null);
     }
   };
 

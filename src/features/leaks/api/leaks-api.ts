@@ -111,6 +111,12 @@ export interface UpdateLeakPayload {
   description?: string | null;
   contextSnapshot?: Record<string, unknown> | null;
   resolvedAt?: string | null;
+  appendAction?: {
+    entityType: string;
+    entityId: string;
+    label: string;
+    metadata?: Record<string, unknown> | null;
+  };
 }
 
 export interface UpdateLeakResult {
@@ -143,11 +149,16 @@ export interface GenerateLeakPlansPayload {
   userId: string;
   mode?: LeakPlanMode;
   forceRefresh?: boolean;
+  retryActionId?: string;
+  retryActionTitle?: string;
+  retryActionKind?: string;
+  retryFailureReason?: string;
 }
 
 export interface GenerateLeakPlansResult {
   plans: LeakSolutionPlan[];
   leak?: LeakEntity;
+  policy?: LeakPolicyHint | null;
   raw: JsonRecord;
 }
 
@@ -164,6 +175,7 @@ export async function generateLeakPlans(
   return {
     plans: normalizePlans(raw.plans as LeakSolutionPlan[] | undefined),
     leak: raw.leak ? normalizeLeak(raw.leak as LeakEntity) : undefined,
+    policy: normalizeLeakPolicy(raw.policy),
     raw,
   };
 }
