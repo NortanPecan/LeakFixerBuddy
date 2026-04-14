@@ -31,7 +31,7 @@ interface AiPattern {
   updatedAt: string;
 }
 
-interface AdminFeedback {
+export interface AdminFeedback {
   id: string;
   type: string;
   message: string;

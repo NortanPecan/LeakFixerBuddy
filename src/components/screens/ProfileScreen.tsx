@@ -5,28 +5,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  User,
   Settings,
-  Bell,
   ChevronRight,
   Trophy,
   Flame,
   Target,
   Dumbbell,
-  Scale,
   Edit,
   TrendingUp,
   TrendingDown,
@@ -39,56 +27,22 @@ import {
   Check,
   Sparkles,
 } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ATTRIBUTE_LABELS, type AttributeKey } from "@/lib/rituals/data";
 import {
   MEASUREMENT_TYPES,
   FEEDBACK_TYPES,
-  ZONES_CONFIG,
-  THEME_OPTIONS,
-  ALL_ACHIEVEMENT_DEFS,
   LEAK_TYPE_LABELS_PROFILE,
-  type UserSettings,
 } from "@/features/profile/constants";
-import { QuickAccess, DonateCard, useProfileScreen } from "@/features/profile";
-
-function WeightSparkline({ data }: { data: Array<{ date: string; weight: number }> }) {
-  if (data.length < 2) return null;
-  const W = 120,
-    H = 24,
-    PAD = 2;
-  const weights = data.map((d) => d.weight);
-  const minW = Math.min(...weights);
-  const maxW = Math.max(...weights);
-  const range = maxW - minW || 1;
-  const points = data
-    .map((d, i) => {
-      const x = PAD + (i / (data.length - 1)) * (W - PAD * 2);
-      const y = H - PAD - ((d.weight - minW) / range) * (H - PAD * 2);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-  const last = data[data.length - 1];
-  const prev = data[data.length - 2];
-  const rising = last.weight >= prev.weight;
-  return (
-    <div className="flex items-center gap-2 pl-6">
-      <svg width={W} height={H} className="overflow-visible">
-        <polyline
-          points={points}
-          fill="none"
-          stroke={rising ? "#10b981" : "#f59e0b"}
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      <span className={`text-xs ${rising ? "text-emerald-400" : "text-yellow-400"}`}>
-        {rising ? "↑" : "↓"} {data[0].weight}→{last.weight} кг
-      </span>
-    </div>
-  );
-}
+import {
+  QuickAccess,
+  DonateCard,
+  useProfileScreen,
+  WeightSparkline,
+  ProfileAchievementsCard,
+  ProfileSettingsCard,
+  AdminFeedbacksCard,
+  AddMeasurementDialog,
+} from "@/features/profile";
 
 export function ProfileScreen() {
   const { user, isDemoMode, isOwnerMode, setScreen } = useAppStore();
@@ -355,47 +309,7 @@ export function ProfileScreen() {
         </Card>
       )}
 
-      {/* Achievements */}
-      <Card className="bg-card/50 backdrop-blur">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center justify-between text-base">
-            <span>🏅 Достижения</span>
-            <span className="text-muted-foreground text-sm font-normal">
-              {achievements.length}/{ALL_ACHIEVEMENT_DEFS.length}
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-3 gap-2">
-            {ALL_ACHIEVEMENT_DEFS.map((def) => {
-              const earned = achievements.find((a) => a.code === def.code);
-              return (
-                <div
-                  key={def.code}
-                  className={`flex flex-col items-center rounded-lg p-2 text-center ${
-                    earned ? "bg-yellow-500/10" : "bg-muted/20 opacity-50 grayscale"
-                  }`}
-                >
-                  <span className="text-2xl">{def.emoji}</span>
-                  <p className="mt-1 text-[11px] leading-tight font-medium">{def.label}</p>
-                  {earned ? (
-                    <p className="text-muted-foreground mt-0.5 text-[10px]">
-                      {new Date(earned.obtainedAt).toLocaleDateString("ru-RU", {
-                        day: "numeric",
-                        month: "short",
-                      })}
-                    </p>
-                  ) : (
-                    <p className="text-muted-foreground/60 mt-0.5 text-[10px] leading-tight">
-                      {def.desc}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+      <ProfileAchievementsCard achievements={achievements} />
 
       {/* AI Patterns History */}
       {aiPatterns.filter((p) => p.leakType !== "tg_input_patterns").length > 0 && (
@@ -689,142 +603,11 @@ export function ProfileScreen() {
         </CardContent>
       </Card>
 
-      {/* Settings */}
-      <Card className="bg-card/50 backdrop-blur">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Settings className="h-5 w-5" />
-            Настройки
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-3">
-            <p className="text-muted-foreground text-xs tracking-wide uppercase">Уведомления</p>
-            {[
-              {
-                key: "ritualReminders" as keyof UserSettings,
-                label: "Напоминания по ритуалам",
-                icon: <Bell className="text-muted-foreground h-5 w-5" />,
-              },
-              {
-                key: "taskReminders" as keyof UserSettings,
-                label: "Напоминания по делам",
-                icon: <Bell className="text-muted-foreground h-5 w-5" />,
-              },
-            ].map(({ key, label, icon }) => (
-              <div key={key} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {icon}
-                  <Label className="text-sm">{label}</Label>
-                </div>
-                <Switch
-                  checked={settings[key] as boolean}
-                  onCheckedChange={(checked) => void handleSettingChange(key, checked)}
-                />
-              </div>
-            ))}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Scale className="text-muted-foreground h-5 w-5" />
-                <div>
-                  <Label className="text-sm">Напоминание о весе</Label>
-                  <p className="text-muted-foreground text-xs">Если не записал сегодня</p>
-                </div>
-              </div>
-              <Switch
-                checked={settings.weightReminder ?? false}
-                onCheckedChange={(checked) => void handleSettingChange("weightReminder", checked)}
-              />
-            </div>
-            {settings.weightReminder && (
-              <div className="flex items-center justify-between pl-8">
-                <Label className="text-muted-foreground text-sm">Время напоминания</Label>
-                <Input
-                  type="time"
-                  value={settings.weightReminderTime ?? "08:00"}
-                  onChange={(e) => void handleSettingChange("weightReminderTime", e.target.value)}
-                  className="h-8 w-28 text-sm"
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="border-border/50 space-y-3 border-t pt-3">
-            <p className="text-muted-foreground text-xs tracking-wide uppercase">Активные зоны</p>
-            <div className="flex flex-wrap gap-2">
-              {ZONES_CONFIG.map(({ key, label, emoji }) => (
-                <Badge
-                  key={key}
-                  variant={settings[key as keyof UserSettings] ? "default" : "outline"}
-                  className={`cursor-pointer transition-all ${
-                    settings[key as keyof UserSettings]
-                      ? "bg-primary text-primary-foreground"
-                      : "opacity-50"
-                  }`}
-                  onClick={() =>
-                    void handleSettingChange(
-                      key as keyof UserSettings,
-                      !settings[key as keyof UserSettings]
-                    )
-                  }
-                >
-                  {emoji} {label}
-                </Badge>
-              ))}
-            </div>
-          </div>
-
-          <div className="border-border/50 space-y-3 border-t pt-3">
-            <p className="text-muted-foreground text-xs tracking-wide uppercase">
-              Виджеты главного экрана
-            </p>
-            {[
-              { id: "weight", label: "Вес" },
-              { id: "wellbeing", label: "Велнес" },
-              { id: "mood", label: "Настроение / Энергия" },
-              { id: "water", label: "Вода (в сводке)" },
-              { id: "food", label: "Еда (в сводке)" },
-              { id: "rituals", label: "Ритуалы (в сводке)" },
-              { id: "supplements", label: "БАДы (в сводке)" },
-              { id: "quickinput", label: "Быстрый ввод" },
-              { id: "ai_recommendations", label: "AI Рекомендации" },
-              { id: "daily_tip", label: "Совет дня (AI)" },
-              { id: "transformation", label: "AI-нарратив «Как я изменился»" },
-              { id: "challenges", label: "Активные челленджи" },
-            ].map(({ id, label }) => {
-              const hidden = (settings.hiddenWidgets ?? []).includes(id);
-              return (
-                <div key={id} className="flex items-center justify-between">
-                  <Label className="text-sm">{label}</Label>
-                  <Switch checked={!hidden} onCheckedChange={() => void handleToggleWidget(id)} />
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="border-border/50 space-y-3 border-t pt-3">
-            <p className="text-muted-foreground text-xs tracking-wide uppercase">Тема оформления</p>
-            <Select
-              value={settings.theme}
-              onValueChange={(value) => void handleSettingChange("theme", value)}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Выберите тему" />
-              </SelectTrigger>
-              <SelectContent>
-                {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
-                  <SelectItem key={value} value={value}>
-                    <div className="flex items-center gap-2">
-                      <Icon className="h-4 w-4" />
-                      {label}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+      <ProfileSettingsCard
+        settings={settings}
+        handleSettingChange={handleSettingChange}
+        handleToggleWidget={handleToggleWidget}
+      />
 
       {/* Feedback */}
       <Card className="bg-card/50 backdrop-blur">
@@ -933,201 +716,27 @@ export function ProfileScreen() {
             </CardContent>
           </Card>
 
-          <Card className="bg-card/50 border-emerald-500/20 backdrop-blur">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <MessageSquare className="h-5 w-5 text-emerald-400" />
-                  Фидбеки пользователей
-                  {adminFeedbackCounts["new"] > 0 && (
-                    <Badge className="border-red-500/30 bg-red-500/20 text-xs text-red-400">
-                      {adminFeedbackCounts["new"]} новых
-                    </Badge>
-                  )}
-                </CardTitle>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-xs"
-                  onClick={() => void loadAdminFeedbacks(adminFeedbackFilter)}
-                >
-                  Обновить
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex flex-wrap gap-1">
-                {(["new", "read", "resolved", "all"] as const).map((f) => (
-                  <Button
-                    key={f}
-                    size="sm"
-                    variant={adminFeedbackFilter === f ? "default" : "outline"}
-                    className={`h-7 text-xs ${adminFeedbackFilter === f ? "bg-primary" : ""}`}
-                    onClick={() => {
-                      setAdminFeedbackFilter(f);
-                      void loadAdminFeedbacks(f);
-                    }}
-                  >
-                    {f === "new"
-                      ? `Новые${adminFeedbackCounts["new"] ? ` (${adminFeedbackCounts["new"]})` : ""}`
-                      : f === "read"
-                        ? "Прочитано"
-                        : f === "resolved"
-                          ? "Решено"
-                          : "Все"}
-                  </Button>
-                ))}
-              </div>
-              {adminFeedbacks.length === 0 && !isLoadingAdminFeedbacks && (
-                <Button
-                  variant="outline"
-                  className="w-full text-sm"
-                  onClick={() => void loadAdminFeedbacks(adminFeedbackFilter)}
-                >
-                  Загрузить фидбеки
-                </Button>
-              )}
-              {isLoadingAdminFeedbacks && (
-                <p className="text-muted-foreground py-2 text-center text-sm">Загрузка...</p>
-              )}
-              <div className="space-y-2">
-                {adminFeedbacks.map((fb) => (
-                  <div
-                    key={fb.id}
-                    className={`space-y-1.5 rounded-xl border p-3 text-sm ${
-                      fb.status === "new"
-                        ? "border-yellow-500/30 bg-yellow-500/5"
-                        : fb.status === "resolved"
-                          ? "border-emerald-500/20 bg-emerald-500/5"
-                          : "border-white/10 bg-white/3"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <Badge
-                          className={`text-xs ${
-                            fb.type === "bug"
-                              ? "bg-red-500/20 text-red-400"
-                              : fb.type === "idea"
-                                ? "bg-blue-500/20 text-blue-400"
-                                : fb.type === "review"
-                                  ? "bg-yellow-500/20 text-yellow-400"
-                                  : "bg-white/10 text-white/60"
-                          }`}
-                        >
-                          {fb.type === "bug"
-                            ? "🐛 Баг"
-                            : fb.type === "idea"
-                              ? "💡 Идея"
-                              : fb.type === "review"
-                                ? "⭐ Отзыв"
-                                : "❓ Вопрос"}
-                        </Badge>
-                        <span className="text-muted-foreground text-xs">
-                          {fb.user?.firstName ?? fb.user?.username ?? "Аноним"}
-                          {" · "}день {fb.user?.day} · стрик {fb.user?.streak}
-                        </span>
-                      </div>
-                      <span className="text-muted-foreground shrink-0 text-xs">
-                        {new Date(fb.createdAt).toLocaleDateString("ru-RU", {
-                          day: "numeric",
-                          month: "short",
-                        })}
-                      </span>
-                    </div>
-                    <p className="text-sm leading-relaxed text-white/80">{fb.message}</p>
-                    {fb.status !== "resolved" && (
-                      <div className="flex gap-1.5 pt-1">
-                        {fb.status === "new" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-6 px-2 text-xs"
-                            onClick={() => void handleMarkFeedback(fb.id, "read")}
-                          >
-                            Прочитано
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-6 border-emerald-500/30 px-2 text-xs text-emerald-400"
-                          onClick={() => void handleMarkFeedback(fb.id, "resolved")}
-                        >
-                          Решено ✓
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {adminFeedbacks.length === 0 &&
-                  !isLoadingAdminFeedbacks &&
-                  adminFeedbackCounts["new"] !== undefined && (
-                    <p className="text-muted-foreground py-3 text-center text-sm">
-                      Нет фидбеков в этой категории
-                    </p>
-                  )}
-              </div>
-            </CardContent>
-          </Card>
+          <AdminFeedbacksCard
+            adminFeedbacks={adminFeedbacks}
+            adminFeedbackCounts={adminFeedbackCounts}
+            adminFeedbackFilter={adminFeedbackFilter}
+            setAdminFeedbackFilter={setAdminFeedbackFilter}
+            isLoadingAdminFeedbacks={isLoadingAdminFeedbacks}
+            loadAdminFeedbacks={loadAdminFeedbacks}
+            handleMarkFeedback={handleMarkFeedback}
+          />
         </>
       )}
 
       <p className="text-muted-foreground text-center text-xs">LeakFixer v1.0.0 • Next.js 16</p>
 
-      {/* Add Measurement Dialog */}
-      <Dialog open={showMeasurements} onOpenChange={setShowMeasurements}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Добавить замер</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-4">
-            <div className="space-y-2">
-              <Label>Тип замера</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {MEASUREMENT_TYPES.map(({ key, label }) => (
-                  <Button
-                    key={key}
-                    variant={newMeasurement.type === key ? "default" : "outline"}
-                    size="sm"
-                    className={`text-xs ${newMeasurement.type === key ? "bg-primary" : ""}`}
-                    onClick={() => setNewMeasurement((prev) => ({ ...prev, type: key }))}
-                  >
-                    {label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="value">Значение</Label>
-              <Input
-                id="value"
-                type="number"
-                step="0.1"
-                placeholder={`Введите значение в ${MEASUREMENT_TYPES.find((t) => t.key === newMeasurement.type)?.unit ?? ""}`}
-                value={newMeasurement.value}
-                onChange={(e) => setNewMeasurement((prev) => ({ ...prev, value: e.target.value }))}
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setShowMeasurements(false)}
-              >
-                Отмена
-              </Button>
-              <Button
-                className="bg-primary flex-1"
-                onClick={() => void handleAddMeasurement()}
-                disabled={!newMeasurement.value}
-              >
-                Сохранить
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <AddMeasurementDialog
+        open={showMeasurements}
+        onOpenChange={setShowMeasurements}
+        newMeasurement={newMeasurement}
+        setNewMeasurement={setNewMeasurement}
+        handleAddMeasurement={handleAddMeasurement}
+      />
     </div>
   );
 }
