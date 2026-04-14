@@ -1,8 +1,6 @@
 "use client";
 
 import { useAppStore } from "@/lib/store";
-import { showErrorToast, showSuccessToast, isOnline } from "@/lib/network-utils";
-import { useTheme } from "next-themes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,42 +21,24 @@ import {
   User,
   Settings,
   Bell,
-  Moon,
-  Globe,
   ChevronRight,
   Trophy,
   Flame,
   Target,
   Dumbbell,
   Scale,
-  Droplets,
   Edit,
   TrendingUp,
   TrendingDown,
   Users,
   Plus,
   Ruler,
-  Heart,
   Brain,
   Zap,
-  Calendar,
   MessageSquare,
-  Bug,
-  Lightbulb,
-  HelpCircle,
-  Star,
-  Coffee,
-  ExternalLink,
   Check,
-  Sun,
-  Monitor,
   Sparkles,
-  Wallet,
-  StickyNote,
-  BookOpen,
-  Download,
 } from "lucide-react";
-import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ATTRIBUTE_LABELS, type AttributeKey } from "@/lib/rituals/data";
 import {
@@ -66,52 +46,11 @@ import {
   FEEDBACK_TYPES,
   ZONES_CONFIG,
   THEME_OPTIONS,
-  type Measurement,
-  type Buddy,
+  ALL_ACHIEVEMENT_DEFS,
+  LEAK_TYPE_LABELS_PROFILE,
   type UserSettings,
-  type ActivityStats,
-  type UserAttribute,
-} from "@/features/profile";
-import { QuickAccess, DonateCard } from "@/features/profile";
-
-// ─── All achievement definitions (earned + locked for motivation) ─────────────
-const ALL_ACHIEVEMENT_DEFS = [
-  {
-    code: "GREAT_DAY_FIRST",
-    emoji: "🌟",
-    label: "Отличный день!",
-    desc: "Набрать 80+ баллов за день",
-  },
-  { code: "QUALITY_WEEK", emoji: "🏆", label: "Неделя качества", desc: "7 дней подряд 70+ баллов" },
-  { code: "STREAK_7", emoji: "🔥", label: "7 дней подряд", desc: "Серия из 7 дней" },
-  { code: "STREAK_30", emoji: "💎", label: "Месяц силы", desc: "Серия из 30 дней" },
-  { code: "WATER_WEEK", emoji: "💧", label: "Водный марафон", desc: "7 дней норма воды" },
-  { code: "GYM_10", emoji: "💪", label: "Железный", desc: "10 тренировок выполнено" },
-  {
-    code: "CHALLENGE_FIRST",
-    emoji: "🏆",
-    label: "Первый вызов",
-    desc: "Завершить первый челлендж",
-  },
-];
-
-const LEAK_TYPE_LABELS_PROFILE: Record<string, string> = {
-  low_energy: "Низкая энергия",
-  chronic_low_energy: "Хроническая усталость",
-  no_gym: "Мало тренировок",
-  gym_dropout: "Бросил зал",
-  ritual_consistency: "Непостоянство ритуалов",
-  ritual_erosion: "Эрозия ритуалов",
-  missed_checkins: "Пропуск чек-инов",
-  calorie_spikes: "Скачки калорий",
-  no_habits: "Нет привычек",
-  weekend_ritual_drop: "Срыв в выходные",
-  high_stress: "Высокий стресс",
-  sleep_deficit: "Дефицит сна",
-  expense_spike: "Скачок расходов",
-  tracking_dropout: "Не ввожу данные",
-  low_tracking: "Мало трекинга",
-};
+} from "@/features/profile/constants";
+import { QuickAccess, DonateCard, useProfileScreen } from "@/features/profile";
 
 function WeightSparkline({ data }: { data: Array<{ date: string; weight: number }> }) {
   if (data.length < 2) return null;
@@ -152,394 +91,63 @@ function WeightSparkline({ data }: { data: Array<{ date: string; weight: number 
 }
 
 export function ProfileScreen() {
-  const { user, profile, isDemoMode, isOwnerMode, setScreen } = useAppStore();
-  const { setTheme } = useTheme();
-  const [stats, setStats] = useState({
-    totalWorkouts: 0,
-    totalCaloriesBurned: 0,
-    totalWaterMl: 0,
-  });
-  const [measurements, setMeasurements] = useState<Record<string, Measurement>>({});
-  const [firstMeasurements, setFirstMeasurements] = useState<
-    Record<string, { value: number; date: string }>
-  >({});
-  const [buddies, setBuddies] = useState<Buddy[]>([]);
-  const [attributes, setAttributes] = useState<UserAttribute[]>([]);
-  const [showMeasurements, setShowMeasurements] = useState(false);
-  const [newMeasurement, setNewMeasurement] = useState({ type: "weight", value: "" });
+  const { user, isDemoMode, isOwnerMode, setScreen } = useAppStore();
 
-  // Personal records (5.26)
-  const [topPRs, setTopPRs] = useState<
-    Array<{ templateId: string; name: string; maxWeight: number }>
-  >([]);
-  const [prHistory, setPrHistory] = useState<
-    Record<string, Array<{ date: string; weight: number }>>
-  >({});
+  const {
+    stats,
+    measurements,
+    firstMeasurements,
+    buddies,
+    attributes,
+    showMeasurements,
+    setShowMeasurements,
+    newMeasurement,
+    setNewMeasurement,
+    topPRs,
+    prHistory,
+    communityStats,
+    achievements,
+    aiPatterns,
+    transformation,
+    transformationLoading,
+    bio,
+    setBio,
+    isEditingBio,
+    setIsEditingBio,
+    settings,
+    activityStats,
+    feedback,
+    setFeedback,
+    feedbackSent,
+    adminFeedbacks,
+    adminFeedbackCounts,
+    adminFeedbackFilter,
+    setAdminFeedbackFilter,
+    isLoadingAdminFeedbacks,
+    handleSaveBio,
+    handleToggleWidget,
+    handleSettingChange,
+    handleSendFeedback,
+    loadAdminFeedbacks,
+    handleMarkFeedback,
+    handleAddMeasurement,
+  } = useProfileScreen();
 
-  // Community percentile (3.10)
-  const [communityStats, setCommunityStats] = useState<{
-    streakPercentile: number;
-    pointsPercentile: number;
-    totalUsers: number;
-  } | null>(null);
-
-  // Achievements
-  const [achievements, setAchievements] = useState<Array<{ code: string; obtainedAt: string }>>([]);
-
-  // AI patterns history
-  const [aiPatterns, setAiPatterns] = useState<
-    Array<{ leakType: string; analysisCount: number; whatWorked: unknown[]; updatedAt: string }>
-  >([]);
-
-  // AI transformation narrative (2.4)
-  const [transformation, setTransformation] = useState<{
-    narrative: string;
-    cached: boolean;
-    createdAt: string;
-  } | null>(null);
-  const [transformationLoading, setTransformationLoading] = useState(false);
-
-  // New state
-  const [bio, setBio] = useState("");
-  const [isEditingBio, setIsEditingBio] = useState(false);
-  const [settings, setSettings] = useState<UserSettings>({
-    ritualReminders: true,
-    taskReminders: true,
-    zoneLeakfixerEnabled: true,
-    zoneAiEnabled: true,
-    zonePokerEnabled: true,
-    zoneHealthEnabled: true,
-    theme: "system",
-  });
-  const [activityStats, setActivityStats] = useState<ActivityStats>({
-    activeRituals: 0,
-    completedTasks7Days: 0,
-    activeChains: 0,
-    completedChains: 0,
-    inProgressContent: 0,
-  });
-  const [feedback, setFeedback] = useState({ type: "idea", message: "" });
-  const [feedbackSent, setFeedbackSent] = useState(false);
-  const [adminFeedbacks, setAdminFeedbacks] = useState<
-    Array<{
-      id: string;
-      type: string;
-      message: string;
-      status: string;
-      createdAt: string;
-      user: { firstName: string | null; username: string | null; day: number; streak: number };
-    }>
-  >([]);
-  const [adminFeedbackCounts, setAdminFeedbackCounts] = useState<Record<string, number>>({});
-  const [adminFeedbackFilter, setAdminFeedbackFilter] = useState<string>("new");
-  const [isLoadingAdminFeedbacks, setIsLoadingAdminFeedbacks] = useState(false);
-
-  // Load all data
-  useEffect(() => {
-    const loadData = async () => {
-      if (!user?.id) return;
-
-      try {
-        // Load measurements
-        const measurementsRes = await fetch(`/api/measurements?userId=${user.id}`);
-        if (measurementsRes.ok) {
-          const measurementsData = await measurementsRes.json();
-          setMeasurements(measurementsData.latestByType || {});
-          setFirstMeasurements(measurementsData.firstByType || {});
-        }
-
-        // Load buddies
-        const buddiesRes = await fetch(`/api/buddies?userId=${user.id}`);
-        if (buddiesRes.ok) {
-          const buddiesData = await buddiesRes.json();
-          setBuddies(buddiesData.buddies || []);
-        }
-
-        // Load attributes
-        const attrsRes = await fetch(`/api/rituals/attributes?userId=${user.id}`);
-        if (attrsRes.ok) {
-          const attrsData = await attrsRes.json();
-          setAttributes(attrsData.attributes || []);
-        }
-
-        // Load settings
-        const settingsRes = await fetch(`/api/settings?userId=${user.id}`);
-        let settingsData: { settings?: { hiddenWidgets?: string[]; theme?: string } } = {};
-        if (settingsRes.ok) {
-          settingsData = await settingsRes.json();
-          if (settingsData.settings) {
-            setSettings(settingsData.settings as unknown as UserSettings);
-            // Apply saved theme
-            if (settingsData.settings.theme) {
-              setTheme(settingsData.settings.theme);
-            }
-          }
-        }
-
-        // Load activity stats
-        const statsRes = await fetch(`/api/stats?userId=${user.id}`);
-        const statsData = statsRes.ok ? await statsRes.json() : {};
-        if (statsData.stats) {
-          setActivityStats({
-            activeRituals: statsData.stats.activeRituals || 0,
-            completedTasks7Days: statsData.stats.completedTasks7Days || 0,
-            activeChains: statsData.stats.activeChains || 0,
-            completedChains: statsData.stats.completedChains || 0,
-            inProgressContent: statsData.stats.inProgressContent || 0,
-          });
-          setAttributes(statsData.stats.attributes || attributes);
-
-          // Set real workout count from API
-          setStats((prev) => ({
-            ...prev,
-            totalWorkouts: statsData.stats.totalWorkouts || 0,
-          }));
-        }
-
-        // Load personal records (5.26)
-        fetch(`/api/gym/records?userId=${user.id}`)
-          .then((r) => (r.ok ? r.json() : null))
-          .then((d) => {
-            if (!d) return;
-            if (d.topPRs) setTopPRs(d.topPRs.slice(0, 5));
-            if (d.history) setPrHistory(d.history);
-          })
-          .catch(() => {
-            /* silent */
-          });
-
-        // Load community percentile (3.10)
-        fetch(`/api/stats/community?userId=${user.id}`)
-          .then((r) => (r.ok ? r.json() : null))
-          .then((d) => {
-            if (d?.success)
-              setCommunityStats({
-                streakPercentile: d.streakPercentile,
-                pointsPercentile: d.pointsPercentile,
-                totalUsers: d.totalUsers,
-              });
-          })
-          .catch(() => {
-            /* silent */
-          });
-
-        // Load achievements
-        fetch(`/api/achievements/check?userId=${user.id}`)
-          .then((r) => (r.ok ? r.json() : null))
-          .then((d) => {
-            if (d?.achievements) setAchievements(d.achievements);
-          })
-          .catch(() => {
-            /* silent */
-          });
-
-        // Load AI patterns history
-        fetch(`/api/ai/patterns?userId=${user.id}`)
-          .then((r) => (r.ok ? r.json() : null))
-          .then((d) => {
-            if (d?.patterns) setAiPatterns(d.patterns);
-          })
-          .catch(() => {
-            /* silent */
-          });
-
-        // Load AI transformation narrative (2.4) — only if 30+ days and not hidden
-        if (
-          (user.day ?? 0) >= 30 &&
-          !(settingsData.settings?.hiddenWidgets ?? []).includes("transformation")
-        ) {
-          setTransformationLoading(true);
-          fetch(`/api/ai/transformation?userId=${user.id}`)
-            .then((r) => (r.ok ? r.json() : null))
-            .then((d) => {
-              if (d?.narrative) setTransformation(d);
-            })
-            .catch(() => {
-              /* silent */
-            })
-            .finally(() => setTransformationLoading(false));
-        }
-
-        // Set bio from profile
-        if (profile?.bio) {
-          setBio(profile.bio);
-        }
-      } catch (error) {
-        showErrorToast(error, "load data");
-      }
-    };
-
-    loadData();
-  }, [user?.id, profile?.bio]);
-
-  // Save bio
-  const handleSaveBio = async () => {
-    if (!user?.id) return;
-    try {
-      await fetch("/api/user", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          profile: { bio },
-        }),
-      });
-      setIsEditingBio(false);
-      showSuccessToast("Биография сохранена");
-    } catch (error) {
-      showErrorToast(error, "save bio");
-    }
-  };
-
-  // Update setting
-  const handleToggleWidget = async (widgetId: string) => {
-    const current = settings.hiddenWidgets ?? [];
-    const updated = current.includes(widgetId)
-      ? current.filter((w) => w !== widgetId)
-      : [...current, widgetId];
-    const newSettings = { ...settings, hiddenWidgets: updated };
-    setSettings(newSettings);
-    if (user?.id) {
-      try {
-        await fetch("/api/settings", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: user.id, hiddenWidgets: updated }),
-        });
-      } catch (error) {
-        showErrorToast(error, "save widget setting");
-      }
-    }
-  };
-
-  const handleSettingChange = async (key: keyof UserSettings, value: boolean | string) => {
-    const newSettings = { ...settings, [key]: value };
-    setSettings(newSettings);
-
-    // Apply theme immediately
-    if (key === "theme" && typeof value === "string") {
-      setTheme(value);
-    }
-
-    if (user?.id) {
-      try {
-        await fetch("/api/settings", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: user.id, ...newSettings }),
-        });
-      } catch (error) {
-        showErrorToast(error, "save setting");
-      }
-    }
-  };
-
-  // Send feedback
-  const handleSendFeedback = async () => {
-    if (!user?.id || !feedback.message.trim()) return;
-
-    try {
-      const res = await fetch("/api/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          type: feedback.type,
-          message: feedback.message,
-        }),
-      });
-      if (!res.ok) throw new Error("send failed");
-      setFeedback({ type: "idea", message: "" });
-      setFeedbackSent(true);
-      setTimeout(() => setFeedbackSent(false), 3000);
-    } catch (error) {
-      showErrorToast(error, "send feedback");
-    }
-  };
-
-  const loadAdminFeedbacks = async (filter = adminFeedbackFilter) => {
-    if (!user?.id) return;
-    setIsLoadingAdminFeedbacks(true);
-    try {
-      const url = `/api/admin/feedback?userId=${user.id}${filter !== "all" ? `&status=${filter}` : ""}`;
-      const res = await fetch(url);
-      if (!res.ok) return;
-      const data = await res.json();
-      setAdminFeedbacks(data.feedbacks || []);
-      setAdminFeedbackCounts(data.counts || {});
-    } catch {
-      /* silent */
-    } finally {
-      setIsLoadingAdminFeedbacks(false);
-    }
-  };
-
-  const handleMarkFeedback = async (feedbackId: string, status: string) => {
-    if (!user?.id) return;
-    try {
-      await fetch("/api/admin/feedback", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, feedbackId, status }),
-      });
-      setAdminFeedbacks((prev) => prev.map((f) => (f.id === feedbackId ? { ...f, status } : f)));
-      setAdminFeedbackCounts((prev) => {
-        const old = adminFeedbacks.find((f) => f.id === feedbackId);
-        if (!old) return prev;
-        return {
-          ...prev,
-          [old.status]: Math.max(0, (prev[old.status] || 0) - 1),
-          [status]: (prev[status] || 0) + 1,
-        };
-      });
-    } catch {
-      /* silent */
-    }
-  };
-
-  const handleAddMeasurement = async () => {
-    if (!user?.id || !newMeasurement.value) return;
-
-    try {
-      await fetch("/api/measurements", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          type: newMeasurement.type,
-          value: parseFloat(newMeasurement.value),
-        }),
-      });
-
-      // Refresh measurements
-      const res = await fetch(`/api/measurements?userId=${user.id}`);
-      const data = await res.json();
-      setMeasurements(data.latestByType || {});
-      setFirstMeasurements(data.firstByType || {});
-      setShowMeasurements(false);
-      setNewMeasurement({ type: "weight", value: "" });
-      showSuccessToast("Замер добавлен");
-    } catch (error) {
-      showErrorToast(error, "add measurement");
-    }
-  };
-
-  const initials = user?.firstName?.[0] || user?.username?.[0]?.toUpperCase() || "U";
+  const initials = user?.firstName?.[0] ?? user?.username?.[0]?.toUpperCase() ?? "U";
   const displayName = user?.firstName
     ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ""}`
-    : user?.username || "Пользователь";
+    : (user?.username ?? "Пользователь");
 
   return (
     <div className="flex flex-col gap-4 pb-20">
-      {/* Header */}
       <h1 className="text-foreground text-2xl font-bold">Профиль</h1>
 
-      {/* User card with avatar, name and bio */}
+      {/* User card */}
       <Card className="bg-card/50 backdrop-blur">
         <CardContent className="pt-4">
           <div className="flex items-start gap-4">
             <Avatar className="border-primary/20 h-16 w-16 border-2">
-              <AvatarImage src={user?.photoUrl || undefined} />
+              <AvatarImage src={user?.photoUrl ?? undefined} />
               <AvatarFallback className="bg-primary/10 text-primary text-xl">
                 {initials}
               </AvatarFallback>
@@ -549,17 +157,16 @@ export function ProfileScreen() {
               {user?.username && <p className="text-muted-foreground text-sm">@{user.username}</p>}
               <div className="mt-1 flex items-center gap-2">
                 <Badge variant="secondary" className="text-xs">
-                  День {user?.day || 1}
+                  День {user?.day ?? 1}
                 </Badge>
                 <Badge variant="secondary" className="text-xs">
                   <Flame className="mr-1 h-3 w-3 text-orange-400" />
-                  {user?.streak || 0}
+                  {user?.streak ?? 0}
                 </Badge>
               </div>
             </div>
           </div>
 
-          {/* Bio section */}
           <div className="border-border/50 mt-4 border-t pt-4">
             {isEditingBio ? (
               <div className="space-y-2">
@@ -576,7 +183,7 @@ export function ProfileScreen() {
                     <Button variant="ghost" size="sm" onClick={() => setIsEditingBio(false)}>
                       Отмена
                     </Button>
-                    <Button size="sm" onClick={handleSaveBio}>
+                    <Button size="sm" onClick={() => void handleSaveBio()}>
                       <Check className="mr-1 h-4 w-4" />
                       Сохранить
                     </Button>
@@ -602,19 +209,19 @@ export function ProfileScreen() {
         </CardContent>
       </Card>
 
-      {/* Points / Streak / Workouts */}
+      {/* Stats grid */}
       <div className="grid grid-cols-3 gap-3">
         <Card className="bg-card/50 backdrop-blur">
           <CardContent className="pt-4 text-center">
             <Trophy className="mx-auto mb-1 h-5 w-5 text-yellow-400" />
-            <p className="text-primary text-xl font-bold">{user?.points || 0}</p>
+            <p className="text-primary text-xl font-bold">{user?.points ?? 0}</p>
             <p className="text-muted-foreground text-xs">Очки</p>
           </CardContent>
         </Card>
         <Card className="bg-card/50 backdrop-blur">
           <CardContent className="pt-4 text-center">
             <Target className="mx-auto mb-1 h-5 w-5 text-emerald-400" />
-            <p className="text-primary text-xl font-bold">{user?.streak || 0}</p>
+            <p className="text-primary text-xl font-bold">{user?.streak ?? 0}</p>
             <p className="text-muted-foreground text-xs">Серия</p>
           </CardContent>
         </Card>
@@ -627,7 +234,7 @@ export function ProfileScreen() {
         </Card>
       </div>
 
-      {/* Progress since day 1 (2.4) */}
+      {/* Progress since day 1 */}
       {user && user.day > 1 && (
         <Card className="from-primary/5 to-card/50 border-primary/20 border bg-gradient-to-r">
           <CardContent className="pt-4 pb-3">
@@ -659,7 +266,6 @@ export function ProfileScreen() {
                 <div className="text-muted-foreground text-[10px]">тренировок</div>
               </div>
             </div>
-            {/* Weight delta since day 1 (2.4) */}
             {measurements["weight"] &&
               firstMeasurements["weight"] &&
               measurements["weight"].value !== firstMeasurements["weight"].value && (
@@ -685,7 +291,7 @@ export function ProfileScreen() {
         </Card>
       )}
 
-      {/* AI Transformation narrative (2.4) */}
+      {/* AI Transformation */}
       {(user?.day ?? 0) >= 30 &&
         !(settings.hiddenWidgets ?? []).includes("transformation") &&
         (transformationLoading || transformation) && (
@@ -716,7 +322,7 @@ export function ProfileScreen() {
           </Card>
         )}
 
-      {/* Personal Records (5.26) */}
+      {/* Personal Records */}
       {topPRs.length > 0 && (
         <Card className="bg-card/50 backdrop-blur">
           <CardHeader className="pb-2">
@@ -848,49 +454,47 @@ export function ProfileScreen() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-muted/30 flex items-center gap-3 rounded-lg p-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20">
-                <Zap className="h-5 w-5 text-emerald-400" />
+            {[
+              {
+                icon: <Zap className="h-5 w-5 text-emerald-400" />,
+                bg: "bg-emerald-500/20",
+                value: activityStats.activeRituals,
+                label: "Активных ритуалов",
+              },
+              {
+                icon: <Check className="h-5 w-5 text-cyan-400" />,
+                bg: "bg-cyan-500/20",
+                value: activityStats.completedTasks7Days,
+                label: "Дел за 7 дней",
+              },
+              {
+                icon: <Target className="h-5 w-5 text-orange-400" />,
+                bg: "bg-orange-500/20",
+                value: `${activityStats.activeChains}/${activityStats.completedChains}`,
+                label: "Цепочек акт/зав",
+              },
+              {
+                icon: <Brain className="h-5 w-5 text-purple-400" />,
+                bg: "bg-purple-500/20",
+                value: activityStats.inProgressContent,
+                label: "В процессе изучения",
+              },
+            ].map(({ icon, bg, value, label }) => (
+              <div key={label} className="bg-muted/30 flex items-center gap-3 rounded-lg p-3">
+                <div className={`flex h-10 w-10 items-center justify-center rounded-full ${bg}`}>
+                  {icon}
+                </div>
+                <div>
+                  <p className="text-lg font-bold">{value}</p>
+                  <p className="text-muted-foreground text-xs">{label}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-lg font-bold">{activityStats.activeRituals}</p>
-                <p className="text-muted-foreground text-xs">Активных ритуалов</p>
-              </div>
-            </div>
-            <div className="bg-muted/30 flex items-center gap-3 rounded-lg p-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-500/20">
-                <Check className="h-5 w-5 text-cyan-400" />
-              </div>
-              <div>
-                <p className="text-lg font-bold">{activityStats.completedTasks7Days}</p>
-                <p className="text-muted-foreground text-xs">Дел за 7 дней</p>
-              </div>
-            </div>
-            <div className="bg-muted/30 flex items-center gap-3 rounded-lg p-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-500/20">
-                <Target className="h-5 w-5 text-orange-400" />
-              </div>
-              <div>
-                <p className="text-lg font-bold">
-                  {activityStats.activeChains}/{activityStats.completedChains}
-                </p>
-                <p className="text-muted-foreground text-xs">Цепочек акт/зав</p>
-              </div>
-            </div>
-            <div className="bg-muted/30 flex items-center gap-3 rounded-lg p-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-500/20">
-                <Brain className="h-5 w-5 text-purple-400" />
-              </div>
-              <div>
-                <p className="text-lg font-bold">{activityStats.inProgressContent}</p>
-                <p className="text-muted-foreground text-xs">В процессе изучения</p>
-              </div>
-            </div>
+            ))}
           </div>
         </CardContent>
       </Card>
 
-      {/* Attributes / Characteristics */}
+      {/* Attributes */}
       <Card className="bg-card/50 backdrop-blur">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-base">
@@ -910,10 +514,9 @@ export function ProfileScreen() {
               ][]
             ).map(([key, value]) => {
               const attr = attributes.find((a) => a.key === key);
-              const points = attr?.points || 0;
-              const level = attr?.level || 1;
+              const points = attr?.points ?? 0;
+              const level = attr?.level ?? 1;
               const progress = points % 100;
-
               return (
                 <div key={key} className="space-y-1">
                   <div className="flex items-center justify-between">
@@ -936,7 +539,6 @@ export function ProfileScreen() {
         </CardContent>
       </Card>
 
-      {/* Quick Access */}
       <QuickAccess onNavigate={setScreen} />
 
       {/* Body Measurements */}
@@ -971,14 +573,12 @@ export function ProfileScreen() {
                   }}
                 >
                   <p className="text-primary text-xl font-bold">
-                    {measurement?.value?.toFixed(1) || "—"}
+                    {measurement?.value?.toFixed(1) ?? "—"}
                   </p>
                   <p className="text-muted-foreground text-xs">{label}</p>
                   {measurement && measurement.trend !== 0 && (
                     <p
-                      className={`mt-1 flex items-center justify-center gap-0.5 text-xs ${
-                        measurement.trend > 0 ? "text-emerald-400" : "text-red-400"
-                      }`}
+                      className={`mt-1 flex items-center justify-center gap-0.5 text-xs ${measurement.trend > 0 ? "text-emerald-400" : "text-red-400"}`}
                     >
                       {measurement.trend > 0 ? (
                         <TrendingUp className="h-3 w-3" />
@@ -1098,29 +698,31 @@ export function ProfileScreen() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Notifications */}
           <div className="space-y-3">
             <p className="text-muted-foreground text-xs tracking-wide uppercase">Уведомления</p>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Bell className="text-muted-foreground h-5 w-5" />
-                <Label className="text-sm">Напоминания по ритуалам</Label>
+            {[
+              {
+                key: "ritualReminders" as keyof UserSettings,
+                label: "Напоминания по ритуалам",
+                icon: <Bell className="text-muted-foreground h-5 w-5" />,
+              },
+              {
+                key: "taskReminders" as keyof UserSettings,
+                label: "Напоминания по делам",
+                icon: <Bell className="text-muted-foreground h-5 w-5" />,
+              },
+            ].map(({ key, label, icon }) => (
+              <div key={key} className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {icon}
+                  <Label className="text-sm">{label}</Label>
+                </div>
+                <Switch
+                  checked={settings[key] as boolean}
+                  onCheckedChange={(checked) => void handleSettingChange(key, checked)}
+                />
               </div>
-              <Switch
-                checked={settings.ritualReminders}
-                onCheckedChange={(checked) => handleSettingChange("ritualReminders", checked)}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Bell className="text-muted-foreground h-5 w-5" />
-                <Label className="text-sm">Напоминания по делам</Label>
-              </div>
-              <Switch
-                checked={settings.taskReminders}
-                onCheckedChange={(checked) => handleSettingChange("taskReminders", checked)}
-              />
-            </div>
+            ))}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Scale className="text-muted-foreground h-5 w-5" />
@@ -1130,8 +732,8 @@ export function ProfileScreen() {
                 </div>
               </div>
               <Switch
-                checked={settings.weightReminder}
-                onCheckedChange={(checked) => handleSettingChange("weightReminder", checked)}
+                checked={settings.weightReminder ?? false}
+                onCheckedChange={(checked) => void handleSettingChange("weightReminder", checked)}
               />
             </div>
             {settings.weightReminder && (
@@ -1139,15 +741,14 @@ export function ProfileScreen() {
                 <Label className="text-muted-foreground text-sm">Время напоминания</Label>
                 <Input
                   type="time"
-                  value={settings.weightReminderTime || "08:00"}
-                  onChange={(e) => handleSettingChange("weightReminderTime", e.target.value)}
+                  value={settings.weightReminderTime ?? "08:00"}
+                  onChange={(e) => void handleSettingChange("weightReminderTime", e.target.value)}
                   className="h-8 w-28 text-sm"
                 />
               </div>
             )}
           </div>
 
-          {/* Zones */}
           <div className="border-border/50 space-y-3 border-t pt-3">
             <p className="text-muted-foreground text-xs tracking-wide uppercase">Активные зоны</p>
             <div className="flex flex-wrap gap-2">
@@ -1161,7 +762,7 @@ export function ProfileScreen() {
                       : "opacity-50"
                   }`}
                   onClick={() =>
-                    handleSettingChange(
+                    void handleSettingChange(
                       key as keyof UserSettings,
                       !settings[key as keyof UserSettings]
                     )
@@ -1173,7 +774,6 @@ export function ProfileScreen() {
             </div>
           </div>
 
-          {/* Home screen widgets (7.2/7.3) */}
           <div className="border-border/50 space-y-3 border-t pt-3">
             <p className="text-muted-foreground text-xs tracking-wide uppercase">
               Виджеты главного экрана
@@ -1196,18 +796,17 @@ export function ProfileScreen() {
               return (
                 <div key={id} className="flex items-center justify-between">
                   <Label className="text-sm">{label}</Label>
-                  <Switch checked={!hidden} onCheckedChange={() => handleToggleWidget(id)} />
+                  <Switch checked={!hidden} onCheckedChange={() => void handleToggleWidget(id)} />
                 </div>
               );
             })}
           </div>
 
-          {/* Theme */}
           <div className="border-border/50 space-y-3 border-t pt-3">
             <p className="text-muted-foreground text-xs tracking-wide uppercase">Тема оформления</p>
             <Select
               value={settings.theme}
-              onValueChange={(value) => handleSettingChange("theme", value)}
+              onValueChange={(value) => void handleSettingChange("theme", value)}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Выберите тему" />
@@ -1273,7 +872,7 @@ export function ProfileScreen() {
               </div>
               <Button
                 className="bg-primary w-full"
-                onClick={handleSendFeedback}
+                onClick={() => void handleSendFeedback()}
                 disabled={!feedback.message.trim()}
               >
                 <MessageSquare className="mr-2 h-4 w-4" />
@@ -1284,10 +883,8 @@ export function ProfileScreen() {
         </CardContent>
       </Card>
 
-      {/* Support / Donate */}
       <DonateCard />
 
-      {/* Demo notice */}
       {isDemoMode && (
         <Card className="border-amber-500/30 bg-amber-500/10">
           <CardContent className="pt-4">
@@ -1312,7 +909,6 @@ export function ProfileScreen() {
         </Card>
       )}
 
-      {/* Owner notice + Admin Feedbacks */}
       {isOwnerMode && (
         <>
           <Card className="border-emerald-500/30 bg-emerald-500/10">
@@ -1337,7 +933,6 @@ export function ProfileScreen() {
             </CardContent>
           </Card>
 
-          {/* Admin: Feedbacks from users */}
           <Card className="bg-card/50 border-emerald-500/20 backdrop-blur">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
@@ -1354,14 +949,13 @@ export function ProfileScreen() {
                   size="sm"
                   variant="outline"
                   className="text-xs"
-                  onClick={() => loadAdminFeedbacks(adminFeedbackFilter)}
+                  onClick={() => void loadAdminFeedbacks(adminFeedbackFilter)}
                 >
                   Обновить
                 </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              {/* Filter tabs */}
               <div className="flex flex-wrap gap-1">
                 {(["new", "read", "resolved", "all"] as const).map((f) => (
                   <Button
@@ -1371,7 +965,7 @@ export function ProfileScreen() {
                     className={`h-7 text-xs ${adminFeedbackFilter === f ? "bg-primary" : ""}`}
                     onClick={() => {
                       setAdminFeedbackFilter(f);
-                      loadAdminFeedbacks(f);
+                      void loadAdminFeedbacks(f);
                     }}
                   >
                     {f === "new"
@@ -1384,23 +978,18 @@ export function ProfileScreen() {
                   </Button>
                 ))}
               </div>
-
-              {/* Load button (lazy) */}
               {adminFeedbacks.length === 0 && !isLoadingAdminFeedbacks && (
                 <Button
                   variant="outline"
                   className="w-full text-sm"
-                  onClick={() => loadAdminFeedbacks(adminFeedbackFilter)}
+                  onClick={() => void loadAdminFeedbacks(adminFeedbackFilter)}
                 >
                   Загрузить фидбеки
                 </Button>
               )}
-
               {isLoadingAdminFeedbacks && (
                 <p className="text-muted-foreground py-2 text-center text-sm">Загрузка...</p>
               )}
-
-              {/* Feedback list */}
               <div className="space-y-2">
                 {adminFeedbacks.map((fb) => (
                   <div
@@ -1435,7 +1024,7 @@ export function ProfileScreen() {
                                 : "❓ Вопрос"}
                         </Badge>
                         <span className="text-muted-foreground text-xs">
-                          {fb.user?.firstName || fb.user?.username || "Аноним"}
+                          {fb.user?.firstName ?? fb.user?.username ?? "Аноним"}
                           {" · "}день {fb.user?.day} · стрик {fb.user?.streak}
                         </span>
                       </div>
@@ -1454,7 +1043,7 @@ export function ProfileScreen() {
                             size="sm"
                             variant="outline"
                             className="h-6 px-2 text-xs"
-                            onClick={() => handleMarkFeedback(fb.id, "read")}
+                            onClick={() => void handleMarkFeedback(fb.id, "read")}
                           >
                             Прочитано
                           </Button>
@@ -1463,7 +1052,7 @@ export function ProfileScreen() {
                           size="sm"
                           variant="outline"
                           className="h-6 border-emerald-500/30 px-2 text-xs text-emerald-400"
-                          onClick={() => handleMarkFeedback(fb.id, "resolved")}
+                          onClick={() => void handleMarkFeedback(fb.id, "resolved")}
                         >
                           Решено ✓
                         </Button>
@@ -1484,7 +1073,6 @@ export function ProfileScreen() {
         </>
       )}
 
-      {/* Version */}
       <p className="text-muted-foreground text-center text-xs">LeakFixer v1.0.0 • Next.js 16</p>
 
       {/* Add Measurement Dialog */}
@@ -1516,7 +1104,7 @@ export function ProfileScreen() {
                 id="value"
                 type="number"
                 step="0.1"
-                placeholder={`Введите значение в ${MEASUREMENT_TYPES.find((t) => t.key === newMeasurement.type)?.unit}`}
+                placeholder={`Введите значение в ${MEASUREMENT_TYPES.find((t) => t.key === newMeasurement.type)?.unit ?? ""}`}
                 value={newMeasurement.value}
                 onChange={(e) => setNewMeasurement((prev) => ({ ...prev, value: e.target.value }))}
               />
@@ -1531,7 +1119,7 @@ export function ProfileScreen() {
               </Button>
               <Button
                 className="bg-primary flex-1"
-                onClick={handleAddMeasurement}
+                onClick={() => void handleAddMeasurement()}
                 disabled={!newMeasurement.value}
               >
                 Сохранить

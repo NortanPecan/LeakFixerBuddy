@@ -1,28 +1,22 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useAppStore } from "@/lib/store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   StickyNote,
   Send,
   Link2,
   Calendar,
-  Filter,
-  Trash2,
   Edit3,
   Sparkles,
   ListTodo,
   Target,
   MoreHorizontal,
-  Plus,
   RefreshCw,
-  ArrowRight,
   CheckCircle2,
+  Trash2,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -32,7 +26,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   DropdownMenu,
@@ -46,554 +39,82 @@ import {
   getNoteTypeInfo,
   getNoteZoneInfo,
   parseReframeData,
-  serializeReframeData,
-  ReframeData,
-  ReframeAction,
   getReframePreview,
   countLinkedActions,
 } from "@/lib/notes-config";
 import { ReframeForm } from "@/components/ReframeForm";
-import { cn } from "@/lib/utils";
-import { showErrorToast, showSuccessToast, isOnline } from "@/lib/network-utils";
+import { useNotesScreen } from "@/features/notes/hooks/use-notes-screen";
 
-interface NoteLink {
-  id: string;
-  entity: string;
-  entityId: string;
-  fragment: string | null;
-  entityDetails?: {
-    type: "task" | "ritual" | "chain";
-    text?: string;
-    title?: string;
-    chain?: { id: string; title: string } | null;
-    status?: string;
-  };
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const days = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+  if (days === 0) return "Сегодня";
+  if (days === 1) return "Вчера";
+  if (days < 7) return `${days} дн. назад`;
+  return date.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
 }
 
-interface Note {
-  id: string;
-  text: string;
-  type: string;
-  zone: string;
-  date: string;
-  createdAt: string;
-  links: NoteLink[];
+function getPreviewText(text: string, maxLength = 80): string {
+  if (text.length <= maxLength) return text;
+  return text.substring(0, maxLength) + "...";
 }
 
 export function NotesScreen() {
-  const { user, setScreen } = useAppStore();
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [quickNote, setQuickNote] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [activeFilter, setActiveFilter] = useState("all");
-  const [activeZone, setActiveZone] = useState("all");
-  const [selectedNote, setSelectedNote] = useState<Note | null>(null);
-  const [showDetail, setShowDetail] = useState(false);
-  const [editText, setEditText] = useState("");
-  const [editType, setEditType] = useState("");
-  const [editZone, setEditZone] = useState("");
-  const [isEditing, setIsEditing] = useState(false);
-
-  // Chain step modal state
-  const [showChainModal, setShowChainModal] = useState(false);
-  const [activeChains, setActiveChains] = useState<{ id: string; title: string }[]>([]);
-  const [selectedChainId, setSelectedChainId] = useState<string>("");
-  const [chainStepText, setChainStepText] = useState("");
-  const [isLoadingChains, setIsLoadingChains] = useState(false);
-  const [isCreatingRitual, setIsCreatingRitual] = useState(false);
-
-  // Reframe modal state
-  const [showReframeModal, setShowReframeModal] = useState(false);
-  const [reframeEditData, setReframeEditData] = useState<ReframeData | undefined>();
-  const [reframeEditZone, setReframeEditZone] = useState<string>("general");
-  const [isSavingReframe, setIsSavingReframe] = useState(false);
-
-  // Reframe detail state
-  const [reframeDetailData, setReframeDetailData] = useState<ReframeData | null>(null);
-  const [reframeActionIndex, setReframeActionIndex] = useState<number | null>(null);
-
-  // Load notes
-  const loadNotes = useCallback(async () => {
-    if (!user?.id) return;
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams({
-        userId: user.id,
-        type: activeFilter,
-        zone: activeZone,
-      });
-      const response = await fetch(`/api/notes?${params}`);
-      const data = await response.json();
-      setNotes(data.notes || []);
-    } catch (error) {
-      showErrorToast(error, "load notes");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user?.id, activeFilter, activeZone]);
-
-  useEffect(() => {
-    loadNotes();
-  }, [loadNotes]);
-
-  // Quick save note
-  const handleQuickSave = async () => {
-    if (!user?.id || !quickNote.trim()) return;
-    setIsSaving(true);
-    try {
-      const response = await fetch("/api/notes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          text: quickNote.trim(),
-          type: "thought",
-          zone: "general",
-        }),
-      });
-      const data = await response.json();
-      if (data.note) {
-        setNotes((prev) => [data.note, ...prev]);
-        setQuickNote("");
-        showSuccessToast("Note created");
-      }
-    } catch (error) {
-      showErrorToast(error, "save note");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // Delete note
-  const handleDelete = async (id: string) => {
-    try {
-      await fetch(`/api/notes?id=${id}`, { method: "DELETE" });
-      setNotes((prev) => prev.filter((n) => n.id !== id));
-      setShowDetail(false);
-      setSelectedNote(null);
-      showSuccessToast("Note deleted");
-    } catch (error) {
-      showErrorToast(error, "delete note");
-    }
-  };
-
-  // Update note
-  const handleUpdate = async () => {
-    if (!selectedNote) return;
-    try {
-      const response = await fetch("/api/notes", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: selectedNote.id,
-          text: editText,
-          type: editType,
-          zone: editZone,
-        }),
-      });
-      const data = await response.json();
-      if (data.note) {
-        setNotes((prev) => prev.map((n) => (n.id === data.note.id ? data.note : n)));
-        setSelectedNote(data.note);
-        setIsEditing(false);
-        showSuccessToast("Note updated");
-      }
-    } catch (error) {
-      showErrorToast(error, "update note");
-    }
-  };
-
-  // Create task from note
-  const handleCreateTask = async () => {
-    if (!selectedNote || !user?.id) return;
-    try {
-      const response = await fetch("/api/notes/link", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          noteId: selectedNote.id,
-          entity: "task",
-          createEntity: true,
-          fragment: selectedNote.text.substring(0, 100),
-          entityData: {
-            userId: user.id,
-            text: selectedNote.text.substring(0, 200),
-          },
-        }),
-      });
-      const data = await response.json();
-      if (data.link) {
-        // Refresh notes to show the link
-        loadNotes();
-        setShowDetail(false);
-        // Navigate to tasks
-        setScreen("tasks");
-      }
-    } catch (error) {
-      showErrorToast(error, "create task");
-    }
-  };
-
-  // Create ritual from note
-  const handleCreateRitual = async () => {
-    if (!selectedNote || !user?.id || isCreatingRitual) return;
-    setIsCreatingRitual(true);
-    try {
-      // Shorten title: first sentence or max 50 chars
-      const text = selectedNote.text;
-      const firstSentence = text.split(/[.!?\n]/)[0];
-      const title =
-        firstSentence.length > 50
-          ? firstSentence.substring(0, 50).trim() + "..."
-          : firstSentence.trim() || text.substring(0, 50);
-
-      const response = await fetch("/api/notes/link", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          noteId: selectedNote.id,
-          entity: "ritual",
-          createEntity: true,
-          fragment: text.substring(0, 100),
-          entityData: {
-            userId: user.id,
-            title: title,
-          },
-        }),
-      });
-      const data = await response.json();
-      if (data.link) {
-        loadNotes();
-        setShowDetail(false);
-        setScreen("rituals");
-      }
-    } catch (error) {
-      showErrorToast(error, "create ritual");
-    } finally {
-      setIsCreatingRitual(false);
-    }
-  };
-
-  // Remove link from note
-  const handleRemoveLink = async (linkId: string) => {
-    if (!confirm("Удалить связь?")) return;
-    try {
-      await fetch(`/api/notes/link?id=${linkId}`, { method: "DELETE" });
-      // Update local state
-      if (selectedNote) {
-        setSelectedNote({
-          ...selectedNote,
-          links: selectedNote.links.filter((l) => l.id !== linkId),
-        });
-      }
-      loadNotes();
-      showSuccessToast("Связь удалена");
-    } catch (error) {
-      showErrorToast(error, "remove link");
-    }
-  };
-
-  // Load active chains for the modal
-  const loadActiveChains = async () => {
-    if (!user?.id) return;
-    setIsLoadingChains(true);
-    try {
-      const response = await fetch(`/api/chains?userId=${user.id}&status=active`);
-      const data = await response.json();
-      setActiveChains(data.chains || []);
-      if (data.chains?.length > 0) {
-        setSelectedChainId(data.chains[0].id);
-      }
-    } catch (error) {
-      showErrorToast(error, "load chains");
-    } finally {
-      setIsLoadingChains(false);
-    }
-  };
-
-  // Open chain step modal
-  const openChainModal = () => {
-    setChainStepText(selectedNote?.text.substring(0, 200) || "");
-    setShowDetail(false);
-    setShowChainModal(true);
-    loadActiveChains();
-  };
-
-  // Create chain step from note or reframe action
-  const handleCreateChainStep = async () => {
-    if (!user?.id || !selectedChainId || !chainStepText.trim()) return;
-    try {
-      const response = await fetch("/api/notes/link", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          noteId: selectedNote?.id,
-          entity: "task",
-          createEntity: true,
-          fragment: chainStepText.substring(0, 100),
-          entityData: {
-            userId: user.id,
-            text: chainStepText,
-            chainId: selectedChainId,
-          },
-        }),
-      });
-      const data = await response.json();
-      if (data.link) {
-        // If this was from a reframe action, update the linked entity
-        if (reframeActionIndex !== null && reframeDetailData) {
-          const updatedActions = [...reframeDetailData.actions];
-          updatedActions[reframeActionIndex] = {
-            ...updatedActions[reframeActionIndex],
-            linkedEntity: { type: "chainStep", id: data.entityId },
-          };
-          const updatedData = { ...reframeDetailData, actions: updatedActions };
-
-          await fetch("/api/notes", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              id: selectedNote?.id,
-              text: serializeReframeData(updatedData),
-            }),
-          });
-          setReframeDetailData(updatedData);
-          setReframeActionIndex(null);
-        }
-
-        loadNotes();
-        setShowChainModal(false);
-        setSelectedChainId("");
-        setChainStepText("");
-        setScreen("tasks");
-      }
-    } catch (error) {
-      showErrorToast(error, "create chain step");
-    }
-  };
-
-  // Open reframe modal for new note
-  const openNewReframeModal = () => {
-    setReframeEditData(undefined);
-    setReframeEditZone("general");
-    setShowReframeModal(true);
-  };
-
-  // Open reframe modal for editing
-  const openEditReframeModal = (note: Note) => {
-    const data = parseReframeData(note.text);
-    if (data) {
-      setReframeEditData(data);
-      setReframeEditZone(note.zone);
-      setSelectedNote(note);
-      setShowDetail(false);
-      setShowReframeModal(true);
-    }
-  };
-
-  // Save reframe note
-  const handleSaveReframe = async (data: ReframeData, zone: string) => {
-    if (!user?.id) return;
-    setIsSavingReframe(true);
-    try {
-      if (selectedNote && reframeEditData) {
-        // Update existing
-        const response = await fetch("/api/notes", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: selectedNote.id,
-            text: serializeReframeData(data),
-            zone,
-          }),
-        });
-        const result = await response.json();
-        if (result.note) {
-          setNotes((prev) => prev.map((n) => (n.id === result.note.id ? result.note : n)));
-          setShowReframeModal(false);
-          setSelectedNote(null);
-          setReframeEditData(undefined);
-          showSuccessToast("Reframe note updated");
-        }
-      } else {
-        // Create new
-        const response = await fetch("/api/notes", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: user.id,
-            text: serializeReframeData(data),
-            type: "reframe",
-            zone,
-          }),
-        });
-        const result = await response.json();
-        if (result.note) {
-          setNotes((prev) => [result.note, ...prev]);
-          setShowReframeModal(false);
-          showSuccessToast("Reframe note created");
-        }
-      }
-    } catch (error) {
-      showErrorToast(error, "save reframe");
-    } finally {
-      setIsSavingReframe(false);
-    }
-  };
-
-  // Create task from reframe action
-  const handleCreateTaskFromAction = async (actionIndex: number) => {
-    if (!selectedNote || !user?.id || !reframeDetailData) return;
-    const action = reframeDetailData.actions[actionIndex];
-    if (!action.text.trim()) return;
-
-    try {
-      const response = await fetch("/api/notes/link", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          noteId: selectedNote.id,
-          entity: "task",
-          createEntity: true,
-          fragment: action.text.substring(0, 100),
-          entityData: {
-            userId: user.id,
-            text: action.text,
-            zone: selectedNote.zone,
-          },
-        }),
-      });
-      const data = await response.json();
-      if (data.link) {
-        // Update reframe data with linked entity
-        const updatedActions = [...reframeDetailData.actions];
-        updatedActions[actionIndex] = {
-          ...action,
-          linkedEntity: { type: "task", id: data.entityId },
-        };
-        const updatedData = { ...reframeDetailData, actions: updatedActions };
-
-        // Update note text
-        await fetch("/api/notes", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: selectedNote.id,
-            text: serializeReframeData(updatedData),
-          }),
-        });
-
-        setReframeDetailData(updatedData);
-        loadNotes();
-        showSuccessToast("Task created from action");
-      }
-    } catch (error) {
-      showErrorToast(error, "create task from action");
-    }
-  };
-
-  // Open chain modal for action
-  const openChainModalForAction = (actionIndex: number) => {
-    if (!reframeDetailData) return;
-    setReframeActionIndex(actionIndex);
-    setChainStepText(reframeDetailData.actions[actionIndex].text);
-    setShowDetail(false);
-    setShowChainModal(true);
-    loadActiveChains();
-  };
-
-  // Create ritual from reframe action
-  const handleCreateRitualFromAction = async (actionIndex: number) => {
-    if (!selectedNote || !user?.id || !reframeDetailData) return;
-    const action = reframeDetailData.actions[actionIndex];
-    if (!action.text.trim()) return;
-
-    try {
-      const response = await fetch("/api/rituals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          title: action.text.substring(0, 100),
-          type: "regular",
-          category: "productivity",
-          days: [1, 2, 3, 4, 5, 6, 7],
-          timeWindow: "any",
-          goalShort: `Из рефрейминга: ${reframeDetailData.newView.substring(0, 50)}`,
-        }),
-      });
-      const data = await response.json();
-      if (data.ritual) {
-        // Update reframe data with linked entity
-        const updatedActions = [...reframeDetailData.actions];
-        updatedActions[actionIndex] = {
-          ...action,
-          linkedEntity: { type: "ritual", id: data.ritual.id },
-        };
-        const updatedData = { ...reframeDetailData, actions: updatedActions };
-
-        // Update note text
-        await fetch("/api/notes", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: selectedNote.id,
-            text: serializeReframeData(updatedData),
-          }),
-        });
-
-        setReframeDetailData(updatedData);
-        loadNotes();
-        showSuccessToast("Ritual created from action");
-      }
-    } catch (error) {
-      showErrorToast(error, "create ritual from action");
-    }
-  };
-
-  // Open note detail
-  const openNoteDetail = (note: Note) => {
-    setSelectedNote(note);
-    setEditText(note.text);
-    setEditType(note.type);
-    setEditZone(note.zone);
-    setIsEditing(false);
-
-    // Parse reframe data if applicable
-    if (note.type === "reframe") {
-      const data = parseReframeData(note.text);
-      setReframeDetailData(data);
-    } else {
-      setReframeDetailData(null);
-    }
-
-    setShowDetail(true);
-  };
-
-  // Format date
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-    if (days === 0) {
-      return "Сегодня";
-    } else if (days === 1) {
-      return "Вчера";
-    } else if (days < 7) {
-      return `${days} дн. назад`;
-    } else {
-      return date.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
-    }
-  };
-
-  // Get preview text
-  const getPreviewText = (text: string, maxLength = 80) => {
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + "...";
-  };
+  const {
+    notes,
+    isLoading,
+    quickNote,
+    setQuickNote,
+    isSaving,
+    activeFilter,
+    setActiveFilter,
+    activeZone,
+    setActiveZone,
+    selectedNote,
+    showDetail,
+    setShowDetail,
+    editText,
+    setEditText,
+    editType,
+    setEditType,
+    editZone,
+    setEditZone,
+    isEditing,
+    setIsEditing,
+    showChainModal,
+    setShowChainModal,
+    activeChains,
+    selectedChainId,
+    setSelectedChainId,
+    chainStepText,
+    setChainStepText,
+    isLoadingChains,
+    isCreatingRitual,
+    showReframeModal,
+    setShowReframeModal,
+    reframeEditData,
+    setReframeEditData,
+    reframeEditZone,
+    isSavingReframe,
+    reframeDetailData,
+    handleQuickSave,
+    handleDelete,
+    handleUpdate,
+    handleCreateTask,
+    handleCreateRitual,
+    handleRemoveLink,
+    openChainModal,
+    handleCreateChainStep,
+    openNewReframeModal,
+    openEditReframeModal,
+    handleSaveReframe,
+    handleCreateTaskFromAction,
+    openChainModalForAction,
+    handleCreateRitualFromAction,
+    openNoteDetail,
+    setScreen,
+  } = useNotesScreen();
 
   return (
     <div className="flex flex-col gap-4 pb-20">
@@ -620,14 +141,14 @@ export function NotesScreen() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  handleQuickSave();
+                  void handleQuickSave();
                 }
               }}
             />
             <div className="flex shrink-0 flex-col gap-1 self-end">
               <Button
                 size="icon"
-                onClick={handleQuickSave}
+                onClick={() => void handleQuickSave()}
                 disabled={!quickNote.trim() || isSaving}
               >
                 <Send className="h-4 w-4" />
@@ -648,7 +169,7 @@ export function NotesScreen() {
         </CardContent>
       </Card>
 
-      {/* Filters */}
+      {/* Type filters */}
       <div className="scrollbar-hide flex gap-2 overflow-x-auto pb-1">
         <Button
           size="sm"
@@ -712,17 +233,12 @@ export function NotesScreen() {
           {notes.map((note) => {
             const typeInfo = getNoteTypeInfo(note.type);
             const zoneInfo = getNoteZoneInfo(note.zone);
-            const hasLinks = note.links && note.links.length > 0;
-
-            // Check if this is a reframe note
             const isReframe = note.type === "reframe";
             const reframeData = isReframe ? parseReframeData(note.text) : null;
 
-            // For reframe notes, show special card
             if (isReframe && reframeData) {
               const preview = getReframePreview(reframeData);
               const linkedCount = countLinkedActions(reframeData);
-
               return (
                 <Card
                   key={note.id}
@@ -773,7 +289,7 @@ export function NotesScreen() {
                             className="text-destructive"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDelete(note.id);
+                              void handleDelete(note.id);
                             }}
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
@@ -787,7 +303,6 @@ export function NotesScreen() {
               );
             }
 
-            // Regular note card
             return (
               <Card
                 key={note.id}
@@ -807,7 +322,7 @@ export function NotesScreen() {
                           <Calendar className="h-3 w-3" />
                           {formatDate(note.createdAt)}
                         </span>
-                        {hasLinks && (
+                        {note.links.length > 0 && (
                           <Badge variant="secondary" className="gap-0.5 px-1.5 py-0 text-[10px]">
                             <Link2 className="h-3 w-3" />
                             {note.links.length}
@@ -835,7 +350,7 @@ export function NotesScreen() {
                           className="text-destructive"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDelete(note.id);
+                            void handleDelete(note.id);
                           }}
                         >
                           <Trash2 className="mr-2 h-4 w-4" />
@@ -855,11 +370,8 @@ export function NotesScreen() {
       <Dialog open={showDetail} onOpenChange={setShowDetail}>
         <DialogContent className="flex max-h-[85vh] max-w-md flex-col">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {isEditing ? "Редактирование" : "Заметка"}
-            </DialogTitle>
+            <DialogTitle>{isEditing ? "Редактирование" : "Заметка"}</DialogTitle>
           </DialogHeader>
-
           <div className="flex-1 space-y-4 overflow-y-auto">
             {isEditing ? (
               <>
@@ -903,10 +415,8 @@ export function NotesScreen() {
               </>
             ) : (
               <>
-                {/* Note content - different for reframe type */}
                 {selectedNote?.type === "reframe" && reframeDetailData ? (
                   <>
-                    {/* Reframe specific view */}
                     {reframeDetailData.situation && (
                       <div className="space-y-1">
                         <p className="text-muted-foreground text-xs">Ситуация</p>
@@ -915,22 +425,18 @@ export function NotesScreen() {
                         </div>
                       </div>
                     )}
-
                     <div className="space-y-1">
                       <p className="text-destructive text-xs">Старая мысль</p>
                       <div className="bg-destructive/10 border-destructive/20 rounded-lg border p-3 text-sm">
                         {reframeDetailData.oldThought}
                       </div>
                     </div>
-
                     <div className="space-y-1">
                       <p className="text-xs text-emerald-600">Новый взгляд</p>
                       <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm">
                         {reframeDetailData.newView}
                       </div>
                     </div>
-
-                    {/* Actions */}
                     {reframeDetailData.actions.filter((a) => a.text.trim()).length > 0 && (
                       <div className="space-y-2">
                         <p className="text-muted-foreground text-xs">Действия</p>
@@ -953,7 +459,7 @@ export function NotesScreen() {
                                     size="sm"
                                     className="h-6 text-[10px]"
                                     onClick={() =>
-                                      handleCreateTaskFromAction(
+                                      void handleCreateTaskFromAction(
                                         reframeDetailData.actions.findIndex(
                                           (a) => a.text === action.text
                                         )
@@ -982,7 +488,7 @@ export function NotesScreen() {
                                     size="sm"
                                     className="h-6 text-[10px]"
                                     onClick={() =>
-                                      handleCreateRitualFromAction(
+                                      void handleCreateRitualFromAction(
                                         reframeDetailData.actions.findIndex(
                                           (a) => a.text === action.text
                                         )
@@ -1008,28 +514,25 @@ export function NotesScreen() {
                     )}
                   </>
                 ) : (
-                  /* Regular note text */
                   <div className="bg-muted/30 rounded-lg p-3 text-sm whitespace-pre-wrap">
                     {selectedNote?.text}
                   </div>
                 )}
 
-                {/* Meta */}
                 <div className="flex flex-wrap items-center gap-3">
                   <Badge variant="outline" className="gap-1">
-                    {getNoteTypeInfo(selectedNote?.type || "").icon}
-                    {getNoteTypeInfo(selectedNote?.type || "").label}
+                    {getNoteTypeInfo(selectedNote?.type ?? "").icon}
+                    {getNoteTypeInfo(selectedNote?.type ?? "").label}
                   </Badge>
                   <Badge variant="secondary" className="gap-1">
-                    {getNoteZoneInfo(selectedNote?.zone || "").icon}
-                    {getNoteZoneInfo(selectedNote?.zone || "").label}
+                    {getNoteZoneInfo(selectedNote?.zone ?? "").icon}
+                    {getNoteZoneInfo(selectedNote?.zone ?? "").label}
                   </Badge>
                   <span className="text-muted-foreground text-xs">
-                    {formatDate(selectedNote?.createdAt || "")}
+                    {formatDate(selectedNote?.createdAt ?? "")}
                   </span>
                 </div>
 
-                {/* Links */}
                 {selectedNote?.links && selectedNote.links.length > 0 && (
                   <div className="space-y-2">
                     <div className="flex items-center gap-1 text-sm font-medium">
@@ -1037,29 +540,25 @@ export function NotesScreen() {
                       Связи
                     </div>
                     {selectedNote.links.map((link) => {
-                      // Determine display text based on entity and chain
                       let displayText = "";
-                      let Icon = ListTodo;
                       let iconColor = "text-primary";
+                      let LinkIcon = ListTodo;
 
                       if (link.entity === "task") {
                         if (link.entityDetails?.chain) {
-                          // Task is a chain step
                           displayText = `Шаг цепочки: ${link.entityDetails.chain.title}`;
-                          Icon = Target;
+                          LinkIcon = Target;
                           iconColor = "text-emerald-500";
                         } else {
                           displayText = "Дело";
-                          Icon = ListTodo;
-                          iconColor = "text-primary";
                         }
                       } else if (link.entity === "ritual") {
-                        displayText = link.entityDetails?.title || "Ритуал";
-                        Icon = Sparkles;
+                        displayText = link.entityDetails?.title ?? "Ритуал";
+                        LinkIcon = Sparkles;
                         iconColor = "text-amber-500";
                       } else if (link.entity === "chain") {
-                        displayText = link.entityDetails?.title || "Цепочка";
-                        Icon = Target;
+                        displayText = link.entityDetails?.title ?? "Цепочка";
+                        LinkIcon = Target;
                         iconColor = "text-emerald-500";
                       }
 
@@ -1068,7 +567,7 @@ export function NotesScreen() {
                           key={link.id}
                           className="bg-muted/30 group flex items-center gap-2 rounded-lg p-2 text-sm"
                         >
-                          <Icon className={`h-4 w-4 ${iconColor} shrink-0`} />
+                          <LinkIcon className={`h-4 w-4 ${iconColor} shrink-0`} />
                           <span className="flex-1 truncate">{displayText}</span>
                           {link.fragment && !link.entityDetails?.chain && (
                             <span className="text-muted-foreground max-w-[100px] truncate text-xs">
@@ -1081,7 +580,7 @@ export function NotesScreen() {
                             className="text-muted-foreground hover:text-destructive h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleRemoveLink(link.id);
+                              void handleRemoveLink(link.id);
                             }}
                           >
                             <Trash2 className="h-3 w-3" />
@@ -1092,7 +591,6 @@ export function NotesScreen() {
                   </div>
                 )}
 
-                {/* Action buttons */}
                 <div className="space-y-2 border-t pt-2">
                   <p className="text-muted-foreground text-sm">Создать из заметки:</p>
                   <div className="flex gap-2">
@@ -1100,7 +598,7 @@ export function NotesScreen() {
                       variant="outline"
                       size="sm"
                       className="flex-1 gap-1"
-                      onClick={handleCreateTask}
+                      onClick={() => void handleCreateTask()}
                     >
                       <ListTodo className="h-4 w-4" />
                       Дело
@@ -1118,7 +616,7 @@ export function NotesScreen() {
                       variant="outline"
                       size="sm"
                       className="flex-1 gap-1"
-                      onClick={handleCreateRitual}
+                      onClick={() => void handleCreateRitual()}
                       disabled={isCreatingRitual}
                     >
                       <Sparkles className="h-4 w-4" />
@@ -1130,14 +628,13 @@ export function NotesScreen() {
             )}
           </div>
 
-          {/* Footer actions */}
           <div className="flex gap-2 border-t pt-4">
             {isEditing ? (
               <>
                 <Button variant="outline" className="flex-1" onClick={() => setIsEditing(false)}>
                   Отмена
                 </Button>
-                <Button className="flex-1" onClick={handleUpdate}>
+                <Button className="flex-1" onClick={() => void handleUpdate()}>
                   Сохранить
                 </Button>
               </>
@@ -1154,7 +651,7 @@ export function NotesScreen() {
                 <Button
                   variant="destructive"
                   className="flex-1 gap-1"
-                  onClick={() => selectedNote && handleDelete(selectedNote.id)}
+                  onClick={() => selectedNote && void handleDelete(selectedNote.id)}
                 >
                   <Trash2 className="h-4 w-4" />
                   Удалить
@@ -1225,7 +722,7 @@ export function NotesScreen() {
                   </Button>
                   <Button
                     className="flex-1"
-                    onClick={handleCreateChainStep}
+                    onClick={() => void handleCreateChainStep()}
                     disabled={!selectedChainId || !chainStepText.trim()}
                   >
                     Создать
@@ -1248,11 +745,10 @@ export function NotesScreen() {
           <ReframeForm
             initialData={reframeEditData}
             initialZone={reframeEditZone}
-            onSubmit={handleSaveReframe}
+            onSubmit={(data, zone) => void handleSaveReframe(data, zone)}
             onCancel={() => {
               setShowReframeModal(false);
               setReframeEditData(undefined);
-              setSelectedNote(null);
             }}
             isLoading={isSavingReframe}
           />

@@ -117,3 +117,41 @@ export interface ActivityStats {
   completedChains: number;
   inProgressContent: number;
 }
+
+export const ALL_ACHIEVEMENT_DEFS = [
+  {
+    code: "GREAT_DAY_FIRST",
+    emoji: "🌟",
+    label: "Отличный день!",
+    desc: "Набрать 80+ баллов за день",
+  },
+  { code: "QUALITY_WEEK", emoji: "🏆", label: "Неделя качества", desc: "7 дней подряд 70+ баллов" },
+  { code: "STREAK_7", emoji: "🔥", label: "7 дней подряд", desc: "Серия из 7 дней" },
+  { code: "STREAK_30", emoji: "💎", label: "Месяц силы", desc: "Серия из 30 дней" },
+  { code: "WATER_WEEK", emoji: "💧", label: "Водный марафон", desc: "7 дней норма воды" },
+  { code: "GYM_10", emoji: "💪", label: "Железный", desc: "10 тренировок выполнено" },
+  {
+    code: "CHALLENGE_FIRST",
+    emoji: "🏆",
+    label: "Первый вызов",
+    desc: "Завершить первый челлендж",
+  },
+] as const;
+
+export const LEAK_TYPE_LABELS_PROFILE: Record<string, string> = {
+  low_energy: "Низкая энергия",
+  chronic_low_energy: "Хроническая усталость",
+  no_gym: "Мало тренировок",
+  gym_dropout: "Бросил зал",
+  ritual_consistency: "Непостоянство ритуалов",
+  ritual_erosion: "Эрозия ритуалов",
+  missed_checkins: "Пропуск чек-инов",
+  calorie_spikes: "Скачки калорий",
+  no_habits: "Нет привычек",
+  weekend_ritual_drop: "Срыв в выходные",
+  high_stress: "Высокий стресс",
+  sleep_deficit: "Дефицит сна",
+  expense_spike: "Скачок расходов",
+  tracking_dropout: "Не ввожу данные",
+  low_tracking: "Мало трекинга",
+};
