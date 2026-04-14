@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,640 +22,76 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   ArrowLeftRight,
-  CreditCard,
-  Banknote,
-  Sparkles,
-  Filter,
-  Calendar,
-  PiggyBank,
   RefreshCw,
   Trash2,
   Edit2,
+  Calendar,
+  PiggyBank,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
-import { showErrorToast, showSuccessToast, isOnline, getOfflineMessage } from "@/lib/network-utils";
-import { getTodayKey } from "@/lib/date-utils";
-
-// Account types
-const ACCOUNT_TYPES = [
-  { value: "cash", label: "Наличные", icon: Banknote },
-  { value: "card", label: "Карта", icon: CreditCard },
-  { value: "poker", label: "Банкролл", icon: Sparkles },
-  { value: "savings", label: "Накопления", icon: PiggyBank },
-  { value: "custom", label: "Другое...", icon: Wallet },
-];
-
-// Currencies
-const CURRENCIES = [
-  { value: "RUB", label: "Рубль (₽)", symbol: "₽" },
-  { value: "USD", label: "Доллар ($)", symbol: "$" },
-  { value: "EUR", label: "Евро (€)", symbol: "€" },
-  { value: "KZT", label: "Тенге (₸)", symbol: "₸" },
-  { value: "UZS", label: "Сум (сўм)", symbol: "сўм" },
-  { value: "custom", label: "Другая валюта", symbol: "" },
-];
-
-// Currency formatters cache
-const currencyFormatters: Record<string, Intl.NumberFormat> = {};
-
-function getCurrencyFormatter(currency: string): Intl.NumberFormat {
-  if (!currencyFormatters[currency]) {
-    try {
-      currencyFormatters[currency] = new Intl.NumberFormat("ru-RU", {
-        style: "currency",
-        currency: currency,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-      });
-    } catch {
-      // Fallback for unknown currencies
-      currencyFormatters[currency] = new Intl.NumberFormat("ru-RU", {
-        style: "decimal",
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-      });
-    }
-  }
-  return currencyFormatters[currency];
-}
-
-// Zone config
-const ZONE_CONFIG: Record<string, { label: string; emoji: string; color: string }> = {
-  leakfixer: { label: "LeakFixer", emoji: "🔧", color: "#4a5568" },
-  ai: { label: "ИИ", emoji: "🤖", color: "#6366f1" },
-  poker: { label: "Покер", emoji: "♠️", color: "#059669" },
-  health: { label: "Здоровье", emoji: "💪", color: "#dc2626" },
-  life: { label: "Жизнь", emoji: "🏠", color: "#f59e0b" },
-  savings: { label: "Резерв", emoji: "💰", color: "#10b981" },
-  general: { label: "Общее", emoji: "📦", color: "#6b7280" },
-};
-
-interface Account {
-  id: string;
-  name: string;
-  type: string;
-  currency: string;
-  icon: string | null;
-  color: string | null;
-  initialBalance: number;
-  currentBalance: number;
-}
-
-interface Category {
-  id: string;
-  name: string;
-  zone: string;
-  icon: string | null;
-  color: string | null;
-  monthlyTarget: number | null;
-  spent: number;
-}
-
-interface Transaction {
-  id: string;
-  date: string;
-  amount: number;
-  description: string | null;
-  zone: string | null;
-  account: { id: string; name: string; icon: string | null; currency?: string };
-  category: { id: string; name: string; icon: string | null; zone: string } | null;
-}
-
-interface FinanceSummary {
-  totalBalance: number;
-  accounts: Account[];
-  categories: Category[];
-  recentTransactions: Transaction[];
-  byZone: Record<string, number>;
-  income: number;
-  expenses: number;
-  thisMonthIncome: number;
-  thisMonthExpenses: number;
-  dailyAvgExpenses: number;
-  projectedMonthExpenses: number;
-  daysElapsed: number;
-  daysRemaining: number;
-}
+import {
+  ACCOUNT_TYPES,
+  CURRENCIES,
+  ZONE_CONFIG,
+  formatFinanceDate as formatDate,
+  formatMoney,
+  getPeriodTotals,
+  useFinanceScreen,
+} from "@/features/finance";
 
 export function FinanceScreen() {
   const { user } = useAppStore();
-  const [summary, setSummary] = useState<FinanceSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Dialogs
-  const [showAddTransaction, setShowAddTransaction] = useState(false);
-  const [showAddAccount, setShowAddAccount] = useState(false);
-
-  // Loading states
-  const [isCreatingAccount, setIsCreatingAccount] = useState(false);
-  const [isCreatingTransaction, setIsCreatingTransaction] = useState(false);
-  const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null);
-
-  // Edit states
-  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-  const [isUpdatingAccount, setIsUpdatingAccount] = useState(false);
-  const [isUpdatingTransaction, setIsUpdatingTransaction] = useState(false);
-
-  // Account history states
-  const [viewingAccountHistory, setViewingAccountHistory] = useState<Account | null>(null);
-  const [accountTransactions, setAccountTransactions] = useState<Transaction[]>([]);
-  const [periodFilter, setPeriodFilter] = useState<"today" | "week" | "month" | "all" | "custom">(
-    "month"
-  );
-  const [customDateFrom, setCustomDateFrom] = useState("");
-  const [customDateTo, setCustomDateTo] = useState("");
-  const [loadingAccountHistory, setLoadingAccountHistory] = useState(false);
-
-  // New transaction form
-  const [newTransaction, setNewTransaction] = useState({
-    accountId: "",
-    categoryId: "",
-    amount: "",
-    description: "",
-    date: getTodayKey(),
-  });
-
-  // Budget goals
-  const [editingBudget, setEditingBudget] = useState<Category | null>(null);
-  const [budgetInput, setBudgetInput] = useState("");
-  const [isSavingBudget, setIsSavingBudget] = useState(false);
-
-  // Transfer form
-  const [showTransfer, setShowTransfer] = useState(false);
-  const [isCreatingTransfer, setIsCreatingTransfer] = useState(false);
-  const [transferForm, setTransferForm] = useState({
-    fromAccountId: "",
-    toAccountId: "",
-    fromAmount: "",
-    toAmount: "", // only for currency exchange
-    isCurrencyExchange: false,
-    date: getTodayKey(),
-    description: "",
-  });
-
-  // New account form
-  const [newAccount, setNewAccount] = useState({
-    name: "",
-    type: "cash",
-    customType: "",
-    currency: "RUB",
-    initialBalance: "",
-    icon: "💳",
-  });
-
-  // Load finance data
-  useEffect(() => {
-    const loadData = async () => {
-      if (!user?.id) return;
-
-      // Check online status
-      if (!isOnline()) {
-        setError(getOfflineMessage());
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`/api/finance?userId=${user.id}`);
-        if (!res.ok) throw new Error("Failed to load data");
-        const data = await res.json();
-        if (data.success) {
-          setSummary(data.summary);
-        }
-      } catch (err) {
-        showErrorToast(err, "загрузка финансов");
-        setError("Не удалось загрузить данные");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
-  }, [user?.id]);
-
-  // Create account
-  const handleCreateAccount = async () => {
-    if (!user?.id || !newAccount.name || isCreatingAccount) return;
-
-    if (!isOnline()) {
-      showErrorToast(new Error("Network error"), "создание счёта");
-      return;
-    }
-
-    setIsCreatingAccount(true);
-    try {
-      const res = await fetch("/api/accounts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          name: newAccount.name,
-          type:
-            newAccount.type === "custom"
-              ? `custom:${newAccount.customType || "Другое"}`
-              : newAccount.type,
-          currency: newAccount.currency,
-          initialBalance: parseFloat(newAccount.initialBalance) || 0,
-          icon: newAccount.icon,
-        }),
-      });
-
-      const responseData = await res.json();
-
-      if (!res.ok) {
-        // Check for duplicate error
-        if (responseData.error?.includes("уже существует")) {
-          showErrorToast(new Error(responseData.error), "создание счёта");
-          return;
-        }
-        throw new Error(responseData.error || "Failed to create account");
-      }
-
-      // Reload data
-      const financeRes = await fetch(`/api/finance?userId=${user.id}`);
-      const data = await financeRes.json();
-      if (data.success) {
-        setSummary(data.summary);
-      }
-
-      setShowAddAccount(false);
-      setNewAccount({
-        name: "",
-        type: "cash",
-        customType: "",
-        currency: "RUB",
-        initialBalance: "",
-        icon: "💳",
-      });
-      showSuccessToast("Счёт создан");
-    } catch (err) {
-      showErrorToast(err, "создание счёта");
-    } finally {
-      setIsCreatingAccount(false);
-    }
-  };
-
-  // Delete account
-  const handleDeleteAccount = async (accountId: string, accountName: string) => {
-    if (!user?.id || deletingAccountId) return;
-
-    // Confirm deletion
-    if (!confirm(`Удалить счёт "${accountName}"?\n\nТранзакции сохранятся в истории.`)) {
-      return;
-    }
-
-    setDeletingAccountId(accountId);
-    try {
-      const res = await fetch(`/api/accounts?id=${accountId}`, {
-        method: "DELETE",
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to delete account");
-      }
-
-      // Reload data
-      const financeRes = await fetch(`/api/finance?userId=${user.id}`);
-      const data = await financeRes.json();
-      if (data.success) {
-        setSummary(data.summary);
-      }
-
-      showSuccessToast("Счёт удалён");
-    } catch (err) {
-      showErrorToast(err, "удаление счёта");
-    } finally {
-      setDeletingAccountId(null);
-    }
-  };
-
-  // Update account
-  const handleUpdateAccount = async () => {
-    if (!editingAccount || !user?.id || isUpdatingAccount) return;
-
-    setIsUpdatingAccount(true);
-    try {
-      const res = await fetch("/api/accounts", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editingAccount.id,
-          name: editingAccount.name,
-          type: editingAccount.type,
-          currency: editingAccount.currency,
-          icon: editingAccount.icon,
-          initialBalance: editingAccount.initialBalance,
-        }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to update account");
-      }
-
-      // Reload data
-      const financeRes = await fetch(`/api/finance?userId=${user.id}`);
-      const data = await financeRes.json();
-      if (data.success) {
-        setSummary(data.summary);
-      }
-
-      setEditingAccount(null);
-      showSuccessToast("Счёт обновлён");
-    } catch (err) {
-      showErrorToast(err, "обновление счёта");
-    } finally {
-      setIsUpdatingAccount(false);
-    }
-  };
-
-  // Update transaction
-  const handleUpdateTransaction = async () => {
-    if (!editingTransaction || !user?.id || isUpdatingTransaction) return;
-
-    setIsUpdatingTransaction(true);
-    try {
-      const res = await fetch("/api/transactions", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editingTransaction.id,
-          accountId: editingTransaction.account.id,
-          categoryId: editingTransaction.category?.id || null,
-          amount: editingTransaction.amount,
-          description: editingTransaction.description,
-          date: editingTransaction.date,
-        }),
-      });
-
-      if (!res.ok) throw new Error("Failed to update transaction");
-
-      // Reload data
-      const financeRes = await fetch(`/api/finance?userId=${user.id}`);
-      const data = await financeRes.json();
-      if (data.success) {
-        setSummary(data.summary);
-      }
-
-      setEditingTransaction(null);
-      showSuccessToast("Транзакция обновлена");
-    } catch (err) {
-      showErrorToast(err, "обновление транзакции");
-    } finally {
-      setIsUpdatingTransaction(false);
-    }
-  };
-
-  // Create transaction
-  const handleCreateTransaction = async () => {
-    if (!user?.id || !newTransaction.accountId || !newTransaction.amount) return;
-
-    if (!isOnline()) {
-      showErrorToast(new Error("Network error"), "создание транзакции");
-      return;
-    }
-
-    try {
-      const res = await fetch("/api/transactions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          accountId: newTransaction.accountId,
-          categoryId: newTransaction.categoryId || null,
-          amount: parseFloat(newTransaction.amount),
-          description: newTransaction.description,
-          date: newTransaction.date,
-        }),
-      });
-
-      if (!res.ok) throw new Error("Failed to create transaction");
-
-      // Reload data
-      const financeRes = await fetch(`/api/finance?userId=${user.id}`);
-      const data = await financeRes.json();
-      if (data.success) {
-        setSummary(data.summary);
-      }
-
-      setShowAddTransaction(false);
-      setNewTransaction({
-        accountId: "",
-        categoryId: "",
-        amount: "",
-        description: "",
-        date: getTodayKey(),
-      });
-      showSuccessToast("Транзакция добавлена");
-    } catch (err) {
-      showErrorToast(err, "создание транзакции");
-    }
-  };
-
-  // Transfer between accounts
-  const handleCreateTransfer = async () => {
-    if (
-      !user?.id ||
-      !transferForm.fromAccountId ||
-      !transferForm.toAccountId ||
-      !transferForm.fromAmount
-    )
-      return;
-    if (transferForm.fromAccountId === transferForm.toAccountId) return;
-
-    if (!isOnline()) {
-      showErrorToast(new Error("Network error"), "перевод");
-      return;
-    }
-
-    setIsCreatingTransfer(true);
-    try {
-      const fromAmt = parseFloat(transferForm.fromAmount);
-      const toAmt =
-        transferForm.isCurrencyExchange && transferForm.toAmount
-          ? parseFloat(transferForm.toAmount)
-          : fromAmt;
-
-      const fromAccount = summary?.accounts.find((a) => a.id === transferForm.fromAccountId);
-      const toAccount = summary?.accounts.find((a) => a.id === transferForm.toAccountId);
-      const desc = transferForm.description || `Перевод: ${fromAccount?.name} → ${toAccount?.name}`;
-
-      // Create debit on source account
-      await fetch("/api/transactions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          accountId: transferForm.fromAccountId,
-          amount: -fromAmt,
-          description: desc,
-          date: transferForm.date,
-          zone: "transfer",
-        }),
-      });
-
-      // Create credit on destination account
-      await fetch("/api/transactions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          accountId: transferForm.toAccountId,
-          amount: toAmt,
-          description: desc,
-          date: transferForm.date,
-          zone: "transfer",
-        }),
-      });
-
-      // Reload finance data
-      const financeRes = await fetch(`/api/finance?userId=${user.id}`);
-      const data = await financeRes.json();
-      if (data.success) setSummary(data.summary);
-
-      setShowTransfer(false);
-      setTransferForm({
-        fromAccountId: "",
-        toAccountId: "",
-        fromAmount: "",
-        toAmount: "",
-        isCurrencyExchange: false,
-        date: getTodayKey(),
-        description: "",
-      });
-      showSuccessToast("Перевод выполнен");
-    } catch (err) {
-      showErrorToast(err, "перевод");
-    } finally {
-      setIsCreatingTransfer(false);
-    }
-  };
-
-  // Format money with currency
-  const formatMoney = (amount: number, currency: string = "RUB") => {
-    const formatter = getCurrencyFormatter(currency);
-    return formatter.format(amount);
-  };
-
-  // Format date
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("ru-RU", {
-      day: "numeric",
-      month: "short",
-    });
-  };
-
-  // Get date range based on period filter
-  const getDateRange = (period: string) => {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    switch (period) {
-      case "today":
-        return { from: today.toISOString(), to: now.toISOString() };
-      case "week": {
-        const weekAgo = new Date(today);
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        return { from: weekAgo.toISOString(), to: now.toISOString() };
-      }
-      case "month": {
-        const monthAgo = new Date(today);
-        monthAgo.setMonth(monthAgo.getMonth() - 1);
-        return { from: monthAgo.toISOString(), to: now.toISOString() };
-      }
-      case "all":
-        return { from: undefined, to: undefined };
-      case "custom":
-        return {
-          from: customDateFrom ? new Date(customDateFrom).toISOString() : undefined,
-          to: customDateTo ? new Date(customDateTo + "T23:59:59").toISOString() : undefined,
-        };
-      default:
-        return { from: undefined, to: undefined };
-    }
-  };
-
-  // Load account history
-  const loadAccountHistory = async (account: Account, period: string) => {
-    if (!user?.id) return;
-
-    setLoadingAccountHistory(true);
-    try {
-      const { from, to } = getDateRange(period);
-      let url = `/api/transactions?userId=${user.id}&accountId=${account.id}`;
-      if (from) url += `&from=${from}`;
-      if (to) url += `&to=${to}`;
-
-      const res = await fetch(url);
-      const data = await res.json();
-
-      if (data.success) {
-        setAccountTransactions(data.transactions);
-      }
-    } catch (err) {
-      showErrorToast(err, "загрузка истории");
-    } finally {
-      setLoadingAccountHistory(false);
-    }
-  };
-
-  // Open account history
-  const handleViewAccountHistory = (account: Account) => {
-    setViewingAccountHistory(account);
-    setPeriodFilter("month");
-    setCustomDateFrom("");
-    setCustomDateTo("");
-    loadAccountHistory(account, "month");
-  };
-
-  // Calculate period totals
-  const getPeriodTotals = (transactions: Transaction[]) => {
-    const income = transactions.filter((t) => t.amount >= 0).reduce((sum, t) => sum + t.amount, 0);
-    const expenses = transactions
-      .filter((t) => t.amount < 0)
-      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-    return { income, expenses, change: income - expenses };
-  };
-
-  // Save monthly budget for a category
-  const handleSaveBudget = async () => {
-    if (!editingBudget || isSavingBudget) return;
-    setIsSavingBudget(true);
-    try {
-      const parsed = parseFloat(budgetInput);
-      const monthlyTarget = budgetInput.trim() === "" || isNaN(parsed) ? null : Math.abs(parsed);
-      const res = await fetch("/api/categories", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editingBudget.id, monthlyTarget }),
-      });
-      if (!res.ok) throw new Error("Failed to update budget");
-      setSummary((prev) =>
-        prev
-          ? {
-              ...prev,
-              categories: prev.categories.map((c) =>
-                c.id === editingBudget.id ? { ...c, monthlyTarget } : c
-              ),
-            }
-          : prev
-      );
-      setEditingBudget(null);
-      setBudgetInput("");
-      showSuccessToast(
-        monthlyTarget ? `Бюджет сохранён: ${formatMoney(monthlyTarget)}` : "Бюджет снят"
-      );
-    } catch (err) {
-      showErrorToast(err, "сохранение бюджета");
-    } finally {
-      setIsSavingBudget(false);
-    }
-  };
+  const {
+    summary,
+    loading,
+    error,
+    showAddTransaction,
+    setShowAddTransaction,
+    showAddAccount,
+    setShowAddAccount,
+    isCreatingAccount,
+    deletingAccountId,
+    editingAccount,
+    setEditingAccount,
+    editingTransaction,
+    setEditingTransaction,
+    isUpdatingAccount,
+    isUpdatingTransaction,
+    viewingAccountHistory,
+    setViewingAccountHistory,
+    accountTransactions,
+    periodFilter,
+    setPeriodFilter,
+    customDateFrom,
+    setCustomDateFrom,
+    customDateTo,
+    setCustomDateTo,
+    loadingAccountHistory,
+    newTransaction,
+    setNewTransaction,
+    editingBudget,
+    setEditingBudget,
+    budgetInput,
+    setBudgetInput,
+    isSavingBudget,
+    showTransfer,
+    setShowTransfer,
+    isCreatingTransfer,
+    transferForm,
+    setTransferForm,
+    newAccount,
+    setNewAccount,
+    handleRetryLoad,
+    handleCreateAccount,
+    handleDeleteAccount,
+    handleUpdateAccount,
+    handleUpdateTransaction,
+    handleCreateTransaction,
+    handleCreateTransfer,
+    loadAccountHistory,
+    handleViewAccountHistory,
+    handleSaveBudget,
+  } = useFinanceScreen({ userId: user?.id });
 
   if (loading) {
     return (
@@ -667,30 +102,7 @@ export function FinanceScreen() {
             <CardContent className="pt-4">
               <div className="flex items-center justify-between">
                 <p className="text-red-400">{error}</p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setError(null);
-                    setLoading(true);
-                    // Retry load
-                    const loadData = async () => {
-                      if (!user?.id) return;
-                      try {
-                        const res = await fetch(`/api/finance?userId=${user.id}`);
-                        const data = await res.json();
-                        if (data.success) {
-                          setSummary(data.summary);
-                        }
-                      } catch (err) {
-                        showErrorToast(err, "загрузка финансов");
-                      } finally {
-                        setLoading(false);
-                      }
-                    };
-                    loadData();
-                  }}
-                >
+                <Button size="sm" variant="outline" onClick={handleRetryLoad}>
                   Повторить
                 </Button>
               </div>
@@ -1492,7 +904,7 @@ export function FinanceScreen() {
                   onClick={() => {
                     setPeriodFilter(opt.value as typeof periodFilter);
                     if (opt.value !== "custom" && viewingAccountHistory) {
-                      loadAccountHistory(viewingAccountHistory, opt.value);
+                      loadAccountHistory(viewingAccountHistory, opt.value as typeof periodFilter);
                     }
                   }}
                 >
