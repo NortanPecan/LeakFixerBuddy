@@ -2,6 +2,100 @@ import { db } from "@/lib/db";
 import { callAI } from "@/lib/ai-provider";
 import type { AiClassifyResult } from "./tg-types";
 
+const FOOD_ACTION_PREFIXES = ["ел", "ела", "съел", "съела", "съелa", "скушал", "скушала"];
+
+function parseDecimalToken(value: string): number | null {
+  let hasDigit = false;
+  let hasSeparator = false;
+
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+    const isDigit = code >= 48 && code <= 57;
+
+    if (isDigit) {
+      hasDigit = true;
+      continue;
+    }
+
+    if ((char === "." || char === ",") && !hasSeparator) {
+      hasSeparator = true;
+      continue;
+    }
+
+    return null;
+  }
+
+  if (!hasDigit) return null;
+
+  const parsed = Number.parseFloat(value.replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeFoodName(tokens: string[]): string {
+  const normalizedTokens =
+    tokens.length > 1 && FOOD_ACTION_PREFIXES.includes(tokens[0].toLowerCase())
+      ? tokens.slice(1)
+      : tokens;
+
+  return normalizedTokens.join(" ").trim();
+}
+
+function classifyBareFoodInput(text: string): AiClassifyResult | null {
+  const tokens = text.trim().split(" ").filter(Boolean);
+  const firstNumberIndex = tokens.findIndex((token) => parseDecimalToken(token) !== null);
+
+  if (firstNumberIndex <= 0) return null;
+
+  const name = normalizeFoodName(tokens.slice(0, firstNumberIndex));
+  const numbers: number[] = [];
+
+  for (const token of tokens.slice(firstNumberIndex)) {
+    const value = parseDecimalToken(token);
+    if (value === null) return null;
+    numbers.push(value);
+  }
+
+  if (!name) return null;
+  if (numbers.length !== 2 && numbers.length !== 5) return null;
+
+  const weight = numbers[0];
+  const kcalPer100 = numbers[1];
+
+  if (weight <= 0 || weight > 5000 || kcalPer100 <= 0 || kcalPer100 > 900) return null;
+
+  const calories = Math.round((weight * kcalPer100) / 100);
+  const data: Record<string, unknown> = {
+    name,
+    calories,
+    weight_g: weight,
+    kcal_per_100: kcalPer100,
+  };
+
+  if (numbers.length === 5) {
+    const proteinPer100 = numbers[2];
+    const fatPer100 = numbers[3];
+    const carbsPer100 = numbers[4];
+    const multiplier = weight / 100;
+
+    if (
+      [proteinPer100, fatPer100, carbsPer100].every(
+        (value) => Number.isFinite(value) && value >= 0 && value <= 100
+      )
+    ) {
+      data.protein = Math.round(proteinPer100 * multiplier * 10) / 10;
+      data.fat = Math.round(fatPer100 * multiplier * 10) / 10;
+      data.carbs = Math.round(carbsPer100 * multiplier * 10) / 10;
+    }
+  }
+
+  return {
+    type: "food",
+    data,
+    display: `🍽️ ${name} (${weight}г, ${calories} ккал)`,
+    confidence: 0.85,
+  };
+}
+
 export const AI_CLASSIFY_SYSTEM = `Ты анализируешь сообщения пользователя фитнес-приложения.
 Определи что хотел сделать пользователь и извлеки данные.
 Отвечай только JSON без markdown блоков:
@@ -52,6 +146,9 @@ export async function classifyUnknownInput(
   text: string,
   userId: string
 ): Promise<AiClassifyResult | null> {
+  const deterministicFood = classifyBareFoodInput(text);
+  if (deterministicFood) return deterministicFood;
+
   // First check user's own learned patterns
   const userPattern = await db.userAiPattern.findUnique({
     where: { userId_leakType: { userId, leakType: "tg_input_patterns" } },
@@ -149,6 +246,10 @@ export async function executeClassifiedAction(
     case "food": {
       const name = String(data.name ?? "блюдо");
       const calories = data.calories != null ? Number(data.calories) : undefined;
+      const weight = data.weight_g != null ? Number(data.weight_g) : undefined;
+      const protein = data.protein != null ? Number(data.protein) : undefined;
+      const fat = data.fat != null ? Number(data.fat) : undefined;
+      const carbs = data.carbs != null ? Number(data.carbs) : undefined;
       await db.foodEntry.create({
         data: {
           userId,
@@ -156,6 +257,10 @@ export async function executeClassifiedAction(
           mealType: "snack",
           date: today,
           ...(calories != null && { calories }),
+          ...(weight != null && Number.isFinite(weight) && { amount: `${weight}г` }),
+          ...(protein != null && Number.isFinite(protein) && { protein }),
+          ...(fat != null && Number.isFinite(fat) && { fat }),
+          ...(carbs != null && Number.isFinite(carbs) && { carbs }),
         },
       });
       return `🍽️ <b>${name}</b>${calories ? ` (${calories} ккал)` : ""} добавлено в питание!`;
