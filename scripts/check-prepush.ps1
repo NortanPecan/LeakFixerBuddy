@@ -87,8 +87,8 @@ if (-not $changedFiles) {
   exit 0
 }
 
-$textFiles = $changedFiles | Where-Object { Is-TextFile $_ }
-$lintFiles = $changedFiles | Where-Object { Is-LintFile $_ -and (Test-Path $_) }
+$textFiles = @($changedFiles | Where-Object { Is-TextFile $_ })
+$lintFiles = @($changedFiles | Where-Object { Is-LintFile $_ -and (Test-Path $_) })
 
 if ($textFiles.Count -gt 0) {
   $encodingFindings = New-Object System.Collections.Generic.List[string]
