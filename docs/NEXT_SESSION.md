@@ -1,24 +1,22 @@
 # Next Session — Текущее состояние и задачи
 
-> Обновлено: 2026-03-18 (сессия 13)
+> Обновлено: 2026-04-15 (сессия 14)
 > Ветка: `claude/add-profile-achievements-px0DE`
 
 ---
 
-## Последняя сессия (2026-03-18, сессия 13)
+## Последняя сессия (2026-04-15, сессия 14)
 
 ### ✅ Сделано
 
 | # | Задача | Детали |
 |---|--------|--------|
-| 1 | **Достижения в ProfileScreen** | Карточка с 6 плитками (2 реальных + 4 locked). Earned: цветные с датой. Locked: серые+grayscale. Счётчик X/6. |
-| 2 | **История AI-паттернов в ProfileScreen** | Секция с UserAiPattern[]: тип лика, кол-во анализов, сколько сработало, дата. Скрывает `tg_input_patterns`. |
-| 3 | **GET /api/ai/patterns** | Новый endpoint. Вся история UserAiPattern пользователя для ProfileScreen. |
-| 4 | **Telegram: кнопка 🏅 + команда ачивменты** | `getAchievementsSummary()`, ACHIEVEMENTS_RE, btn_achievements в moduleHandlers. |
-| 5 | **AI_CLASSIFY_SYSTEM расширен** | +10 примеров разговорных форм: скушал, выпил кофе, побегал, поплавал, заплатил за такси и т.д. |
-| 6 | **Баг: бесконечный цикл в боте** | Дедупликация по update_id через Note(zone='__tg_dedup'). Telegram retry → возвращаем 200 сразу. |
-| 7 | **Баг: JSON в мимолётных мыслях** | storePending() больше не создаёт FleetingThought с JSON-payload. |
-| 8 | **parseFoodEntry() — расширенный парсер еды** | Вариант B: 2 числа = вес+ккал/100г. Метрические единицы → пересчёт. БЖУ на 100г → пересчёт на порцию. Keywords: ел/ела/еда/съел/съела. |
+| 1 | **Backend для 4 ачивментов** | STREAK_7 (streak≥7), STREAK_30 (streak≥30), GYM_10 (10 выполненных тренировок), WATER_WEEK (7 дней подряд норма воды). Все 6 плиток теперь реально выдаются. |
+| 2 | **Telegram getFoodSummary + БЖУ** | Показывает `(amount)` если есть, и `Б/Ж/У` если есть. Пример: `🟢 Доширак (70г) — 308 ккал · Б11.9 Ж5.6 У37.8` |
+| 3 | **Telegram: кнопки качества еды** | После записи `ел доширак 70 440` — inline-кнопки `🟢 Отлично / 🟡 Нормально / 🔴 Срыв`. callback `food_q_{id}_{quality}` → обновляет FoodEntry.quality. |
+| 4 | **Telegram: кнопка ➕ Сет в зале** | Под каждым упражнением кнопка `➕ Сет: Жим лёжа` → ForceReply «вес × повторений». Парсер: `75x8`, `75 8`, `75х8` (кирилл.), `75×8`, `75`. Создаёт db.gymExerciseSet. |
+| 5 | **AI classify еда без ключевого слова** | Детерминированный пре-чек: `слово N1 N2` → еда (вес + ккал/100г) без AI. `доширак 70 440` → 70г, 308 ккал. Также расширены примеры в AI_CLASSIFY_SYSTEM. |
+| 6 | **StatsScreen: средний балл + лучшая неделя** | Карточка «Итого»: 4-я плитка «Средний балл» (avg overallScore > 0). На графике «По неделям»: лучшая неделя подсвечена жёлтым (#f59e0b). |
 
 ---
 
@@ -26,61 +24,38 @@
 
 | Проблема | Статус |
 |----------|--------|
-| 4 из 6 achievement-плиток (STREAK_7/30, GYM_10, WATER_WEEK) не выдаются бэкендом — видны только как locked | ❌ нужен backend |
-| Telegram getFoodSummary() не показывает amount/БЖУ из новых полей FoodEntry | ❌ нужно обновить |
-| Кнопки качества еды (🟢🟡🔴) в Telegram после записи блюда | ❌ не реализовано |
+| 16 pre-existing TypeScript ошибок в нетронутых файлах (export, monthly-report, TopNav, GymContext, etc.) | ⚠️ pre-existing, не блокируют |
 
 ---
 
 ## Задачи — следующая сессия (по приоритету)
 
-### 1. 🔴 Backend для недостающих ачивментов (30 мин)
-Файл: `src/app/api/achievements/check/route.ts`
+### 1. 🔴 Исправить pre-existing TypeScript ошибки (30 мин)
+Файлы: `src/components/TopNav.tsx`, `src/features/gym/GymContext.tsx`, `src/app/api/export/route.ts`, `src/app/api/monthly-report/route.ts`, `src/app/api/weekly-report/route.ts`, `src/app/api/notifications/send-reminder/route.ts`, `src/components/screens/HabitsScreen.tsx`
 
-Добавить в массив `ACHIEVEMENTS` 4 новые проверки:
-```typescript
-{ code: 'STREAK_7',    label: '7 дней подряд',  emoji: '🔥', desc: 'Серия из 7 дней',          check: async (userId) => user.streak >= 7 && !existing }
-{ code: 'STREAK_30',   label: 'Месяц силы',      emoji: '💎', desc: 'Серия из 30 дней',         check: async (userId) => user.streak >= 30 && !existing }
-{ code: 'GYM_10',      label: 'Железный',        emoji: '💪', desc: '10 тренировок выполнено',  check: async (userId) => gymCount >= 10 && !existing }
-{ code: 'WATER_WEEK',  label: 'Водный марафон',  emoji: '💧', desc: '7 дней норма воды',        check: async (userId) => 7 consecutive days water >= waterTarget && !existing }
-```
-- `check()` нужен доступ к userId и todayScore, добавить параметр `user: { streak: number }` в сигнатуру
-- `WATER_WEEK`: проверить `fitnessDaily.water >= waterTarget` за последние 7 дней подряд
+Основные проблемы:
+- `TopNav.tsx:17` — `'monthly-report'` отсутствует в Record<Screen, string>
+- `GymContext.tsx:94` — Property 'user' does not exist on type 'unknown'
+- `export/route.ts` — `completedAt` → `completed`, exercises не в include
+- `HabitsScreen.tsx:444` — `ringColor` не существует в CSS Properties
+- `monthly-report`, `weekly-report` — `value` в HabitLogSelect, `type` в TransactionSelect
 
-### 2. 🟡 Telegram: getFoodSummary + качество еды (30 мин)
-Файл: `src/app/api/telegram/webhook/route.ts`
+### 2. 🟡 Улучшение Telegram: сводка зала с PR + статистика подходов (20 мин)
+- `getGymSummary()`: после добавления сета через `➕ Сет` — обновлять исходное сообщение зала (сейчас отправляет новое)
+- Показывать общий объём (сетов × повторений × вес) на тренировку
 
-**getFoodSummary()** — обновить вывод:
-```
-🟢 Доширак (70г) — 308 ккал · Б11.9 Ж5.6 У37.8
-```
-- Если `entry.amount` → добавлять `(amount)`
-- Если `entry.protein/fat/carbs` → добавлять `· Б X Ж X У X`
+### 3. 🟡 Telegram: уведомление о достижении в реальном времени (30 мин)
+- После `POST /api/achievements/check` — если новые ачивменты — отправить push в Telegram
+- Реализовать через `sendMessage` в самом `/api/achievements/check` если пользователь имеет `telegramId`
 
-**Кнопки качества** после записи еды через текстовую команду:
-- После `db.foodEntry.create()` отправлять keyboard:
-  `[🟢 Отлично, 🟡 Нормально, 🔴 Срыв]` → callback `food_q_{id}_{good|neutral|bad}`
-- callback handler: `db.foodEntry.update({ quality })`
+### 4. 🟢 ProfileScreen: секция «Рекорды» — топ-5 упражнений с историей весов (30 мин)
+- Уже есть SVG-sparkline в ProfileScreen, улучшить данные: показывать PRs с датой первого и текущего рекорда
+- Ссылка на `/api/gym/records` для дополнительного контекста
 
-### 3. 🟡 StatsScreen — лучшая неделя + средний балл (30 мин)
-Файлы: `src/components/screens/StatsScreen.tsx`, `src/app/api/stats/history/route.ts`
-
-- В API `/api/stats/history`: добавить `dayScore` в DayData (вызов `calcDayScore` для каждого дня, или упрощённая версия)
-- В cards «Итого за N дней»: добавить плитку «Средний балл дня» (avg dayScore)
-- В weeklySummary: найти неделю с наивысшим суммарным баллом → подсветить border/bg
-
-### 4. 🟢 Telegram: кнопка «+ Сет» в сводке зала (45 мин)
-Файл: `src/app/api/telegram/webhook/route.ts`
-
-После списка упражнений добавить кнопку `[+ Добавить сет → {exercise.name}]`.
-- callback `gym_addset_{exerciseId}` → ForceReply «Введи: вес × повторения (напр. 75x8)»
-- pending `__type: 'gymSet'`, парсер `75x8` / `75 8` / `75` → db.gymExerciseSet.create
-- Расширить `PendingPayload` типом `PendingGymSet`
-
-### 5. 🟢 Telegram: «доширак» без ключевого слова (AI улучшение)
-Сейчас при вводе `доширак 70 440` без `ел` — идёт в AI classify, который должен его поймать как food.
-Убедиться что AI_CLASSIFY_SYSTEM имеет пример для числового формата без ключевого слова.
-Добавить пример: `"доширак 70 440"` → food с weight_g=70, calories_per_100=440.
+### 5. 🟢 StatsScreen: тепловая карта активности за 90 дней (45 мин)
+- GitHub-стиль: 13 столбцов × 7 строк = 91 день
+- Цвет: от светло-зелёного (мало активности) до тёмно-зелёного (высокий overallScore)
+- Данные из existing `/api/stats/history?days=90`
 
 ---
 
@@ -90,13 +65,15 @@
 |------|---------|
 | **update_id dedup** | Note(zone='__tg_dedup'), deleteMany старых при каждом новом → чистый KV |
 | **storePending** | Только Note(zone='__tg_pending'). НЕ создавать FleetingThought — виден в приложении |
+| **PendingPayload** | ForceReply \| AiConfirm \| GymSet — gymSet handled in reply_to_message block |
 | **parseFoodEntry** | Поэтапный снос с конца: BJU → kcal → weight → name. Metric units → /100г. Count units → total |
-| **ALL_ACHIEVEMENT_DEFS** | Хардкод в ProfileScreen. Backend выдаёт только коды которые знает. Новые плитки = sync |
+| **ALL_ACHIEVEMENT_DEFS** | Хардкод в ProfileScreen. Теперь все 6 кодов выдаются backend-ом |
 | **Transaction.amount** | Положительный = доход, отрицательный = расход (нет поля type!) |
 | **hidden_widgets** | Web-виджеты (без префикса) + tg-кнопки (`tg_gym`, `tg_food` и т.д.) |
 | **БД** | Только Supabase PostgreSQL, Prisma ORM, без локальной БД |
 | **Lint** | `bun run lint` перед коммитом (0 ошибок) |
 | **Миграции** | Вручную в Supabase SQL Editor, файл в prisma/migrations/ |
+| **classifyUnknownInput** | Пре-чек "слово N1 N2" → food (детерминированно, без AI). Затем user patterns → AI |
 
 ---
 
