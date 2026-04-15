@@ -20,25 +20,41 @@ export function useAiWidgets(userId: string | undefined, hiddenWidgets: string[]
 
   useEffect(() => {
     if (!userId) return;
-    fetch(`/api/ai/recommendations?userId=${userId}`)
+
+    const controller = new AbortController();
+
+    void fetch(`/api/ai/recommendations?userId=${userId}`, { signal: controller.signal })
       .then((r) => r.json())
       .then((data: AiRecommendationApiResponse) => {
-        if (data.success && data.recommendation) setAiRecommendation(data.recommendation);
+        if (!controller.signal.aborted && data.success && data.recommendation) {
+          setAiRecommendation(data.recommendation);
+        }
       })
-      .catch(() => {});
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) console.error("Failed to load AI recommendation:", error);
+      });
+
+    return () => controller.abort();
   }, [userId]);
 
   useEffect(() => {
     if (!userId || hiddenWidgets.includes("daily_tip")) return;
-    fetch(`/api/ai/daily-tip?userId=${userId}`)
+
+    const controller = new AbortController();
+
+    void fetch(`/api/ai/daily-tip?userId=${userId}`, { signal: controller.signal })
       .then((r) => {
         if (!r.ok) return null;
         return r.json() as Promise<DailyTipApiResponse>;
       })
       .then((data) => {
-        if (data) setDailyTip(data);
+        if (!controller.signal.aborted && data) setDailyTip(data);
       })
-      .catch(() => {});
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) console.error("Failed to load daily tip:", error);
+      });
+
+    return () => controller.abort();
   }, [userId, hiddenWidgets]);
 
   return { aiRecommendation, dailyTip };

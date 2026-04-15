@@ -29,10 +29,14 @@ export function useWeeklyLeaks(userId: string | undefined) {
 
   useEffect(() => {
     if (!userId) return;
+    const controller = new AbortController();
     const weekStart = getMondayISO();
-    fetch(`/api/weekly-report?userId=${userId}&weekStart=${weekStart}`)
+    void fetch(`/api/weekly-report?userId=${userId}&weekStart=${weekStart}`, {
+      signal: controller.signal,
+    })
       .then((r) => r.json())
       .then((data: WeeklyReportApiResponse) => {
+        if (controller.signal.aborted) return;
         if (!data.success || !data.leakHints) return;
         setWeeklyLeaksCount(data.leakHints.length);
         const severityOrder: Record<string, number> = { critical: 0, warning: 1, info: 2 };
@@ -41,7 +45,11 @@ export function useWeeklyLeaks(userId: string | undefined) {
         );
         if (sorted.length > 0) setTopWeeklyLeak(sorted[0]);
       })
-      .catch(() => {});
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) console.error("Failed to load weekly leaks:", error);
+      });
+
+    return () => controller.abort();
   }, [userId]);
 
   return { weeklyLeaksCount, topWeeklyLeak };

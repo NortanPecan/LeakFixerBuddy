@@ -2,6 +2,9 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { createHmac, timingSafeEqual } from "crypto";
 import { getSupabaseUrl, getSupabaseServiceKey, isSupabaseAdminAvailable } from "./supabaseClient";
 
+const TELEGRAM_INIT_DATA_MAX_AGE_SECONDS = 60 * 60 * 24;
+const TELEGRAM_INIT_DATA_FUTURE_SKEW_SECONDS = 60;
+
 // Lazy-initialized Supabase admin client for auth operations
 let _supabaseAuth: SupabaseClient | null = null;
 
@@ -71,6 +74,11 @@ export async function authenticateTelegramUser(telegramUser: {
     const existingUser = users.find((u) => u.user_metadata?.telegram_id === telegramId);
 
     if (existingUser) {
+      const existingEmail = existingUser.email;
+      if (!existingEmail) {
+        return { error: new Error("Telegram auth user is missing email") };
+      }
+
       // Update last login
       await client.auth.admin.updateUserById(existingUser.id, {
         user_metadata: {
@@ -86,7 +94,7 @@ export async function authenticateTelegramUser(telegramUser: {
       // Generate new session token
       const { data: sessionData, error: _sessionError } = await client.auth.admin.generateLink({
         type: "magiclink",
-        email: existingUser.email!,
+        email: existingEmail,
       });
       const session = (sessionData as { session?: unknown })?.session ?? null;
 
@@ -152,6 +160,7 @@ export function verifyTelegramInitData(initData: string): {
     const params = new URLSearchParams(initData);
     const hash = params.get("hash");
     const userParam = params.get("user");
+    const authDateRaw = params.get("auth_date");
 
     if (!hash) {
       return { valid: false, error: "No hash in initData" };
@@ -159,6 +168,17 @@ export function verifyTelegramInitData(initData: string): {
 
     if (!userParam) {
       return { valid: false, error: "No user data in initData" };
+    }
+
+    const authDate = Number(authDateRaw);
+    const now = Math.floor(Date.now() / 1000);
+    if (
+      !Number.isFinite(authDate) ||
+      authDate <= 0 ||
+      now - authDate > TELEGRAM_INIT_DATA_MAX_AGE_SECONDS ||
+      authDate - now > TELEGRAM_INIT_DATA_FUTURE_SKEW_SECONDS
+    ) {
+      return { valid: false, error: "Invalid Telegram signature" };
     }
 
     params.delete("hash");
@@ -171,17 +191,14 @@ export function verifyTelegramInitData(initData: string): {
     const secretKey = createHmac("sha256", "WebAppData").update(botToken).digest();
     const calculatedHash = createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
 
-    const providedHash = Buffer.from(hash, "hex");
-    const expectedHash = Buffer.from(calculatedHash, "hex");
-
-    if (
-      providedHash.length !== expectedHash.length ||
-      !timingSafeEqual(providedHash, expectedHash)
-    ) {
+    if (!safeCompareHex(hash, calculatedHash)) {
       return { valid: false, error: "Invalid Telegram signature" };
     }
 
     const userData = JSON.parse(userParam);
+    if (!Number.isSafeInteger(userData.id) || userData.id <= 0) {
+      return { valid: false, error: "Invalid initData format" };
+    }
 
     return {
       valid: true,
@@ -198,6 +215,18 @@ export function verifyTelegramInitData(initData: string): {
     console.error("Error verifying initData:", error);
     return { valid: false, error: "Invalid initData format" };
   }
+}
+
+function safeCompareHex(providedHex: string, expectedHex: string): boolean {
+  if (!isHex(providedHex) || !isHex(expectedHex) || providedHex.length !== expectedHex.length) {
+    return false;
+  }
+
+  return timingSafeEqual(Buffer.from(providedHex, "hex"), Buffer.from(expectedHex, "hex"));
+}
+
+function isHex(value: string): boolean {
+  return value.length % 2 === 0 && /^[0-9a-f]+$/i.test(value);
 }
 
 /**

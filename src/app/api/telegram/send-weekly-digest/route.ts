@@ -10,9 +10,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { generateWeeklyDigest } from "@/lib/ai-weekly-digest";
+import { requireCronSecret } from "@/lib/cron-auth";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const CRON_SECRET = process.env.CRON_SECRET;
 
 // ─── Telegram helper ──────────────────────────────────────────────────────────
 
@@ -38,10 +38,8 @@ async function sendTelegramMessage(chatId: bigint, text: string): Promise<boolea
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 async function handleRequest(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const cronAuthError = requireCronSecret(request);
+  if (cronAuthError) return cronAuthError;
 
   if (!BOT_TOKEN) {
     return NextResponse.json({ error: "TELEGRAM_BOT_TOKEN not configured" }, { status: 500 });

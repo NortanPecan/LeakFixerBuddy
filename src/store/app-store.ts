@@ -398,7 +398,6 @@ export const useAppStore = create<AppState>()(
 
       // Email login
       loginWithEmail: async (email, password, action, name) => {
-        set({ isLoading: true });
         try {
           const response = await fetch("/api/auth/email", {
             method: "POST",
@@ -408,6 +407,7 @@ export const useAppStore = create<AppState>()(
           const data = await response.json();
 
           if (!response.ok) {
+            set({ isLoading: false });
             return { ok: false, error: data.error || "Auth failed" };
           }
 

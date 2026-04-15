@@ -49,3 +49,21 @@ npm run check:prepush
 
 ## ENV
 DATABASE_URL, DIRECT_DATABASE_URL, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, TELEGRAM_BOT_TOKEN, CRON_SECRET, GROQ_API_KEY, GEMINI_API_KEY
+
+## Hardening guidance for future agents
+- Keep architecture changes small and reversible. Prefer shared helpers for auth, validation, rate limiting, and error responses when they remove real duplication.
+- Treat `src/app/api/` as the highest-risk boundary. Auth, cron/admin endpoints, Telegram webhook verification, password handling, and AI-provider fallbacks need fail-closed behavior.
+- New email passwords must use the shared password hashing helper. Legacy SHA-256 hashes may only be accepted for login-time migration.
+- Use zod contracts for new or touched API request bodies. Preserve existing public response shapes unless the product owner asks for an API break.
+- Tests before handoff: `bun run lint`, `bun run test:vitest`, `bun run test:e2e -- --project=mobile-chrome`, and `bun run build` when dependencies, Next.js config, API routes, or CI are touched.
+- Playwright tests should use stable locators (`data-testid`, roles, labels) and mock external services unless the scenario is explicitly about an integration.
+- Code review priority order: security regressions, data loss, auth bypass, broken production deploy, race/stale state bugs, memory/subscription leaks, then maintainability.
+- Do not do sweeping rewrites of `LeaksScreen.tsx` or broad API migrations in one pass. Extract only well-tested slices with clear ownership.
+
+## Mechanical Prettier cleanup TODO
+- Do this as a separate mechanical PR with no behavior changes.
+- Scope: formatting only. Run `bun run format` and avoid manual refactors in the same PR.
+- Keep generated/runtime folders out of the PR: `.next/`, `coverage/`, `playwright-report/`, and `test-results/`.
+- Practical flow: start from a clean branch, run `bun run format`, review `git diff --stat`, then stage only formatter output.
+- Before opening the PR, run `bun run lint`, `bun run test:vitest`, `bun run test:e2e -- --project=mobile-chrome`, and `bun run build`.
+- After that PR lands, remove `continue-on-error: true` from the CI Prettier step so `bun run format:check` becomes blocking again.

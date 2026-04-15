@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { createHmac } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 import { getMoodStatusText } from "@/lib/mood-utils";
 import { setAuthSession } from "@/lib/server-auth";
 
@@ -15,6 +15,8 @@ interface TelegramUser {
 
 const DEMO_TELEGRAM_ID_TEXT = "9000000001";
 const DEMO_EMAIL = "demo@leakfixer.local";
+const TELEGRAM_INIT_DATA_MAX_AGE_SECONDS = 60 * 60 * 24;
+const TELEGRAM_INIT_DATA_FUTURE_SKEW_SECONDS = 60;
 
 function makeConfigHint() {
   return {
@@ -115,6 +117,16 @@ function serializeTelegramId(value: unknown): string | null {
   return String(value);
 }
 
+function safeCompareHex(left: string, right: string): boolean {
+  try {
+    const leftBuffer = Buffer.from(left, "hex");
+    const rightBuffer = Buffer.from(right, "hex");
+    return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+  } catch {
+    return false;
+  }
+}
+
 async function findUserByTelegramId(rawId: number | string) {
   const candidates = telegramIdCandidates(rawId);
   for (const candidate of candidates) {
@@ -171,6 +183,19 @@ function validateTelegramInitData(
 
     params.delete("hash");
 
+    const authDateText = params.get("auth_date");
+    const authDate = authDateText ? Number(authDateText) : NaN;
+    const now = Math.floor(Date.now() / 1000);
+    if (
+      !Number.isFinite(authDate) ||
+      authDate <= 0 ||
+      authDate > now + TELEGRAM_INIT_DATA_FUTURE_SKEW_SECONDS ||
+      now - authDate > TELEGRAM_INIT_DATA_MAX_AGE_SECONDS
+    ) {
+      console.error("[Telegram Auth] Expired or invalid auth_date");
+      return { valid: false };
+    }
+
     const dataCheckString = [...params.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([k, v]) => `${k}=${v}`)
@@ -178,7 +203,7 @@ function validateTelegramInitData(
 
     const secretKey = createHmac("sha256", "WebAppData").update(botToken).digest();
     const signature = createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
-    const valid = signature === hash;
+    const valid = safeCompareHex(signature, hash);
 
     if (!valid) {
       console.error("[Telegram Auth] Invalid signature", { expected: hash, calculated: signature });

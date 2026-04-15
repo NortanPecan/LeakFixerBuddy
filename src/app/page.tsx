@@ -356,6 +356,7 @@ export default function Home() {
 
   return (
     <main
+      data-testid="app-shell"
       className="flex min-h-screen flex-col"
       style={{
         background: "linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)",
@@ -404,6 +405,7 @@ function AuthErrorScreen({ message }: { message: string }) {
 
   return (
     <main
+      data-testid="auth-error-screen"
       className="flex min-h-screen flex-col"
       style={{
         background: "linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)",
@@ -423,12 +425,14 @@ function AuthErrorScreen({ message }: { message: string }) {
           <p className="mb-5 text-sm break-words text-white/40">{message}</p>
           <div className="grid grid-cols-1 gap-2">
             <Button
+              data-testid="auth-email-button"
               onClick={() => setShowEmail(true)}
               className="h-12 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700"
             >
               Войти / Зарегистрироваться
             </Button>
             <Button
+              data-testid="auth-telegram-button"
               onClick={async () => {
                 setIsLoading(true);
                 await login();
@@ -441,6 +445,7 @@ function AuthErrorScreen({ message }: { message: string }) {
             </Button>
             {canUseDemo && (
               <Button
+                data-testid="auth-demo-button"
                 variant="outline"
                 onClick={async () => {
                   setIsLoading(true);
@@ -462,6 +467,7 @@ function AuthErrorScreen({ message }: { message: string }) {
 function LoadingScreen() {
   return (
     <main
+      data-testid="loading-screen"
       className="flex min-h-screen flex-col"
       style={{
         background: "linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)",

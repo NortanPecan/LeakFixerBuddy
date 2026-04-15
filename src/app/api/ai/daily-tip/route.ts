@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { callAI } from "@/lib/ai-provider";
 import { requireSelf } from "@/lib/server-auth";
+import { requireCronSecret } from "@/lib/cron-auth";
 
 const DAILY_TIP_SYSTEM = `Ты персональный коуч по саморазвитию. Пишешь на русском языке.
 Тебе дают данные о пользователе за последнюю неделю.
@@ -135,11 +136,8 @@ export async function GET(request: NextRequest) {
 // Force-regenerate tip (for cron job)
 export async function POST(request: NextRequest) {
   // Cron auth
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const cronAuthError = requireCronSecret(request);
+  if (cronAuthError) return cronAuthError;
 
   try {
     const body = (await request.json()) as { userId?: string };

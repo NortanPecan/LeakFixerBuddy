@@ -117,12 +117,13 @@ const memoryStore = new Map<string, MemoryEntry>();
 
 // Clean up expired entries every minute
 if (typeof setInterval !== "undefined") {
-  setInterval(() => {
+  const cleanupTimer = setInterval(() => {
     const now = Date.now();
     for (const [key, entry] of memoryStore) {
       if (now >= entry.resetAt) memoryStore.delete(key);
     }
   }, 60_000);
+  cleanupTimer.unref?.();
 }
 
 function checkMemory(key: string, config: RateLimitConfig): RateLimitResult {

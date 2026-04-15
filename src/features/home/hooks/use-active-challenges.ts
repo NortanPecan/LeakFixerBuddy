@@ -16,12 +16,21 @@ export function useActiveChallenges(
 
   useEffect(() => {
     if (!userId || hiddenWidgets.includes("challenges")) return;
-    fetch(`/api/challenges?userId=${userId}&status=active`)
+
+    const controller = new AbortController();
+
+    void fetch(`/api/challenges?userId=${userId}&status=active`, { signal: controller.signal })
       .then((r) => r.json())
       .then((d: ChallengesApiResponse) => {
-        if (d.success && d.challenges) setActiveChallenges(d.challenges.slice(0, 2));
+        if (!controller.signal.aborted && d.success && d.challenges) {
+          setActiveChallenges(d.challenges.slice(0, 2));
+        }
       })
-      .catch(() => {});
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) console.error("Failed to load active challenges:", error);
+      });
+
+    return () => controller.abort();
   }, [userId, hiddenWidgets]);
 
   return activeChallenges;

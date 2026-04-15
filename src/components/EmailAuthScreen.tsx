@@ -12,12 +12,13 @@ interface Props {
 }
 
 export function EmailAuthScreen({ onBack }: Props) {
-  const { loginWithEmail, isLoading } = useAppStore();
+  const { loginWithEmail } = useAppStore();
   const [mode, setMode] = useState<Mode>("choose");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
     setError("");
@@ -25,12 +26,14 @@ export function EmailAuthScreen({ onBack }: Props) {
       setError("Заполни email и пароль");
       return;
     }
+    setIsSubmitting(true);
     const result = await loginWithEmail(
       email.trim(),
       password,
       mode as "signin" | "signup",
       name.trim() || undefined
     );
+    setIsSubmitting(false);
     if (!result.ok) {
       const map: Record<string, string> = {
         "Email already registered": "Email уже зарегистрирован",
@@ -46,6 +49,7 @@ export function EmailAuthScreen({ onBack }: Props) {
 
   return (
     <div
+      data-testid="email-auth-screen"
       className="flex min-h-screen flex-col items-center justify-center px-4"
       style={{
         background: "linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)",
@@ -74,12 +78,14 @@ export function EmailAuthScreen({ onBack }: Props) {
         {mode === "choose" && (
           <div className="space-y-3">
             <Button
+              data-testid="email-signin-choice"
               className="h-12 w-full rounded-xl border-0 bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700"
               onClick={() => setMode("signin")}
             >
               Войти по email
             </Button>
             <Button
+              data-testid="email-signup-choice"
               variant="outline"
               className="h-12 w-full rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10"
               onClick={() => setMode("signup")}
@@ -119,6 +125,7 @@ export function EmailAuthScreen({ onBack }: Props) {
               />
             )}
             <Input
+              data-testid="email-input"
               type="email"
               placeholder="Email"
               value={email}
@@ -127,6 +134,7 @@ export function EmailAuthScreen({ onBack }: Props) {
               className="h-12 rounded-xl border-white/15 bg-white/5 text-white placeholder:text-white/30"
             />
             <Input
+              data-testid="password-input"
               type="password"
               placeholder="Пароль (мин. 6 символов)"
               value={password}
@@ -137,17 +145,21 @@ export function EmailAuthScreen({ onBack }: Props) {
             />
 
             {error && (
-              <div className="rounded-lg bg-red-500/10 px-2 py-2 text-center text-sm text-red-400">
+              <div
+                data-testid="email-auth-error"
+                className="rounded-lg bg-red-500/10 px-2 py-2 text-center text-sm text-red-400"
+              >
                 {error}
               </div>
             )}
 
             <Button
+              data-testid="email-submit-button"
               className="h-12 w-full rounded-xl border-0 bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700"
               onClick={handleSubmit}
-              disabled={isLoading}
+              disabled={isSubmitting}
             >
-              {isLoading ? "Загружаю..." : mode === "signin" ? "Войти" : "Создать аккаунт"}
+              {isSubmitting ? "Загружаю..." : mode === "signin" ? "Войти" : "Создать аккаунт"}
             </Button>
 
             <div className="flex items-center justify-between text-sm">

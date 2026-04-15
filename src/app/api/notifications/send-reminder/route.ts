@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { requireCronSecret } from "@/lib/cron-auth";
 import { formatDateKey, normalizeToDate } from "@/lib/date-utils";
 import { isScheduledDay, parseScheduleDays } from "@/lib/streak-utils";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const CRON_SECRET = process.env.CRON_SECRET;
 
 async function sendTelegramMessage(chatId: bigint, text: string): Promise<boolean> {
   if (!BOT_TOKEN) return false;
@@ -35,10 +35,8 @@ export async function POST(request: NextRequest) {
 }
 
 async function handleReminder(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const cronAuthError = requireCronSecret(request);
+  if (cronAuthError) return cronAuthError;
 
   if (!BOT_TOKEN) {
     return NextResponse.json({ error: "TELEGRAM_BOT_TOKEN not configured" }, { status: 500 });

@@ -28,19 +28,27 @@ export function useWeightData(userId: string | undefined) {
   const [weightLoading, setWeightLoading] = useState(false);
   const [weightSaving, setWeightSaving] = useState(false);
 
-  const reload = useCallback(async (uid: string) => {
-    const r = await fetch(`/api/weight?userId=${uid}`);
+  const reload = useCallback(async (uid: string, signal?: AbortSignal) => {
+    const r = await fetch(`/api/weight?userId=${uid}`, { signal });
     const data = (await r.json()) as WeightApiResponse;
+    if (signal?.aborted) return;
     setWeightData(mapResponse(data));
     if (data.todayAvg) setWeightValue(data.todayAvg.toFixed(1));
   }, []);
 
   useEffect(() => {
     if (!userId) return;
+    const controller = new AbortController();
     setWeightLoading(true);
-    reload(userId)
-      .catch((err: unknown) => console.error("Failed to load weight:", err))
-      .finally(() => setWeightLoading(false));
+    reload(userId, controller.signal)
+      .catch((err: unknown) => {
+        if (!controller.signal.aborted) console.error("Failed to load weight:", err);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setWeightLoading(false);
+      });
+
+    return () => controller.abort();
   }, [userId, reload]);
 
   const handleSaveWeight = async () => {

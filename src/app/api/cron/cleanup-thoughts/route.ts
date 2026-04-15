@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { requireCronSecret } from "@/lib/cron-auth";
 
 /**
  * GET/POST /api/cron/cleanup-thoughts
@@ -16,11 +17,8 @@ export async function POST(request: NextRequest) {
 }
 
 async function handler(request: NextRequest) {
-  const auth = request.headers.get("authorization");
-  const secret = process.env.CRON_SECRET;
-  if (secret && auth !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const cronAuthError = requireCronSecret(request);
+  if (cronAuthError) return cronAuthError;
 
   try {
     const result = await db.fleetingThought.deleteMany({
