@@ -4,6 +4,8 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireSelf } from "@/lib/server-auth";
 import { appendRunJournal, compactSnapshot } from "@/lib/leak-policy";
+import { loadLeakPlansWithFeedback } from "@/server/leaks/leak-plan-queries";
+import { loadFeedbackLeakForUser } from "@/server/leaks/leak-route-queries";
 
 const LeakFeedbackSchema = z.object({
   userId: z.string().min(1),
@@ -147,23 +149,6 @@ function buildPatternResponse(pattern: {
   };
 }
 
-async function loadPlans(leakId: string) {
-  return db.leakSolutionPlan.findMany({
-    where: { leakId },
-    include: {
-      actions: {
-        include: {
-          feedbacks: {
-            orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-          },
-        },
-        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      },
-    },
-    orderBy: [{ isSelected: "desc" }, { createdAt: "asc" }],
-  });
-}
-
 export async function POST(request: NextRequest, context: { params: Promise<{ leakId: string }> }) {
   try {
     const body = await request.json();
@@ -206,18 +191,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
     const auth = requireSelf(request, userId);
     if ("error" in auth) return auth.error;
 
-    const leak = await db.leak.findUnique({
-      where: { id: leakId },
-      select: { id: true, userId: true, title: true },
-    });
-
-    if (!leak) {
-      return NextResponse.json({ error: "Leak not found" }, { status: 404 });
-    }
-
-    if (leak.userId !== userId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const target = await loadFeedbackLeakForUser(leakId, userId);
+    if ("error" in target) return target.error;
+    const leak = target.data;
 
     const actions = await db.leakSolutionAction.findMany({
       where: { id: { in: targetActionIds } },
@@ -549,7 +525,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
       return { pattern, reopened, effectivePolicyCorrelationId };
     });
 
-    const plans = await loadPlans(leakId);
+    const plans = await loadLeakPlansWithFeedback(leakId);
     const refreshedLeak = await db.leak.findUnique({
       where: { id: leakId },
       select: {

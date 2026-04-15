@@ -4,6 +4,9 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireSelf } from "@/lib/server-auth";
 import { appendRunJournal, compactSnapshot, normalizeSnapshot } from "@/lib/leak-policy";
+import { runLeakActionLinkHealthCheck } from "@/server/leaks/leak-action-link-health";
+import { getPayloadObject, toDateFromHint } from "@/server/leaks/leak-convert-utils";
+import { loadConvertLeakForUser } from "@/server/leaks/leak-route-queries";
 
 const ConvertLeakPlanSchema = z.object({
   userId: z.string().min(1),
@@ -14,47 +17,6 @@ const ConvertLeakPlanSchema = z.object({
 
 type PlanMode = "minimum" | "base" | "maximum";
 type EntityType = "task" | "ritual" | "challenge" | "content" | "skill" | "trait";
-type HealthCheckSummary = { removedLinks: number; patchedLinks: number };
-
-function normalizeMetadata(metadata: unknown): Record<string, unknown> {
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return {};
-  return { ...(metadata as Record<string, unknown>) };
-}
-
-function getPayloadObject(payload: unknown): Record<string, unknown> {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return {};
-  }
-
-  return payload as Record<string, unknown>;
-}
-
-function toDateFromHint(hint: unknown): Date | null {
-  if (typeof hint !== "string" || !hint.trim()) return null;
-
-  const key = hint.trim().toLowerCase();
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-
-  if (key === "today") return date;
-  if (key === "tomorrow") {
-    date.setDate(date.getDate() + 1);
-    return date;
-  }
-  if (key === "this_week") {
-    date.setDate(date.getDate() + 3);
-    return date;
-  }
-  if (key === "next_week") {
-    date.setDate(date.getDate() + 7);
-    return date;
-  }
-
-  const parsed = new Date(hint);
-  if (!Number.isNaN(parsed.getTime())) return parsed;
-
-  return null;
-}
 
 function mapSphereToZone(sphere: string | null | undefined) {
   const normalized = String(sphere || "")
@@ -101,171 +63,6 @@ function mapSphereToTraitCategory(sphere: string | null | undefined) {
   return "mind";
 }
 
-async function entityExists(tx: Prisma.TransactionClient, entityType: string, entityId: string) {
-  if (entityType === "task") {
-    return Boolean(await tx.task.findUnique({ where: { id: entityId }, select: { id: true } }));
-  }
-  if (entityType === "ritual") {
-    return Boolean(await tx.ritual.findUnique({ where: { id: entityId }, select: { id: true } }));
-  }
-  if (entityType === "challenge") {
-    return Boolean(
-      await tx.challenge.findUnique({ where: { id: entityId }, select: { id: true } })
-    );
-  }
-  if (entityType === "content") {
-    return Boolean(
-      await tx.contentItem.findUnique({ where: { id: entityId }, select: { id: true } })
-    );
-  }
-  if (entityType === "skill") {
-    return Boolean(await tx.skill.findUnique({ where: { id: entityId }, select: { id: true } }));
-  }
-  if (entityType === "trait") {
-    return Boolean(await tx.trait.findUnique({ where: { id: entityId }, select: { id: true } }));
-  }
-  return false;
-}
-
-async function runLeakActionLinkHealthCheck(
-  tx: Prisma.TransactionClient,
-  leakId: string,
-  plans: Array<{
-    id: string;
-    mode: string;
-    actions: Array<{ id: string; kind: string; title: string }>;
-  }>
-): Promise<HealthCheckSummary> {
-  const links = await tx.leakActionLink.findMany({
-    where: { leakId },
-    select: {
-      id: true,
-      entityType: true,
-      entityId: true,
-      label: true,
-      metadata: true,
-      status: true,
-    },
-  });
-
-  const actions = plans.flatMap((plan) =>
-    plan.actions.map((action) => ({
-      ...action,
-      planId: plan.id,
-      planMode: plan.mode,
-      titleKey: action.title.trim().toLowerCase(),
-    }))
-  );
-  const actionsById = new Map(actions.map((action) => [action.id, action]));
-  const actionsByKindTitle = new Map(
-    actions.map((action) => [`${action.kind}|${action.titleKey}`, action])
-  );
-
-  let removedLinks = 0;
-  let patchedLinks = 0;
-
-  for (const link of links) {
-    const exists = await entityExists(tx, link.entityType, link.entityId);
-    if (!exists) {
-      await tx.leakActionLink.delete({ where: { id: link.id } });
-      removedLinks += 1;
-      continue;
-    }
-
-    const metadata = normalizeMetadata(link.metadata);
-    const sourceActionId =
-      typeof metadata.sourceActionId === "string" && metadata.sourceActionId
-        ? metadata.sourceActionId
-        : null;
-    const sourceActionKind =
-      typeof metadata.sourceActionKind === "string" ? metadata.sourceActionKind : null;
-    const sourceActionTitle =
-      typeof metadata.sourceActionTitle === "string" ? metadata.sourceActionTitle : null;
-    const byId = sourceActionId ? actionsById.get(sourceActionId) || null : null;
-    const fallbackByKey =
-      sourceActionKind && sourceActionTitle
-        ? actionsByKindTitle.get(`${sourceActionKind}|${sourceActionTitle.trim().toLowerCase()}`) ||
-          null
-        : null;
-    const fallbackByLabel =
-      actionsByKindTitle.get(`${link.entityType}|${link.label.trim().toLowerCase()}`) || null;
-    const resolvedAction = byId || fallbackByKey || fallbackByLabel;
-
-    let changed = false;
-    if (resolvedAction) {
-      if (metadata.sourceActionId !== resolvedAction.id) {
-        metadata.sourceActionId = resolvedAction.id;
-        changed = true;
-      }
-      if (metadata.sourceActionTitle !== resolvedAction.title) {
-        metadata.sourceActionTitle = resolvedAction.title;
-        changed = true;
-      }
-      if (metadata.sourceActionKind !== resolvedAction.kind) {
-        metadata.sourceActionKind = resolvedAction.kind;
-        changed = true;
-      }
-      if (metadata.sourcePlanId !== resolvedAction.planId) {
-        metadata.sourcePlanId = resolvedAction.planId;
-        changed = true;
-      }
-      if (metadata.sourcePlanMode !== resolvedAction.planMode) {
-        metadata.sourcePlanMode = resolvedAction.planMode;
-        changed = true;
-      }
-      if (link.status !== "active") {
-        changed = true;
-      }
-    } else if (sourceActionId || sourceActionKind || sourceActionTitle) {
-      delete metadata.sourceActionId;
-      delete metadata.sourceActionTitle;
-      delete metadata.sourceActionKind;
-      delete metadata.sourcePlanId;
-      delete metadata.sourcePlanMode;
-      changed = true;
-    }
-
-    if (changed) {
-      await tx.leakActionLink.update({
-        where: { id: link.id },
-        data: {
-          metadata: metadata as unknown as Prisma.InputJsonValue,
-          status: "active",
-        },
-      });
-      patchedLinks += 1;
-    }
-  }
-
-  return { removedLinks, patchedLinks };
-}
-
-async function getLeakForUser(leakId: string, userId: string) {
-  const leak = await db.leak.findUnique({
-    where: { id: leakId },
-    select: {
-      id: true,
-      userId: true,
-      title: true,
-      description: true,
-      severity: true,
-      sphere: true,
-      status: true,
-      contextSnapshot: true,
-    },
-  });
-
-  if (!leak) {
-    return { error: NextResponse.json({ error: "Leak not found" }, { status: 404 }) };
-  }
-
-  if (leak.userId !== userId) {
-    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
-  }
-
-  return { leak };
-}
-
 export async function POST(request: NextRequest, context: { params: Promise<{ leakId: string }> }) {
   try {
     const body = await request.json();
@@ -283,8 +80,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
     const auth = requireSelf(request, userId);
     if ("error" in auth) return auth.error;
 
-    const target = await getLeakForUser(leakId, userId);
+    const target = await loadConvertLeakForUser(leakId, userId);
     if ("error" in target) return target.error;
+    const leak = target.data;
 
     const plans = await db.leakSolutionPlan.findMany({
       where: { leakId },
@@ -316,16 +114,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
       return NextResponse.json({ error: "Selected action not found in plan" }, { status: 404 });
     }
 
-    const zone = mapSphereToZone(target.leak.sphere);
-    const ritualCategory = mapSphereToRitualCategory(target.leak.sphere);
-    const traitCategory = mapSphereToTraitCategory(target.leak.sphere);
+    const zone = mapSphereToZone(leak.sphere);
+    const ritualCategory = mapSphereToRitualCategory(leak.sphere);
+    const traitCategory = mapSphereToTraitCategory(leak.sphere);
 
     const result = await db.$transaction(async (tx) => {
       const createdEntities: Array<{ entityType: EntityType; entityId: string; label: string }> =
         [];
       let skippedActions = 0;
       let reusedActions = 0;
-      let snapshot = normalizeSnapshot(target.leak.contextSnapshot);
+      let snapshot = normalizeSnapshot(leak.contextSnapshot);
       const healthCheck = await runLeakActionLinkHealthCheck(tx, leakId, plans);
       const existingLinks = await tx.leakActionLink.findMany({
         where: { leakId },
@@ -466,7 +264,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
               status: "todo",
               date: toDateFromHint(payload.suggestedDeadline) || null,
               zone: zone || "LeakFixer",
-              notes: action.description || target.leak.description || target.leak.title,
+              notes: action.description || leak.description || leak.title,
             },
           });
 
@@ -484,8 +282,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
               category: ritualCategory,
               days: JSON.stringify(days),
               timeWindow: "any",
-              goalShort: target.leak.title,
-              description: action.description || target.leak.description || target.leak.title,
+              goalShort: leak.title,
+              description: action.description || leak.description || leak.title,
               attributes: JSON.stringify(
                 ritualCategory === "health"
                   ? ["health", "will"]
@@ -503,7 +301,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
               userId,
               name: action.title,
               title: action.title,
-              description: action.description || target.leak.description || target.leak.title,
+              description: action.description || leak.description || leak.title,
               type: "custom",
               category: "lifestyle",
               zone,
@@ -532,7 +330,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
               userId,
               type: typeof payload.contentType === "string" ? payload.contentType : "article",
               title: action.title,
-              description: action.description || target.leak.description || null,
+              description: action.description || leak.description || null,
               zone,
               status: "planned",
             },
@@ -657,7 +455,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
         });
       }
 
-      if (target.leak.status === "new" && createdEntities.length > 0) {
+      if (leak.status === "new" && createdEntities.length > 0) {
         if (policyCorrelationId) {
           snapshot.activePolicyCorrelationId = policyCorrelationId;
           snapshot.activePolicyActionType = "create_entity";

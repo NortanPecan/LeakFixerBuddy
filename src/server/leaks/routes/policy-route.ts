@@ -10,23 +10,8 @@ import {
   type LeakPlanMode,
   type PolicyPlan,
 } from "@/lib/leak-policy";
-
-async function loadPlans(leakId: string) {
-  return db.leakSolutionPlan.findMany({
-    where: { leakId },
-    include: {
-      actions: {
-        include: {
-          feedbacks: {
-            orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-          },
-        },
-        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      },
-    },
-    orderBy: [{ isSelected: "desc" }, { createdAt: "asc" }],
-  });
-}
+import { loadLeakPlansWithFeedback } from "@/server/leaks/leak-plan-queries";
+import { loadPolicyLeakForUser } from "@/server/leaks/leak-route-queries";
 
 function pickLiveContext(snapshot: Record<string, unknown>) {
   const live =
@@ -544,22 +529,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ lea
     const auth = requireSelf(request, userId);
     if ("error" in auth) return auth.error;
 
-    const leak = await db.leak.findUnique({
-      where: { id: leakId },
-      select: {
-        id: true,
-        userId: true,
-        contextSnapshot: true,
-      },
-    });
-    if (!leak) {
-      return NextResponse.json({ error: "Leak not found" }, { status: 404 });
-    }
-    if (leak.userId !== userId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const target = await loadPolicyLeakForUser(leakId, userId);
+    if ("error" in target) return target.error;
+    const leak = target.data;
 
-    const plans = await loadPlans(leakId);
+    const plans = await loadLeakPlansWithFeedback(leakId);
     const snapshot = normalizeSnapshot(leak.contextSnapshot);
     const policy = buildLeakPolicy(
       plans as unknown as PolicyPlan[],

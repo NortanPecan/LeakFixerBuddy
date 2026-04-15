@@ -13,6 +13,9 @@ import {
   normalizeSnapshot,
   type PolicyPlan,
 } from "@/lib/leak-policy";
+import { loadLeakPlansWithFeedback } from "@/server/leaks/leak-plan-queries";
+import { resolveLeakPlanRetryFocus } from "@/server/leaks/leak-plan-retry";
+import { loadPlanLeakForUser } from "@/server/leaks/leak-route-queries";
 
 const PLAN_MODE_ORDER: LeakPlanMode[] = ["minimum", "base", "maximum"];
 
@@ -370,99 +373,6 @@ async function buildLiveLeakContext(userId: string, leakId: string) {
   };
 }
 
-async function getLeakForUser(leakId: string, userId: string) {
-  const leak = await db.leak.findUnique({
-    where: { id: leakId },
-    select: {
-      id: true,
-      userId: true,
-      title: true,
-      description: true,
-      severity: true,
-      sphere: true,
-      contextSnapshot: true,
-    },
-  });
-
-  if (!leak) {
-    return { error: NextResponse.json({ error: "Leak not found" }, { status: 404 }) };
-  }
-
-  if (leak.userId !== userId) {
-    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
-  }
-
-  return { leak };
-}
-
-async function resolveRetryFocus(
-  leakId: string,
-  input: {
-    retryActionId?: string;
-    retryActionTitle?: string;
-    retryActionKind?: string;
-    retryFailureReason?: string;
-  }
-) {
-  const fallback =
-    input.retryActionTitle && input.retryActionTitle.trim().length > 0
-      ? {
-          actionId: input.retryActionId || null,
-          actionTitle: input.retryActionTitle.trim(),
-          actionKind: input.retryActionKind || null,
-          failureReason: input.retryFailureReason || null,
-        }
-      : null;
-
-  if (!input.retryActionId) return fallback;
-
-  const action = await db.leakSolutionAction.findUnique({
-    where: { id: input.retryActionId },
-    include: {
-      plan: {
-        select: {
-          leakId: true,
-          mode: true,
-        },
-      },
-      feedbacks: {
-        where: { leakId },
-        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-        take: 1,
-        select: {
-          comment: true,
-        },
-      },
-    },
-  });
-
-  if (!action || action.plan.leakId !== leakId) return fallback;
-
-  return {
-    actionId: action.id,
-    actionTitle: action.title,
-    actionKind: action.kind,
-    failureReason: input.retryFailureReason || action.feedbacks[0]?.comment || null,
-  };
-}
-
-async function loadPlans(leakId: string) {
-  return db.leakSolutionPlan.findMany({
-    where: { leakId },
-    include: {
-      actions: {
-        include: {
-          feedbacks: {
-            orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-          },
-        },
-        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      },
-    },
-    orderBy: [{ isSelected: "desc" }, { createdAt: "asc" }],
-  });
-}
-
 export async function GET(request: NextRequest, context: { params: Promise<{ leakId: string }> }) {
   try {
     const { searchParams } = new URL(request.url);
@@ -476,11 +386,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ lea
     const auth = requireSelf(request, userId);
     if ("error" in auth) return auth.error;
 
-    const target = await getLeakForUser(leakId, userId);
+    const target = await loadPlanLeakForUser(leakId, userId);
     if ("error" in target) return target.error;
+    const leak = target.data;
 
-    const plans = await loadPlans(leakId);
-    const previousSnapshot = normalizeSnapshot(target.leak.contextSnapshot);
+    const plans = await loadLeakPlansWithFeedback(leakId);
+    const previousSnapshot = normalizeSnapshot(leak.contextSnapshot);
     const liveContext = await buildLiveLeakContext(userId, leakId);
     const policy = buildLeakPolicy(plans as unknown as PolicyPlan[], previousSnapshot, liveContext);
     return NextResponse.json({ plans, policy });
@@ -519,13 +430,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
     const auth = requireSelf(request, userId);
     if ("error" in auth) return auth.error;
 
-    const target = await getLeakForUser(leakId, userId);
+    const target = await loadPlanLeakForUser(leakId, userId);
     if ("error" in target) return target.error;
+    const leak = target.data;
 
     if (!regenerate) {
-      const existingPlans = await loadPlans(leakId);
+      const existingPlans = await loadLeakPlansWithFeedback(leakId);
       if (existingPlans.length > 0) {
-        const previousSnapshot = normalizeSnapshot(target.leak.contextSnapshot);
+        const previousSnapshot = normalizeSnapshot(leak.contextSnapshot);
         const liveContext = await buildLiveLeakContext(userId, leakId);
         const policy = buildLeakPolicy(
           existingPlans as unknown as PolicyPlan[],
@@ -536,14 +448,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
       }
     }
 
-    const retryFocus = await resolveRetryFocus(leakId, {
+    const retryFocus = await resolveLeakPlanRetryFocus(leakId, {
       retryActionId,
       retryActionTitle,
       retryActionKind,
       retryFailureReason,
     });
 
-    const previousSnapshot = normalizeSnapshot(target.leak.contextSnapshot);
+    const previousSnapshot = normalizeSnapshot(leak.contextSnapshot);
     const liveContext = await buildLiveLeakContext(userId, leakId);
     const selectedPlanMode = getSnapshotMode(previousSnapshot, "selectedPlanMode") || "base";
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -595,7 +507,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
     const { plans, provider } = await generateLeakPlans({
       userId,
       leak: {
-        ...target.leak,
+        ...leak,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         contextSnapshot: mergedSnapshot as any,
       },
@@ -644,7 +556,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ le
       }
     });
 
-    const storedPlans = await loadPlans(leakId);
+    const storedPlans = await loadLeakPlansWithFeedback(leakId);
     const policy = buildLeakPolicy(
       storedPlans as unknown as PolicyPlan[],
       mergedSnapshot,
@@ -678,7 +590,7 @@ export async function PATCH(
     const auth = requireSelf(request, userId);
     if ("error" in auth) return auth.error;
 
-    const target = await getLeakForUser(leakId, userId);
+    const target = await loadPlanLeakForUser(leakId, userId);
     if ("error" in target) return target.error;
 
     await db.$transaction(async (tx) => {
@@ -714,7 +626,7 @@ export async function PATCH(
       });
     });
 
-    const plans = await loadPlans(leakId);
+    const plans = await loadLeakPlansWithFeedback(leakId);
     const leakState = await db.leak.findUnique({
       where: { id: leakId },
       select: { contextSnapshot: true },
