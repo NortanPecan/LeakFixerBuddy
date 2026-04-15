@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Inbox, Search } from "lucide-react";
 
 interface LeakEmptyStateProps {
   hasLeaks: boolean;
@@ -28,39 +29,54 @@ export function LeakEmptyState({
       <CardContent className="space-y-4 pt-6">
         {!hasLeaks ? (
           <>
-            <div className="space-y-2">
-              <div className="font-medium text-white">Здесь появится твой inbox ликов</div>
-              <p className="text-sm text-white/60">
-                Начни с одной короткой фразы в блоке выше, либо забери готовый сигнал из weekly data
-                и уже потом разбери его с AI.
-              </p>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/10">
+                <Inbox className="h-5 w-5 text-indigo-300" />
+              </div>
+              <div>
+                <div className="font-medium text-white">Пока пусто</div>
+                <p className="text-sm text-white/60">
+                  Заметь первое слабое место выше — или возьми готовый сигнал из weekly data.
+                </p>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={onOpenSignals}
-                className="border-white/15 bg-white/5 text-white hover:bg-white/10"
-              >
-                Сигналы ({signalsCount})
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={onOpenPatterns}
-                className="border-white/15 bg-white/5 text-white hover:bg-white/10"
-              >
-                Patterns ({patternsCount})
-              </Button>
-            </div>
+            {(signalsCount > 0 || patternsCount > 0) && (
+              <div className="flex flex-wrap gap-2">
+                {signalsCount > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={onOpenSignals}
+                    className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                  >
+                    Сигналы ({signalsCount})
+                  </Button>
+                )}
+                {patternsCount > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={onOpenPatterns}
+                    className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                  >
+                    Паттерны ({patternsCount})
+                  </Button>
+                )}
+              </div>
+            )}
           </>
         ) : (
           <>
-            <div className="space-y-2">
-              <div className="font-medium text-white">По текущим фильтрам ничего не найдено</div>
-              <p className="text-sm text-white/60">
-                Сбрось фильтры или поиск, чтобы снова увидеть весь inbox и активные leak-сценарии.
-              </p>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5">
+                <Search className="h-5 w-5 text-white/50" />
+              </div>
+              <div>
+                <div className="font-medium text-white">Ничего не найдено</div>
+                <p className="text-sm text-white/60">
+                  Попробуй сбросить фильтры или изменить поиск.
+                </p>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button

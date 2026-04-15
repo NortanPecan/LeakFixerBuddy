@@ -24,7 +24,7 @@ export function SignalsTab({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-white/60">
-          Сигналы, которые уже удалось вытащить из weekly data.
+          Автоматические сигналы из еженедельной аналитики.
         </p>
         <Button
           variant="outline"
@@ -32,7 +32,7 @@ export function SignalsTab({
           onClick={onOpenWeeklyReport}
           className="border-white/15 bg-white/5 text-white hover:bg-white/10"
         >
-          В недельный отчёт
+          Недельный отчёт
         </Button>
       </div>
 
@@ -45,7 +45,8 @@ export function SignalsTab({
         >
           <CardContent className="pt-6">
             <p className="text-sm text-white/60">
-              Пока мало данных для автосигналов. Здесь появятся найденные паттерны недели.
+              Пока мало данных для автоматических сигналов. Они появятся после первых полных недель
+              трекинга.
             </p>
           </CardContent>
         </Card>
@@ -79,7 +80,7 @@ export function SignalsTab({
                       disabled={savingSignalKey === `${signal.type}:${signal.message}`}
                       className="border-white/15 bg-white/5 text-white hover:bg-white/10"
                     >
-                      Сохранить как leak
+                      Превратить в лик
                     </Button>
                   </div>
                   <LeakAiAnalysisCard

@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AlertTriangle } from "lucide-react";
 import type { LeakEntity } from "@/features/leaks/types";
 
 interface LeakPriorityCardProps {
@@ -20,9 +21,12 @@ export function LeakPriorityCard({ priorityLeaks, onSelectLeak }: LeakPriorityCa
       }}
     >
       <CardHeader className="pb-2">
-        <CardTitle className="text-base text-white">Приоритетный фокус</CardTitle>
+        <CardTitle className="flex items-center gap-2 text-base text-white">
+          <AlertTriangle className="h-4 w-4 text-amber-300" />
+          Требует внимания
+        </CardTitle>
         <CardDescription className="text-white/60">
-          Leaks, где сейчас выше риск застрять без следующего шага.
+          Лики без следующего шага — риск застрять.
         </CardDescription>
       </CardHeader>
       <CardContent className="pt-0">

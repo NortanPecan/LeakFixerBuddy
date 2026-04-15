@@ -8,7 +8,7 @@ import {
   SPHERE_OPTIONS,
 } from "@/features/leaks/lib/leak-constants";
 import type { LeakSeverity } from "@/features/leaks/types";
-import { NotebookPen } from "lucide-react";
+import { Plus } from "lucide-react";
 
 interface LeakCaptureCardProps {
   title: string;
@@ -41,25 +41,25 @@ export function LeakCaptureCard({
     <Card style={{ background: "rgba(15,23,42,0.82)", border: "1px solid rgba(255,255,255,0.08)" }}>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-white">
-          <NotebookPen className="h-5 w-5 text-white/70" />
-          Быстрый capture
+          <Plus className="h-5 w-5 text-white/70" />
+          Новый лик
         </CardTitle>
         <CardDescription className="text-white/55">
-          Теперь это уже отдельная сущность leak-inbox, а не временная заметка.
+          Заметь слабое место — AI поможет разобрать и составить план.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <Input
           value={title}
           onChange={(event) => onTitleChange(event.target.value)}
-          placeholder="Коротко назови лик или паттерн"
+          placeholder="Коротко: что не так?"
           className="border-white/10 bg-white/5 text-white placeholder:text-white/30"
         />
         <Textarea
           value={details}
           onChange={(event) => onDetailsChange(event.target.value)}
-          placeholder="Что произошло, где это проявляется, что могло повлиять, что хочешь исправить..."
-          className="min-h-28 border-white/10 bg-white/5 text-white placeholder:text-white/30"
+          placeholder="Что произошло? Где проявляется? Что хочешь исправить?"
+          className="min-h-24 border-white/10 bg-white/5 text-white placeholder:text-white/30"
         />
 
         <div className="flex flex-wrap gap-2">
@@ -121,12 +121,9 @@ export function LeakCaptureCard({
             disabled={!hasDraft || submitting}
             className="bg-indigo-600 text-white hover:bg-indigo-500"
           >
-            Сохранить
+            {submitting ? "Сохраняю..." : "Сохранить"}
           </Button>
         </div>
-        <p className="text-xs text-white/45">
-          AI-разбор доступен после сохранения внутри карточки leak.
-        </p>
       </CardContent>
     </Card>
   );

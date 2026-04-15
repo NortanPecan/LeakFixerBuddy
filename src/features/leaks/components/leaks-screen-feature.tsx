@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RefreshCw, Sparkles } from "lucide-react";
+import { RefreshCw, Sparkles, Activity, BarChart3 } from "lucide-react";
 import {
   getLeakGroupKey,
   LeakInboxTab,
@@ -253,6 +253,7 @@ export function LeaksScreenFeature() {
 
   return (
     <div className="flex flex-col gap-4 pb-20">
+      {/* Заголовок — компактный */}
       <Card
         style={{
           background: "linear-gradient(135deg, rgba(30,41,59,0.95) 0%, rgba(15,23,42,0.92) 100%)",
@@ -264,36 +265,28 @@ export function LeaksScreenFeature() {
             <div>
               <CardTitle className="flex items-center gap-2 text-white">
                 <Sparkles className="h-5 w-5 text-indigo-300" />
-                Leaks
+                Лики
               </CardTitle>
               <CardDescription className="mt-1 text-white/60">
-                Отдельный контур для захвата ликов, сигналов и AI-паттернов.
+                Находи слабые места — составляй план — исправляй.
               </CardDescription>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => loadData(false)}
-              disabled={refreshing}
-              className="border-white/15 bg-white/5 text-white hover:bg-white/10"
-            >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Badge className="border-white/10 bg-white/10 text-white/80">
+                {leakCounts.all}
+              </Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => loadData(false)}
+                disabled={refreshing}
+                className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              </Button>
+            </div>
           </div>
         </CardHeader>
-        <CardContent className="pt-0">
-          <div className="flex flex-wrap gap-2">
-            <Badge className="border-white/10 bg-white/10 text-white/80">
-              Inbox: {leakCounts.all}
-            </Badge>
-            <Badge className="border-indigo-500/20 bg-indigo-500/10 text-indigo-200">
-              Signals: {signals.length}
-            </Badge>
-            <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-200">
-              Patterns: {patterns.length}
-            </Badge>
-          </div>
-        </CardContent>
       </Card>
 
       <LeakCaptureCard
@@ -312,9 +305,15 @@ export function LeaksScreenFeature() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-3 bg-white/5">
-          <TabsTrigger value="inbox">Inbox</TabsTrigger>
-          <TabsTrigger value="signals">Signals</TabsTrigger>
-          <TabsTrigger value="patterns">Patterns</TabsTrigger>
+          <TabsTrigger value="inbox">Входящие</TabsTrigger>
+          <TabsTrigger value="signals" className="gap-1">
+            <Activity className="h-3.5 w-3.5 opacity-60" />
+            Сигналы
+          </TabsTrigger>
+          <TabsTrigger value="patterns" className="gap-1">
+            <BarChart3 className="h-3.5 w-3.5 opacity-60" />
+            Паттерны
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="inbox" className="space-y-4">
