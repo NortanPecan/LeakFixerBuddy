@@ -165,7 +165,13 @@ interface PendingAiConfirm {
   originalText: string
 }
 
-type PendingPayload = PendingForceReply | PendingAiConfirm
+interface PendingGymSet {
+  __type: 'gymSet'
+  exerciseId: string
+  exerciseName: string
+}
+
+type PendingPayload = PendingForceReply | PendingAiConfirm | PendingGymSet
 
 async function storePending(userId: string, payload: PendingPayload): Promise<void> {
   // Store one pending per user — upsert via delete+create since no unique key on text
@@ -363,6 +369,9 @@ async function getGymSummary(userId: string, today: Date): Promise<{ text: strin
 
   const keyboard: InlineKeyboard = []
   if (isToday && source.status !== 'completed') {
+    for (const ex of source.exercises) {
+      keyboard.push([{ text: `➕ Сет: ${ex.name}`, callback_data: `gym_addset_${ex.id}` }])
+    }
     keyboard.push([{ text: '✅ Отметить выполненной', callback_data: `gym_done_${source.id}` }])
   }
   keyboard.push(...backBtn())
@@ -416,8 +425,15 @@ async function getFoodSummary(userId: string, today: Date): Promise<{ text: stri
   const qualityMap: Record<string, string> = { good: '🟢', neutral: '🟡', bad: '🔴' }
   const lines = entries.map((e) => {
     const q = qualityMap[e.quality ?? ''] ?? '⚪'
-    const cal = e.calories ? ` — ${e.calories} ккал` : ''
-    return `${q} ${e.name}${cal}`
+    let line = `${q} ${e.name}`
+    if (e.amount) line += ` (${e.amount})`
+    if (e.calories) line += ` — ${e.calories} ккал`
+    const bju: string[] = []
+    if (e.protein) bju.push(`Б${e.protein}`)
+    if (e.fat) bju.push(`Ж${e.fat}`)
+    if (e.carbs) bju.push(`У${e.carbs}`)
+    if (bju.length > 0) line += ` · ${bju.join(' ')}`
+    return line
   })
 
   const text = `🍽️ <b>Питание сегодня</b>\n\n${lines.join('\n')}\n\n<b>Итого: ${totalCal > 0 ? `${totalCal} ккал` : `${entries.length} записей`}</b>`
@@ -697,6 +713,11 @@ const AI_CLASSIFY_SYSTEM = `Ты анализируешь сообщения п�
 "покачался" → {"type":"gym","data":{"duration_min":null},"display":"💪 Тренировка","confidence":0.85}
 "поплавал 45 минут" → {"type":"gym","data":{"duration_min":45},"display":"💪 Плавание 45 мин","confidence":0.9}
 
+Примеры (еда без ключевого слова — слово + 2 числа = вес + ккал/100г):
+"доширак 70 440" → {"type":"food","data":{"name":"доширак","calories":308,"weight_g":70},"display":"🍽️ доширак (70г, 308 ккал)","confidence":0.85}
+"гречка 200 320" → {"type":"food","data":{"name":"гречка","calories":640,"weight_g":200},"display":"🍽️ гречка (200г, 640 ккал)","confidence":0.85}
+"творог 150 110" → {"type":"food","data":{"name":"творог","calories":165,"weight_g":150},"display":"🍽️ творог (150г, 165 ккал)","confidence":0.85}
+
 Примеры (финансы):
 "купил кофе 150 руб" → {"type":"expense","data":{"amount":150,"desc":"кофе"},"display":"💸 Расход −150₽ (кофе)","confidence":0.9}
 "заплатил за такси 500" → {"type":"expense","data":{"amount":500,"desc":"такси"},"display":"💸 Расход −500₽ (такси)","confidence":0.9}
@@ -710,6 +731,25 @@ interface AiClassifyResult {
 }
 
 async function classifyUnknownInput(text: string, userId: string): Promise<AiClassifyResult | null> {
+  // Pre-check: "name N1 N2" (word + two plain numbers) → likely food with weight + kcal/100g
+  // e.g. "доширак 70 440" → 70г, 440 kcal/100g → 308 kcal
+  const foodTwoNumRe = /^([а-яёА-ЯЁa-zA-Z][а-яёА-ЯЁa-zA-Z\s\-]*?)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)\s*$/
+  const foodPreMatch = text.trim().match(foodTwoNumRe)
+  if (foodPreMatch) {
+    const name = foodPreMatch[1].trim()
+    const weight = parseFloat(foodPreMatch[2].replace(',', '.'))
+    const kcalPer100 = parseFloat(foodPreMatch[3].replace(',', '.'))
+    if (weight > 0 && weight <= 5000 && kcalPer100 > 0 && kcalPer100 <= 900) {
+      const actualKcal = Math.round(weight * kcalPer100 / 100)
+      return {
+        type: 'food',
+        data: { name, calories: actualKcal, weight_g: weight },
+        display: `🍽️ ${name} (${weight}г, ${actualKcal} ккал)`,
+        confidence: 0.85,
+      }
+    }
+  }
+
   // First check user's own learned patterns
   const userPattern = await db.userAiPattern.findUnique({
     where: { userId_leakType: { userId, leakType: 'tg_input_patterns' } },
@@ -755,8 +795,8 @@ async function saveLearnedPattern(userId: string, originalText: string, type: st
       if (patterns.length > 50) patterns.splice(50)
     }
 
-    // Cast to satisfy Prisma Json type
-    const patternsJson = patterns as unknown as Record<string, unknown>[]
+    // JSON round-trip gives `any` which satisfies Prisma's InputJsonValue
+    const patternsJson = JSON.parse(JSON.stringify(patterns))
     await db.userAiPattern.upsert({
       where: { userId_leakType: { userId, leakType: 'tg_input_patterns' } },
       update: { lastAnalysis: patternsJson, updatedAt: new Date() },
@@ -1080,7 +1120,7 @@ async function handleCommand(userId: string, text: string): Promise<{ reply: str
       }
     }
 
-    await db.foodEntry.create({
+    const entry = await db.foodEntry.create({
       data: {
         userId,
         name: parsed.name,
@@ -1109,7 +1149,13 @@ async function handleCommand(userId: string, text: string): Promise<{ reply: str
       if (parsed.carbs   !== null) bju.push(`У ${parsed.carbs}г`)
       reply += `\n🥩 ${bju.join(' · ')}`
     }
-    return { reply }
+    // Quality keyboard
+    const keyboard: InlineKeyboard = [[
+      { text: '🟢 Отлично', callback_data: `food_q_${entry.id}_good` },
+      { text: '🟡 Нормально', callback_data: `food_q_${entry.id}_neutral` },
+      { text: '🔴 Срыв', callback_data: `food_q_${entry.id}_bad` },
+    ]]
+    return { reply, keyboard }
   }
 
   // Gym
@@ -1383,6 +1429,41 @@ async function handleCallback(
     return
   }
 
+  // Food quality rating callback
+  if (data.startsWith('food_q_')) {
+    const rest = data.slice('food_q_'.length) // "{entryId}_{quality}"
+    const lastUnderscore = rest.lastIndexOf('_')
+    const entryId = rest.slice(0, lastUnderscore)
+    const quality = rest.slice(lastUnderscore + 1)
+    if (entryId && ['good', 'neutral', 'bad'].includes(quality)) {
+      await db.foodEntry.update({ where: { id: entryId }, data: { quality } }).catch(() => {})
+      const qualityLabel = quality === 'good' ? '🟢 Отлично' : quality === 'neutral' ? '🟡 Нормально' : '🔴 Срыв'
+      await answerCallback(cbQueryId, `${qualityLabel} записано!`)
+      await editMessageText(chatId, messageId, `${qualityLabel} — качество еды отмечено!`, [])
+    } else {
+      await answerCallback(cbQueryId, '❌ Неверные данные')
+    }
+    return
+  }
+
+  // Gym add set — send ForceReply asking for weight × reps
+  if (data.startsWith('gym_addset_')) {
+    const exerciseId = data.replace('gym_addset_', '')
+    const exercise = await db.gymExercise.findUnique({ where: { id: exerciseId }, select: { name: true } })
+    if (!exercise) {
+      await answerCallback(cbQueryId, '❌ Упражнение не найдено')
+      return
+    }
+    const botMsgId = await sendForceReply(
+      chatId,
+      `💪 <b>${exercise.name}</b>\n\nВведи вес × повторений:\n<code>75x8</code>  <code>75 8</code>  <code>75</code>`
+    )
+    if (botMsgId) {
+      await storePending(userId, { __type: 'gymSet', exerciseId, exerciseName: exercise.name })
+    }
+    return
+  }
+
   // ForceReply buttons — ask user to type value
   const forceReplyMap: Record<string, { action: 'sleep' | 'weight' | 'mood' | 'energy'; prompt: string }> = {
     btn_sleep:  { action: 'sleep',  prompt: '😴 Сколько часов ты спал? Ответь числом (напр. <b>7.5</b>):' },
@@ -1528,6 +1609,47 @@ export async function POST(request: NextRequest) {
           }
         }
         if (reply) { await sendMessage(chatId, reply); return }
+      } else if (pending && pending.__type === 'gymSet') {
+        await clearPendingForUserId(user.id)
+        // Parse: 75x8 / 75 x 8 / 75х8 (Cyrillic) / 75×8 / 75 8 / 75
+        const setWithRepsRe = /^(\d+(?:[.,]\d+)?)\s*[xXхХ×]\s*(\d+(?:[.,]\d+)?)/
+        const setTwoNumsRe  = /^(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)\s*$/
+        const setWeightOnly = /^(\d+(?:[.,]\d+)?)\s*$/
+        let weight: number | null = null
+        let reps: number | null = null
+        const t2 = text.trim()
+        let m = t2.match(setWithRepsRe)
+        if (m) {
+          weight = parseFloat(m[1].replace(',', '.'))
+          reps = Math.round(parseFloat(m[2].replace(',', '.')))
+        } else {
+          m = t2.match(setTwoNumsRe)
+          if (m) {
+            weight = parseFloat(m[1].replace(',', '.'))
+            reps = Math.round(parseFloat(m[2].replace(',', '.')))
+          } else {
+            m = t2.match(setWeightOnly)
+            if (m) weight = parseFloat(m[1].replace(',', '.'))
+          }
+        }
+        if (weight === null || isNaN(weight) || weight <= 0) {
+          await sendMessage(chatId, '❌ Не понял формат. Введи: <code>75x8</code> или <code>75 8</code> или просто <code>75</code>')
+          return
+        }
+        const existingSets = await db.gymExerciseSet.count({ where: { exerciseId: pending.exerciseId } })
+        await db.gymExerciseSet.create({
+          data: {
+            exerciseId: pending.exerciseId,
+            setNum: existingSets + 1,
+            weight,
+            reps,
+            isWarmup: false,
+            completed: true,
+          },
+        })
+        const repsText = reps ? ` × ${reps} повт.` : ''
+        await sendMessage(chatId, `💪 <b>${pending.exerciseName}</b>\nСет ${existingSets + 1}: <b>${weight} кг${repsText}</b> ✅`)
+        return
       }
     }
 

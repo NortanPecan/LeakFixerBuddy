@@ -112,6 +112,17 @@ export function StatsScreen() {
   const last14Days = allDays.slice(-14)
   const last7Days = allDays.slice(-7)
 
+  // Avg day score across non-zero days
+  const validScores = allDays.filter(h => h.overallScore > 0).map(h => h.overallScore)
+  const avgDayScore = validScores.length > 0
+    ? Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length)
+    : null
+
+  // Best week index for highlight
+  const bestWeekIdx = data?.weeklySummary && data.weeklySummary.length > 0
+    ? data.weeklySummary.reduce((maxIdx, w, idx, arr) => w.avgScore > arr[maxIdx].avgScore ? idx : maxIdx, 0)
+    : -1
+
   // Format date for display
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
@@ -204,7 +215,7 @@ export function StatsScreen() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="grid grid-cols-2 gap-4 text-center">
                 <div>
                   <p className="text-2xl font-bold text-primary">{data.totals.totalRituals}</p>
                   <p className="text-xs text-muted-foreground">Ритуалов</p>
@@ -216,6 +227,10 @@ export function StatsScreen() {
                 <div>
                   <p className="text-2xl font-bold text-primary">{data.totals.totalTasks}</p>
                   <p className="text-xs text-muted-foreground">Дел</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-amber-400">{avgDayScore !== null ? `${avgDayScore}%` : '—'}</p>
+                  <p className="text-xs text-muted-foreground">Средний балл</p>
                 </div>
               </div>
             </CardContent>
@@ -562,7 +577,11 @@ export function StatsScreen() {
                       />
                       <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} />
                       <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey="avgScore" name="Общий %" fill="#10b981" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="avgScore" name="Общий %" radius={[4, 4, 0, 0]}>
+                        {data.weeklySummary.map((_entry, idx) => (
+                          <Cell key={idx} fill={idx === bestWeekIdx ? '#f59e0b' : '#10b981'} />
+                        ))}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

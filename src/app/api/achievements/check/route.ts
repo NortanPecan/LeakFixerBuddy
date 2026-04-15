@@ -116,6 +116,79 @@ const ACHIEVEMENTS = [
       return !existing
     },
   },
+  {
+    code: 'STREAK_7',
+    label: '7 дней подряд',
+    emoji: '🔥',
+    desc: 'Серия из 7 дней активности',
+    check: async (userId: string, _todayScore: number | null) => {
+      const user = await db.appUser.findUnique({ where: { id: userId }, select: { streak: true } })
+      if (!user || user.streak < 7) return false
+      const existing = await db.achievement.findUnique({
+        where: { userId_code: { userId, code: 'STREAK_7' } },
+      })
+      return !existing
+    },
+  },
+  {
+    code: 'STREAK_30',
+    label: 'Месяц силы',
+    emoji: '💎',
+    desc: 'Серия из 30 дней активности',
+    check: async (userId: string, _todayScore: number | null) => {
+      const user = await db.appUser.findUnique({ where: { id: userId }, select: { streak: true } })
+      if (!user || user.streak < 30) return false
+      const existing = await db.achievement.findUnique({
+        where: { userId_code: { userId, code: 'STREAK_30' } },
+      })
+      return !existing
+    },
+  },
+  {
+    code: 'GYM_10',
+    label: 'Железный',
+    emoji: '💪',
+    desc: '10 тренировок выполнено',
+    check: async (userId: string, _todayScore: number | null) => {
+      const count = await db.gymWorkout.count({
+        where: { period: { userId }, status: 'completed' },
+      })
+      if (count < 10) return false
+      const existing = await db.achievement.findUnique({
+        where: { userId_code: { userId, code: 'GYM_10' } },
+      })
+      return !existing
+    },
+  },
+  {
+    code: 'WATER_WEEK',
+    label: 'Водный марафон',
+    emoji: '💧',
+    desc: '7 дней подряд выполнена норма воды',
+    check: async (userId: string, _todayScore: number | null) => {
+      const records = await db.fitnessDaily.findMany({
+        where: { userId, water: { gte: 0 } },
+        orderBy: { date: 'desc' },
+        take: 7,
+        select: { date: true, water: true, waterTarget: true },
+      })
+      if (records.length < 7) return false
+      // All 7 must meet their water target
+      const allMet = records.every((r) => (r.water ?? 0) >= (r.waterTarget ?? 2000))
+      if (!allMet) return false
+      // Must be 7 consecutive days
+      for (let i = 0; i < records.length - 1; i++) {
+        const d1 = new Date(records[i].date)
+        const d2 = new Date(records[i + 1].date)
+        const diffDays = Math.round((d1.getTime() - d2.getTime()) / 86400000)
+        if (diffDays !== 1) return false
+      }
+      const existing = await db.achievement.findUnique({
+        where: { userId_code: { userId, code: 'WATER_WEEK' } },
+      })
+      return !existing
+    },
+  },
 ]
 
 // ─── Route ────────────────────────────────────────────────────────────────────
